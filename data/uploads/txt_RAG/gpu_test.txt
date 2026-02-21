@@ -1,0 +1,1 @@
+Test GPU embedding - to jest testowy dokument do sprawdzenia czy embedding działa na GPU.

@@ -1,0 +1,5 @@
+data/nextcloud/
+data/nextcloud_db/
+data/postgres/
+llama.cpp/
+venv/

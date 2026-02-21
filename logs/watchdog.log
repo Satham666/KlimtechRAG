@@ -1,0 +1,210 @@
+2026-02-20 22:38:27,221 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 30747)
+2026-02-20 22:38:27,221 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-20 22:38:27,221 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-20 22:38:27,221 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-20 22:38:27,221 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-20 22:38:27,221 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-20 22:38:27,221 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-20 22:38:27,221 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-20 22:38:27,221 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-20 22:38:27,221 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-20 22:38:27,221 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-20 22:38:27,221 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-20 22:38:27,221 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-20 22:38:27,221 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-20 22:38:27,221 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
+2026-02-20 22:51:57,490 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 35858)
+2026-02-20 22:51:57,492 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-20 22:51:57,492 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-20 22:51:57,492 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-20 22:51:57,492 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-20 22:51:57,492 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-20 22:51:57,492 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-20 22:51:57,492 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-20 22:51:57,492 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-20 22:51:57,492 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-20 22:51:57,492 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-20 22:51:57,492 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-20 22:51:57,492 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-20 22:51:57,492 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-20 22:51:57,492 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
+2026-02-20 22:54:25,465 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 36609)
+2026-02-20 22:54:25,467 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-20 22:54:25,467 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-20 22:54:25,467 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-20 22:54:25,467 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-20 22:54:25,467 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-20 22:54:25,467 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-20 22:54:25,467 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-20 22:54:25,467 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-20 22:54:25,467 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-20 22:54:25,467 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-20 22:54:25,467 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-20 22:54:25,467 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-20 22:54:25,467 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-20 22:54:25,467 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
+2026-02-20 22:56:07,046 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 37112)
+2026-02-20 22:56:07,047 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-20 22:56:07,047 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-20 22:56:07,047 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-20 22:56:07,047 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-20 22:56:07,047 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-20 22:56:07,047 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-20 22:56:07,047 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-20 22:56:07,047 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-20 22:56:07,047 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-20 22:56:07,047 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-20 22:56:07,047 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-20 22:56:07,047 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-20 22:56:07,047 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-20 22:56:07,047 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
+2026-02-20 22:58:51,265 INFO [klimtechrag.watcher] [WATCH] Nowy plik: wyt_resusc.pdf
+2026-02-20 22:58:55,280 INFO [klimtechrag.watcher] [wyt_resusc.pdf] Przetwarzanie wyt_resusc.pdf (19.9 MB), próba 1/3
+2026-02-20 23:04:46,702 INFO [klimtechrag.watcher] [wyt_resusc.pdf] OK - zaindeksowano 307 fragmentów
+2026-02-20 23:06:19,806 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 39418)
+2026-02-20 23:06:19,806 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-20 23:06:19,806 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-20 23:06:19,807 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-20 23:06:19,807 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-20 23:06:19,807 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-20 23:06:19,807 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-20 23:06:19,807 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-20 23:06:19,807 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-20 23:06:19,807 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-20 23:06:19,807 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-20 23:06:19,807 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-20 23:06:19,807 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-20 23:06:19,807 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-20 23:06:19,807 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
+2026-02-20 23:48:38,016 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 47176)
+2026-02-20 23:48:38,018 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-20 23:48:38,018 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-20 23:48:38,018 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-20 23:48:38,018 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-20 23:48:38,018 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-20 23:48:38,018 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-20 23:48:38,018 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-20 23:48:38,018 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-20 23:48:38,018 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-20 23:48:38,018 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-20 23:48:38,018 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-20 23:48:38,018 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-20 23:48:38,018 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-20 23:48:38,018 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
+2026-02-20 23:50:18,505 INFO [klimtechrag.watcher] [WATCH] Nowy plik: PODSUMOWANIE_SESJI_2026-02-20_nr_1.md
+2026-02-20 23:50:20,522 INFO [klimtechrag.watcher] [WATCH] Nowy plik: PODSUMOWANIE_2026-02-20_19-17_nr_2.md
+2026-02-20 23:50:20,522 INFO [klimtechrag.watcher] [PODSUMOWANIE_SESJI_2026-02-20_nr_1.md] Przetwarzanie PODSUMOWANIE_SESJI_2026-02-20_nr_1.md (0.0 MB), próba 1/3
+2026-02-20 23:50:23,024 INFO [klimtechrag.watcher] Pliki w kolejce: 1
+2026-02-20 23:50:28,025 INFO [klimtechrag.watcher] Pliki w kolejce: 1
+2026-02-20 23:50:31,239 INFO [klimtechrag.watcher] [PODSUMOWANIE_SESJI_2026-02-20_nr_1.md] OK - zaindeksowano 9 fragmentów
+2026-02-20 23:50:31,245 INFO [klimtechrag.watcher] [PODSUMOWANIE_2026-02-20_19-17_nr_2.md] Przetwarzanie PODSUMOWANIE_2026-02-20_19-17_nr_2.md (0.0 MB), próba 1/3
+2026-02-20 23:50:34,843 INFO [klimtechrag.watcher] [PODSUMOWANIE_2026-02-20_19-17_nr_2.md] OK - zaindeksowano 8 fragmentów
+2026-02-21 00:07:07,760 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 51647)
+2026-02-21 00:07:07,761 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-21 00:07:07,761 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-21 00:07:07,761 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-21 00:07:07,761 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-21 00:07:07,761 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-21 00:07:07,761 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-21 00:07:07,761 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-21 00:07:07,761 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-21 00:07:07,761 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-21 00:07:07,761 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-21 00:07:07,761 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-21 00:07:07,761 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-21 00:07:07,761 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-21 00:07:07,761 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
+2026-02-21 00:19:13,055 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 54610)
+2026-02-21 00:19:13,055 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-21 00:19:13,055 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-21 00:19:13,055 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-21 00:19:13,055 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-21 00:19:13,055 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-21 00:19:13,055 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-21 00:19:13,055 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-21 00:19:13,055 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-21 00:19:13,055 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-21 00:19:13,055 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-21 00:19:13,055 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-21 00:19:13,055 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-21 00:19:13,055 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-21 00:19:13,055 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
+2026-02-21 00:37:16,747 INFO [klimtechrag.watcher] [WATCH] Nowy plik: gpu_test.txt
+2026-02-21 00:37:18,753 INFO [klimtechrag.watcher] [gpu_test.txt] Przetwarzanie gpu_test.txt (0.0 MB), próba 1/3
+2026-02-21 00:37:19,361 INFO [klimtechrag.watcher] [gpu_test.txt] OK - zaindeksowano 1 fragmentów
+2026-02-21 00:37:53,002 INFO [klimtechrag.watcher] [WATCH] Nowy plik: gpu_test_big.txt
+2026-02-21 00:53:23,420 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 63865)
+2026-02-21 00:53:23,421 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-21 00:53:23,421 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-21 00:53:23,421 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-21 00:53:23,421 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-21 00:53:23,421 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-21 00:53:23,421 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-21 00:53:23,421 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-21 00:53:23,421 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-21 00:53:23,421 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-21 00:53:23,421 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-21 00:53:23,421 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-21 00:53:23,421 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-21 00:53:23,421 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-21 00:53:23,421 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
+2026-02-21 01:00:45,896 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 65606)
+2026-02-21 01:00:45,897 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-21 01:00:45,897 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-21 01:00:45,897 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-21 01:00:45,897 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-21 01:00:45,897 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-21 01:00:45,897 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-21 01:00:45,897 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-21 01:00:45,897 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-21 01:00:45,897 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-21 01:00:45,897 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-21 01:00:45,897 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-21 01:00:45,897 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-21 01:00:45,897 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-21 01:00:45,897 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
+2026-02-21 01:02:28,642 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 66127)
+2026-02-21 01:02:28,643 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-21 01:02:28,643 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-21 01:02:28,643 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-21 01:02:28,643 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-21 01:02:28,643 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-21 01:02:28,643 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-21 01:02:28,643 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-21 01:02:28,643 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-21 01:02:28,643 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-21 01:02:28,643 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-21 01:02:28,643 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-21 01:02:28,643 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-21 01:02:28,643 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-21 01:02:28,643 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
+2026-02-21 01:04:50,394 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 67088)
+2026-02-21 01:04:50,394 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-21 01:04:50,394 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-21 01:04:50,394 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-21 01:04:50,394 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-21 01:04:50,394 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-21 01:04:50,394 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-21 01:04:50,394 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-21 01:04:50,394 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-21 01:04:50,394 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-21 01:04:50,394 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-21 01:04:50,394 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-21 01:04:50,394 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-21 01:04:50,394 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-21 01:04:50,394 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
+2026-02-21 15:55:08,969 INFO [klimtechrag.watcher] Watchdog uruchomiony (PID: 50698)
+2026-02-21 15:55:08,972 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Doc_RAG
+2026-02-21 15:55:08,972 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Audio_RAG
+2026-02-21 15:55:08,972 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Video_RAG
+2026-02-21 15:55:08,972 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/Images_RAG
+2026-02-21 15:55:08,972 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/json_RAG
+2026-02-21 15:55:08,972 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/pdf_RAG
+2026-02-21 15:55:08,972 WARNING [klimtechrag.watcher] Folder nie istnieje: /home/lobo/KlimtechRAG/data/nextcloud/data/admin/files/RAG_Dane/txt_RAG
+2026-02-21 15:55:08,972 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Doc_RAG
+2026-02-21 15:55:08,972 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Audio_RAG
+2026-02-21 15:55:08,972 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Video_RAG
+2026-02-21 15:55:08,972 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/Images_RAG
+2026-02-21 15:55:08,972 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/json_RAG
+2026-02-21 15:55:08,972 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
+2026-02-21 15:55:08,972 INFO [klimtechrag.watcher] Monitoring: /home/lobo/KlimtechRAG/data/uploads/txt_RAG
