@@ -176,6 +176,21 @@ git commit -m "Opis zmian"        # Commit
 git push                          # Wyślij na GitHub
 ```
 
+### Aktualizacja zmienionych plików (same nazwy, zmieniona treść):
+
+```bash
+git status                        # Zobacz które pliki się zmieniły
+git add .                         # Dodaj wszystkie zmienione pliki
+git commit -m "Aktualizacja kodu" # Zrób commit
+git push                          # Wyślij na GitHub
+```
+
+### Szybki workflow (3 komendy):
+
+```bash
+git add . && git commit -m "Opis" && git push
+```
+
 ### Naprawienie błędu (dodano za duże pliki):
 
 ```bash

@@ -79,7 +79,7 @@ WATCH_DIRS = [
     f"{UPLOADS_RAG}/txt_RAG",
 ]
 
-API_URL = f"http://localhost:{os.getenv('BACKEND_API_PORT', '8000')}/ingest"
+API_URL = f"http://localhost:{os.getenv('BACKEND_API_PORT', '8000')}/ingest_path"
 INGEST_TIMEOUT = int(os.getenv("INGEST_TIMEOUT", "7200"))
 MAX_RETRIES = int(os.getenv("INGEST_MAX_RETRIES", "3"))
 

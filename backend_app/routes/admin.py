@@ -93,13 +93,6 @@ async def websocket_health(ws: WebSocket):
     except Exception:
         await ws.close()
 
-
-@router.on_event("startup")
-async def startup_event():
-    init_file_registry()
-    logger.info("File registry initialized")
-
-
 @router.get("/files/stats")
 async def files_stats():
     return get_file_stats()
