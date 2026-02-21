@@ -1,132 +1,0 @@
-INFO:     Started server process [69438]
-INFO:     Waiting for application startup.
-2026-02-21 01:15:33,262 INFO klimtechrag File registry initialized
-2026-02-21 01:15:33,262 INFO klimtechrag File registry initialized
-2026-02-21 01:15:33,262 INFO klimtechrag File registry initialized
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-2026-02-21 01:15:33,925 INFO httpx HTTP Request: GET http://localhost:6333/ "HTTP/1.1 200 OK"
-2026-02-21 01:15:33,928 INFO httpx HTTP Request: GET http://localhost:6333/collections/klimtech_docs/exists "HTTP/1.1 200 OK"
-2026-02-21 01:15:33,929 INFO httpx HTTP Request: GET http://localhost:6333/collections/klimtech_docs "HTTP/1.1 200 OK"
-2026-02-21 01:15:33,931 INFO httpx HTTP Request: POST http://localhost:6333/collections/klimtech_docs/points/count "HTTP/1.1 200 OK"
-2026-02-21 01:15:33,932 INFO klimtechrag Request GET /health finished in 27 ms
-INFO:     127.0.0.1:48194 - "GET /health HTTP/1.1" 200 OK
-2026-02-21 01:15:37,799 INFO klimtechrag [PDF] Użyto pdftotext (szybkie)
-2026-02-21 01:15:37,818 INFO haystack.core.pipeline.base Warming up component splitter...
-2026-02-21 01:15:37,818 INFO haystack.core.pipeline.base Warming up component embedder...
-2026-02-21 01:15:37,818 INFO haystack.core.pipeline.pipeline Running component splitter
-2026-02-21 01:15:37,833 INFO haystack.core.pipeline.pipeline Running component embedder
-Batches:   0%|          | 0/10 [00:00<?, ?it/s]/home/lobo/KlimtechRAG/venv/lib/python3.12/site-packages/torch/nn/modules/linear.py:125: UserWarning: Attempting to use hipBLASLt on an unsupported architecture! Overriding blas backend to hipblas (Triggered internally at ../aten/src/ATen/Context.cpp:296.)
-  return F.linear(input, self.weight, self.bias)
-Batches:  10%|█         | 1/10 [00:01<00:17,  1.94s/it]Batches:  20%|██        | 2/10 [00:03<00:13,  1.65s/it]Batches:  30%|███       | 3/10 [00:04<00:10,  1.55s/it]Batches:  40%|████      | 4/10 [00:06<00:09,  1.51s/it]Batches:  50%|█████     | 5/10 [00:07<00:07,  1.49s/it]Batches:  60%|██████    | 6/10 [00:09<00:05,  1.47s/it]Batches:  70%|███████   | 7/10 [00:10<00:04,  1.46s/it]Batches:  80%|████████  | 8/10 [00:12<00:02,  1.46s/it]Batches:  90%|█████████ | 9/10 [00:13<00:01,  1.46s/it]Batches: 100%|██████████| 10/10 [00:14<00:00,  1.28s/it]Batches: 100%|██████████| 10/10 [00:14<00:00,  1.44s/it]
-2026-02-21 01:15:52,270 INFO haystack.core.pipeline.pipeline Running component writer
-  0%|          | 0/307 [00:00<?, ?it/s]2026-02-21 01:15:52,325 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-2026-02-21 01:15:52,379 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
- 65%|██████▌   | 200/307 [00:00<00:00, 1835.21it/s]2026-02-21 01:15:52,431 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-2026-02-21 01:15:52,437 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-400it [00:00, 2389.65it/s]                         
-2026-02-21 01:15:52,443 INFO haystack.core.pipeline.base Warming up component splitter...
-2026-02-21 01:15:52,443 INFO haystack.core.pipeline.base Warming up component embedder...
-2026-02-21 01:15:52,444 INFO haystack.core.pipeline.pipeline Running component splitter
-2026-02-21 01:15:52,444 INFO haystack.core.pipeline.pipeline Running component embedder
-Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.60it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.59it/s]
-2026-02-21 01:15:52,598 INFO haystack.core.pipeline.pipeline Running component writer
-  0%|          | 0/3 [00:00<?, ?it/s]2026-02-21 01:15:52,605 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-100it [00:00, 14717.37it/s]          
-2026-02-21 01:15:52,609 INFO haystack.core.pipeline.base Warming up component splitter...
-2026-02-21 01:15:52,609 INFO haystack.core.pipeline.base Warming up component embedder...
-2026-02-21 01:15:52,610 INFO haystack.core.pipeline.pipeline Running component splitter
-2026-02-21 01:15:52,610 INFO haystack.core.pipeline.pipeline Running component embedder
-Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.55it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.54it/s]
-2026-02-21 01:15:52,765 INFO haystack.core.pipeline.pipeline Running component writer
-  0%|          | 0/3 [00:00<?, ?it/s]2026-02-21 01:15:52,772 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-100it [00:00, 14370.45it/s]          
-2026-02-21 01:15:52,789 INFO haystack.core.pipeline.base Warming up component splitter...
-2026-02-21 01:15:52,789 INFO haystack.core.pipeline.base Warming up component embedder...
-2026-02-21 01:15:52,789 INFO haystack.core.pipeline.pipeline Running component splitter
-2026-02-21 01:15:52,801 INFO haystack.core.pipeline.pipeline Running component embedder
-Batches:   0%|          | 0/9 [00:00<?, ?it/s]Batches:  11%|█         | 1/9 [00:01<00:11,  1.45s/it]Batches:  22%|██▏       | 2/9 [00:02<00:10,  1.45s/it]Batches:  33%|███▎      | 3/9 [00:04<00:08,  1.45s/it]Batches:  44%|████▍     | 4/9 [00:05<00:07,  1.45s/it]Batches:  56%|█████▌    | 5/9 [00:07<00:05,  1.45s/it]Batches:  67%|██████▋   | 6/9 [00:08<00:04,  1.45s/it]Batches:  78%|███████▊  | 7/9 [00:10<00:02,  1.45s/it]Batches:  89%|████████▉ | 8/9 [00:11<00:01,  1.45s/it]Batches: 100%|██████████| 9/9 [00:12<00:00,  1.33s/it]Batches: 100%|██████████| 9/9 [00:12<00:00,  1.41s/it]
-2026-02-21 01:16:05,537 INFO haystack.core.pipeline.pipeline Running component writer
-  0%|          | 0/279 [00:00<?, ?it/s]2026-02-21 01:16:05,591 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-2026-02-21 01:16:05,643 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
- 72%|███████▏  | 200/279 [00:00<00:00, 1902.00it/s]2026-02-21 01:16:05,682 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-300it [00:00, 2078.01it/s]                         
-2026-02-21 01:16:05,700 INFO haystack.core.pipeline.base Warming up component splitter...
-2026-02-21 01:16:05,700 INFO haystack.core.pipeline.base Warming up component embedder...
-2026-02-21 01:16:05,700 INFO haystack.core.pipeline.pipeline Running component splitter
-2026-02-21 01:16:05,712 INFO haystack.core.pipeline.pipeline Running component embedder
-Batches:   0%|          | 0/9 [00:00<?, ?it/s]Batches:  11%|█         | 1/9 [00:01<00:11,  1.46s/it]Batches:  22%|██▏       | 2/9 [00:02<00:10,  1.46s/it]Batches:  33%|███▎      | 3/9 [00:04<00:08,  1.46s/it]Batches:  44%|████▍     | 4/9 [00:05<00:07,  1.46s/it]Batches:  56%|█████▌    | 5/9 [00:07<00:05,  1.46s/it]Batches:  67%|██████▋   | 6/9 [00:08<00:04,  1.46s/it]Batches:  78%|███████▊  | 7/9 [00:10<00:02,  1.46s/it]Batches:  89%|████████▉ | 8/9 [00:11<00:01,  1.46s/it]Batches: 100%|██████████| 9/9 [00:12<00:00,  1.34s/it]Batches: 100%|██████████| 9/9 [00:12<00:00,  1.42s/it]
-2026-02-21 01:16:18,498 INFO haystack.core.pipeline.pipeline Running component writer
-  0%|          | 0/279 [00:00<?, ?it/s]2026-02-21 01:16:18,549 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-2026-02-21 01:16:18,601 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
- 72%|███████▏  | 200/279 [00:00<00:00, 1933.08it/s]2026-02-21 01:16:18,640 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-300it [00:00, 2101.53it/s]                         
-2026-02-21 01:16:18,658 INFO haystack.core.pipeline.base Warming up component splitter...
-2026-02-21 01:16:18,658 INFO haystack.core.pipeline.base Warming up component embedder...
-2026-02-21 01:16:18,659 INFO haystack.core.pipeline.pipeline Running component splitter
-2026-02-21 01:16:18,671 INFO haystack.core.pipeline.pipeline Running component embedder
-Batches:   0%|          | 0/9 [00:00<?, ?it/s]Batches:  11%|█         | 1/9 [00:01<00:11,  1.46s/it]Batches:  22%|██▏       | 2/9 [00:02<00:10,  1.46s/it]Batches:  33%|███▎      | 3/9 [00:04<00:08,  1.46s/it]Batches:  44%|████▍     | 4/9 [00:05<00:07,  1.46s/it]Batches:  56%|█████▌    | 5/9 [00:07<00:05,  1.46s/it]Batches:  67%|██████▋   | 6/9 [00:08<00:04,  1.46s/it]Batches:  78%|███████▊  | 7/9 [00:10<00:02,  1.46s/it]Batches:  89%|████████▉ | 8/9 [00:11<00:01,  1.46s/it]Batches: 100%|██████████| 9/9 [00:12<00:00,  1.34s/it]Batches: 100%|██████████| 9/9 [00:12<00:00,  1.42s/it]
-2026-02-21 01:16:31,487 INFO haystack.core.pipeline.pipeline Running component writer
-  0%|          | 0/279 [00:00<?, ?it/s]2026-02-21 01:16:31,539 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-2026-02-21 01:16:31,593 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
- 72%|███████▏  | 200/279 [00:00<00:00, 1872.48it/s]2026-02-21 01:16:31,634 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-300it [00:00, 2034.37it/s]                         
-2026-02-21 01:16:32,510 INFO klimtechrag [PDF] Użyto pdftotext (szybkie)
-2026-02-21 01:16:32,522 INFO haystack.core.pipeline.base Warming up component splitter...
-2026-02-21 01:16:32,522 INFO haystack.core.pipeline.base Warming up component embedder...
-2026-02-21 01:16:32,522 INFO haystack.core.pipeline.pipeline Running component splitter
-2026-02-21 01:16:32,536 INFO haystack.core.pipeline.pipeline Running component embedder
-Batches:   0%|          | 0/10 [00:00<?, ?it/s]Batches:  10%|█         | 1/10 [00:01<00:13,  1.46s/it]Batches:  20%|██        | 2/10 [00:02<00:11,  1.46s/it]Batches:  30%|███       | 3/10 [00:04<00:10,  1.46s/it]Batches:  40%|████      | 4/10 [00:05<00:08,  1.46s/it]Batches:  50%|█████     | 5/10 [00:07<00:07,  1.46s/it]Batches:  60%|██████    | 6/10 [00:08<00:05,  1.46s/it]Batches:  70%|███████   | 7/10 [00:10<00:04,  1.46s/it]Batches:  80%|████████  | 8/10 [00:11<00:02,  1.47s/it]Batches:  90%|█████████ | 9/10 [00:13<00:01,  1.46s/it]Batches: 100%|██████████| 10/10 [00:14<00:00,  1.29s/it]Batches: 100%|██████████| 10/10 [00:14<00:00,  1.41s/it]
-2026-02-21 01:16:46,657 INFO haystack.core.pipeline.pipeline Running component writer
-  0%|          | 0/307 [00:00<?, ?it/s]2026-02-21 01:16:46,723 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-2026-02-21 01:16:46,777 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
- 65%|██████▌   | 200/307 [00:00<00:00, 1668.55it/s]2026-02-21 01:16:46,845 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-2026-02-21 01:16:46,852 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-400it [00:00, 2056.47it/s]                         
-2026-02-21 01:16:46,858 INFO haystack.core.pipeline.base Warming up component splitter...
-2026-02-21 01:16:46,858 INFO haystack.core.pipeline.base Warming up component embedder...
-2026-02-21 01:16:46,858 INFO haystack.core.pipeline.pipeline Running component splitter
-2026-02-21 01:16:46,858 INFO haystack.core.pipeline.pipeline Running component embedder
-Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.58it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.57it/s]
-2026-02-21 01:16:47,080 INFO haystack.core.pipeline.pipeline Running component writer
-  0%|          | 0/4 [00:00<?, ?it/s]2026-02-21 01:16:47,097 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-100it [00:00, 5992.12it/s]           
-2026-02-21 01:16:47,106 INFO haystack.core.pipeline.base Warming up component splitter...
-2026-02-21 01:16:47,106 INFO haystack.core.pipeline.base Warming up component embedder...
-2026-02-21 01:16:47,106 INFO haystack.core.pipeline.pipeline Running component splitter
-2026-02-21 01:16:47,107 INFO haystack.core.pipeline.pipeline Running component embedder
-Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.58it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.57it/s]
-2026-02-21 01:16:47,328 INFO haystack.core.pipeline.pipeline Running component writer
-  0%|          | 0/4 [00:00<?, ?it/s]2026-02-21 01:16:47,334 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-100it [00:00, 18585.18it/s]          
-2026-02-21 01:16:47,354 INFO haystack.core.pipeline.base Warming up component splitter...
-2026-02-21 01:16:47,354 INFO haystack.core.pipeline.base Warming up component embedder...
-2026-02-21 01:16:47,354 INFO haystack.core.pipeline.pipeline Running component splitter
-2026-02-21 01:16:47,366 INFO haystack.core.pipeline.pipeline Running component embedder
-Batches:   0%|          | 0/9 [00:00<?, ?it/s]Batches:  11%|█         | 1/9 [00:01<00:11,  1.47s/it]Batches:  22%|██▏       | 2/9 [00:02<00:10,  1.47s/it]Batches:  33%|███▎      | 3/9 [00:04<00:08,  1.47s/it]Batches:  44%|████▍     | 4/9 [00:05<00:07,  1.47s/it]Batches:  56%|█████▌    | 5/9 [00:07<00:05,  1.47s/it]Batches:  67%|██████▋   | 6/9 [00:08<00:04,  1.47s/it]Batches:  78%|███████▊  | 7/9 [00:10<00:02,  1.47s/it]Batches:  89%|████████▉ | 8/9 [00:11<00:01,  1.47s/it]Batches: 100%|██████████| 9/9 [00:12<00:00,  1.35s/it]Batches: 100%|██████████| 9/9 [00:12<00:00,  1.43s/it]
-2026-02-21 01:17:00,238 INFO haystack.core.pipeline.pipeline Running component writer
-  0%|          | 0/279 [00:00<?, ?it/s]2026-02-21 01:17:00,341 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
- 36%|███▌      | 100/279 [00:00<00:00, 971.18it/s]2026-02-21 01:17:00,413 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-2026-02-21 01:17:00,455 INFO httpx HTTP Request: PUT http://localhost:6333/collections/klimtech_docs/points?wait=true "HTTP/1.1 200 OK"
-300it [00:00, 1450.43it/s]                        300it [00:00, 1381.73it/s]
-2026-02-21 01:17:00,462 INFO klimtechrag Wymuszam indeksowanie HNSW w Qdrant (4499 punktów)...
-2026-02-21 01:17:00,467 INFO klimtechrag HNSW threshold obniżony, indeksowanie nastąpi automatycznie
-2026-02-21 01:17:00,468 INFO klimtechrag Cache odpowiedzi wyczyszczony
-2026-02-21 01:17:00,468 INFO klimtechrag Request POST /ingest_all finished in 83533 ms
-INFO:     127.0.0.1:48210 - "POST /ingest_all?limit=10 HTTP/1.1" 200 OK
-2026-02-21 01:17:00,469 INFO klimtechrag Request GET / finished in 0 ms
-INFO:     127.0.0.1:50632 - "GET / HTTP/1.1" 200 OK
-2026-02-21 01:19:03,847 INFO klimtechrag Request GET / finished in 0 ms
-INFO:     127.0.0.1:42778 - "GET / HTTP/1.1" 200 OK
-Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 76.95it/s]
-2026-02-21 01:19:09,490 INFO httpx HTTP Request: POST http://localhost:6333/collections/klimtech_docs/points/query "HTTP/1.1 200 OK"
-2026-02-21 01:19:09,490 INFO klimtechrag [RAG] Znaleziono 5 dokumentów: session-ses_3929_1.md, historia_sesji.md, historia_sesji_1.md, session-ses_3929.md, historia_sesji_1.md
-2026-02-21 01:19:39,931 INFO openai._base_client Retrying request to /chat/completions in 0.424244 seconds
-2026-02-21 01:20:10,386 INFO openai._base_client Retrying request to /chat/completions in 0.974981 seconds
-2026-02-21 01:20:26,674 INFO httpx HTTP Request: POST http://localhost:8082/v1/chat/completions "HTTP/1.1 200 OK"
-2026-02-21 01:20:26,678 INFO klimtechrag Request POST /v1/chat/completions finished in 77225 ms
-INFO:     127.0.0.1:42782 - "POST /v1/chat/completions HTTP/1.1" 200 OK
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [69438]

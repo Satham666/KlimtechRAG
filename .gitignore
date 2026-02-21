@@ -1,5 +1,6 @@
-data/nextcloud/
-data/nextcloud_db/
-data/postgres/
-llama.cpp/
 venv/
+llama.cpp/
+data/
+__pycache__/
+*.pyc
+logs/
