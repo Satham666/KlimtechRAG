@@ -3,7 +3,7 @@ import logging
 import time
 from typing import Dict, Tuple, Optional
 
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 from fastapi import APIRouter, Depends, HTTPException, Request
 from haystack import Document as HaystackDocument
 

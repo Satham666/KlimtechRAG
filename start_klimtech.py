@@ -26,7 +26,7 @@ ENV_FILE = os.path.join(BASE_DIR, ".env")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 LLM_COMMAND_FILE = os.path.join(LOG_DIR, "llm_command.txt")
 
-PYTHON_VENV = os.path.join(BASE_DIR, "venv", "bin", "python")
+PYTHON_VENV = "/home/lobo/klimtech_venv/bin/python3"
 
 # Kontenery Podman (w kolejności startu)
 CONTAINERS = ["qdrant", "nextcloud", "postgres_nextcloud", "n8n", "open-webui"]
@@ -303,7 +303,7 @@ def main():
     backend_env = {
         "HIP_VISIBLE_DEVICES": "0",
         "HSA_OVERRIDE_GFX_VERSION": "9.0.6",
-        "KLIMTECH_EMBEDDING_DEVICE": "cpu",   # embedding na CPU
+        "KLIMTECH_EMBEDDING_DEVICE": "cuda:0",  # embedding na GPU
         "KLIMTECH_BASE_PATH": BASE_DIR,
     }
     if not start_process("Backend FastAPI", backend_cmd, BASE_DIR,
@@ -335,9 +335,18 @@ def main():
     print(f"   💬 Open WebUI:     http://localhost:{config.get('OWUI_PORT', 3000)}")
     print(f"   🔧 API Backend:    http://localhost:{backend_port}")
     print(f"   🤖 LLM (llama):   http://localhost:{llama_port}")
-    print(f"   📦 Qdrant:        http://localhost:6333")
-    print(f"   ☁️  Nextcloud:     http://localhost:8443")
-    print(f"   🔗 n8n:           http://localhost:5678")
+    def get_container_port(name):
+        try:
+            w = subprocess.run(["podman", "port", name], capture_output=True, text=True, timeout=5)
+            for linia in w.stdout.strip().splitlines():
+                if "->" in linia:
+                    return linia.split(":")[-1].strip()
+        except Exception:
+            pass
+        return "???"
+    print(f"   📦 Qdrant:        http://localhost:{get_container_port('qdrant')}")
+    print(f"   ☁️  Nextcloud:     http://localhost:{get_container_port('nextcloud')}")
+    print(f"   🔗 n8n:           http://localhost:{get_container_port('n8n')}")
     print(f"\n   📝 Model: {model_name}")
     print(f"   📊 RAG debug: http://localhost:{backend_port}/rag/debug")
     print("\n   CTRL+C aby zatrzymać\n")

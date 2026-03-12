@@ -80,7 +80,7 @@ def kill_llama() -> None:
 
 def kill_venv_python() -> None:
     print("⚡ Pozostałe procesy venv...")
-    pkill("KlimtechRAG/venv/bin/python", "venv python")
+    pkill("klimtech_venv/bin/python", "venv python")
 
 
 def stop_containers() -> None:

@@ -28,7 +28,7 @@ indexing_pipeline.connect("embedder", "writer")
 rag_pipeline = Pipeline()
 rag_pipeline.add_component("embedder", text_embedder)
 rag_pipeline.add_component(
-    "retriever", QdrantEmbeddingRetriever(document_store=doc_store, top_k=10)
+    "retriever", QdrantEmbeddingRetriever(document_store=doc_store, top_k=5)
 )
 rag_pipeline.add_component(
     "prompt_builder",
