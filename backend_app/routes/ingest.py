@@ -427,6 +427,7 @@ async def ingest_all_pending(req: Request, limit: int = 10):
 
     for f in files:
         if f.extension not in TEXT_INDEXABLE:
+            mark_indexed(f.path, 0)  # oznacz jako skipped żeby nie wracać
             results.append({"filename": f.filename, "chunks": 0, "status": "skipped_format"})
             continue
         try:

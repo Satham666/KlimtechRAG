@@ -12,7 +12,6 @@ from .routes import (
     filesystem_router,
     admin_router,
     ui_router,
-    model_switch_router,
 )
 
 from .services import doc_store

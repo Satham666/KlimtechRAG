@@ -17,7 +17,16 @@ import fitz
 
 logger = logging.getLogger("klimtechrag")
 
-VLM_MODEL = os.path.expanduser("/media/lobo/BACKUP/Dodatkowe_KlimtechRAG/modele_LLM/model_video/Qwen2-VL-7B-Instruct-Q6_K_L.gguf")
+def _find_vlm_model():
+    import glob
+    base = os.environ.get("KLIMTECH_BASE_PATH","").strip() or "/media/lobo/BACKUP/KlimtechRAG"
+    from pathlib import Path
+    h = Path.home() / "KlimtechRAG"
+    if h.exists(): base = str(h)
+    hits = glob.glob(os.path.join(base,"modele_LLM","model_video","*.gguf"))
+    hits = [f for f in hits if "mmproj" not in f]
+    return hits[0] if hits else ""
+VLM_MODEL = _find_vlm_model()
 LLAMA_SERVER_BIN = os.path.expanduser("~/KlimtechRAG/llama.cpp/build/bin/llama-server")
 LLAMA_CLI_BIN = os.path.expanduser("~/KlimtechRAG/llama.cpp/build/bin/llama-cli")
 VLM_PORT = 8083

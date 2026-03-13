@@ -18,7 +18,14 @@ from typing import Optional, Dict, Any
 # KONFIGURACJA
 # ---------------------------------------------------------------------------
 
-BASE_DIR = os.environ.get("KLIMTECH_BASE_PATH", "/media/lobo/BACKUP/KlimtechRAG")
+def _detect_base():
+    from pathlib import Path
+    env = os.environ.get("KLIMTECH_BASE_PATH", "").strip()
+    if env and Path(env).exists(): return env
+    h = Path.home() / "KlimtechRAG"
+    if h.exists(): return str(h)
+    return "/media/lobo/BACKUP/KlimtechRAG"
+BASE_DIR = _detect_base()
 LLAMA_DIR = os.path.join(BASE_DIR, "llama.cpp")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 LLM_COMMAND_FILE = os.path.join(LOG_DIR, "llm_command.txt")
