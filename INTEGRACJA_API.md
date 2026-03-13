@@ -53,7 +53,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # Rejestracja routerów
 app.include_router(chat.router)
 app.include_router(ingest.router)
