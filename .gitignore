@@ -4,6 +4,4 @@ data/
 __pycache__/
 *.pyc
 logs/
-files.zip
-wyt_resusc.pdf
 modele_LLM/
