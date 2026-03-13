@@ -230,12 +230,18 @@ def get_stats() -> dict:
             FROM files GROUP BY extension ORDER BY cnt DESC
         """).fetchall()
 
+        indexed_today = conn.execute(
+            "SELECT COUNT(*) FROM files WHERE status = 'indexed' "
+            "AND date(indexed_at) = date('now')"
+        ).fetchone()[0]
+
         return {
             "total_files": total,
             "indexed": indexed,
             "pending": pending,
             "errors": errors,
             "total_chunks": total_chunks,
+            "indexed_today": indexed_today,
             "by_extension": [
                 {"ext": r[0], "count": r[1], "chunks": r[2]} for r in by_ext
             ],

@@ -95,7 +95,20 @@ async def websocket_health(ws: WebSocket):
 
 @router.get("/files/stats")
 async def files_stats():
-    return get_file_stats()
+    stats = get_file_stats()
+    try:
+        import requests as _req
+        r = _req.get(
+            f"{settings.qdrant_url}/collections/{settings.qdrant_collection}",
+            timeout=3
+        ).json()
+        result = r.get("result", {})
+        stats["qdrant_points"]  = result.get("points_count", 0)
+        stats["qdrant_indexed"] = result.get("indexed_vectors_count", 0)
+    except Exception:
+        stats["qdrant_points"]  = None
+        stats["qdrant_indexed"] = None
+    return stats
 
 
 @router.get("/files/list")

@@ -311,8 +311,8 @@ input[type=file]{display:none}
         <div class="sb-s">
           <div class="sb-lbl">Statystyki</div>
           <div class="stats-grid">
-            <div class="stat"><div class="stat-val" id="sDocs">–</div><div class="stat-lbl">Dokumenty</div></div>
-            <div class="stat"><div class="stat-val" id="sChunks">–</div><div class="stat-lbl">Chunki</div></div>
+            <div class="stat"><div class="stat-val" id="sDocs">–</div><div class="stat-lbl">Zaindeksowane</div></div>
+            <div class="stat"><div class="stat-val" id="sChunks">–</div><div class="stat-lbl">Wektory RAG</div></div>
             <div class="stat"><div class="stat-val" id="sPending">–</div><div class="stat-lbl">Do indeksu</div></div>
             <div class="stat"><div class="stat-val" id="sToday">–</div><div class="stat-lbl">Dzisiaj</div></div>
           </div>
@@ -562,8 +562,8 @@ async function loadStats(){
   try{
     const r=await fetch(`${B}/files/stats`); if(!r.ok) return;
     const d=await r.json();
-    document.getElementById('sDocs').textContent   =d.total_files??'–';
-    document.getElementById('sChunks').textContent =d.total_chunks??'–';
+    document.getElementById('sDocs').textContent   =d.indexed??'–';
+    document.getElementById('sChunks').textContent =d.qdrant_points??d.total_chunks??'–';
     document.getElementById('sPending').textContent=d.pending??'–';
     document.getElementById('sToday').textContent  =d.indexed_today??'–';
   }catch{}

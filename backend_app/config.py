@@ -8,7 +8,17 @@ try:
 except ImportError:
     from pydantic import BaseSettings  # fallback dla starszych wersji
 
-BASE = "/media/lobo/BACKUP/KlimtechRAG"
+def _detect_base() -> str:
+    from pathlib import Path
+    env = os.environ.get("KLIMTECH_BASE_PATH", "").strip()
+    if env and Path(env).exists():
+        return env
+    home_path = Path.home() / "KlimtechRAG"
+    if home_path.exists():
+        return str(home_path)
+    return "/media/lobo/BACKUP/KlimtechRAG"
+
+BASE = _detect_base()
 
 
 class Settings(BaseSettings):
