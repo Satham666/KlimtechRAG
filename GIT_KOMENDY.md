@@ -24,7 +24,7 @@ git add *.py                      # Dodaje wszystkie pliki .py
 git commit -m "Opis zmian"        # Tworzy commit z opisem
 git commit --amend -m "Nowy opis" # Zmienia opis ostatniego commita
 
-it add -A; and git commit -m "Sync" -a; or true; and git push --force
+git add -A; and git commit -m "Sync" -a; or true; and git push --force
 
 ```
 
