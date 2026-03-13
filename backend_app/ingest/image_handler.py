@@ -17,7 +17,7 @@ import fitz
 
 logger = logging.getLogger("klimtechrag")
 
-VLM_MODEL = os.path.expanduser("~/.cache/llama.cpp/LFM2.5-VL-1.6B-F16.gguf")
+VLM_MODEL = os.path.expanduser("/media/lobo/BACKUP/Dodatkowe_KlimtechRAG/modele_LLM/model_video/Qwen2-VL-7B-Instruct-Q6_K_L.gguf")
 LLAMA_SERVER_BIN = os.path.expanduser("~/KlimtechRAG/llama.cpp/build/bin/llama-server")
 LLAMA_CLI_BIN = os.path.expanduser("~/KlimtechRAG/llama.cpp/build/bin/llama-cli")
 VLM_PORT = 8083
