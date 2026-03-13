@@ -34,6 +34,28 @@ CONTAINERS = ["qdrant", "nextcloud", "postgres_nextcloud", "n8n", "open-webui"]
 PROCESSES = []
 
 # ---------------------------------------------------------------------------
+# Pobierz IP z interfejsu sieciowego
+# ---------------------------------------------------------------------------
+
+def get_interface_ip(interface: str = "enp9s0") -> str:
+    """Zwraca adres IPv4 podanego interfejsu. Fallback: localhost."""
+    try:
+        result = subprocess.check_output(
+            ["ip", "-4", "addr", "show", interface],
+            text=True, stderr=subprocess.DEVNULL
+        )
+        for line in result.splitlines():
+            line = line.strip()
+            if line.startswith("inet "):
+                return line.split()[1].split("/")[0]
+    except Exception:
+        pass
+    print(f"⚠️  Nie można pobrać IP z {interface} — używam localhost")
+    return "localhost"
+
+LOCAL_IP = get_interface_ip("enp9s0")
+
+# ---------------------------------------------------------------------------
 # Konfiguracja z .env
 # ---------------------------------------------------------------------------
 
@@ -182,7 +204,7 @@ def start_owui(config: dict) -> None:
     if result.returncode == 0:
         # Kontener istnieje — po prostu go uruchom
         subprocess.run(["podman", "start", "open-webui"], capture_output=True)
-        print(f"✅ Open WebUI uruchomiony (istniejący kontener) → http://localhost:{owui_port}")
+        print(f"✅ Open WebUI uruchomiony (istniejący kontener) → http://{LOCAL_IP}:{owui_port}")
         return
 
     # Tworzenie nowego kontenera (pierwsze uruchomienie)
@@ -213,7 +235,7 @@ def start_owui(config: dict) -> None:
 
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode == 0:
-        print(f"✅ Open WebUI uruchomiony (nowy kontener) → http://localhost:{owui_port}")
+        print(f"✅ Open WebUI uruchomiony (nowy kontener) → http://{LOCAL_IP}:{owui_port}")
     else:
         print(f"❌ Open WebUI — błąd startu: {proc.stderr[:200]}")
         print("   Sprawdź: podman pull ghcr.io/open-webui/open-webui:main")
@@ -330,11 +352,6 @@ def main():
     start_owui(config)
 
     # Podsumowanie
-    print("\n" + "=" * 55)
-    print("🎉 KlimtechRAG gotowy!")
-    print(f"   💬 Open WebUI:     http://localhost:{config.get('OWUI_PORT', 3000)}")
-    print(f"   🔧 API Backend:    http://localhost:{backend_port}")
-    print(f"   🤖 LLM (llama):   http://localhost:{llama_port}")
     def get_container_port(name):
         try:
             w = subprocess.run(["podman", "port", name], capture_output=True, text=True, timeout=5)
@@ -344,11 +361,17 @@ def main():
         except Exception:
             pass
         return "???"
-    print(f"   📦 Qdrant:        http://localhost:{get_container_port('qdrant')}")
-    print(f"   ☁️  Nextcloud:     http://localhost:{get_container_port('nextcloud')}")
-    print(f"   🔗 n8n:           http://localhost:{get_container_port('n8n')}")
+
+    print("\n" + "=" * 55)
+    print("🎉 KlimtechRAG gotowy!")
+    print(f"   💬 Open WebUI:     http://{LOCAL_IP}:{config.get('OWUI_PORT', 3000)}")
+    print(f"   🔧 API Backend:    http://{LOCAL_IP}:{backend_port}")
+    print(f"   🤖 LLM (llama):   http://{LOCAL_IP}:{llama_port}")
+    print(f"   📦 Qdrant:        http://{LOCAL_IP}:{get_container_port('qdrant')}")
+    print(f"   ☁️  Nextcloud:     http://{LOCAL_IP}:{get_container_port('nextcloud')}")
+    print(f"   🔗 n8n:           http://{LOCAL_IP}:{get_container_port('n8n')}")
     print(f"\n   📝 Model: {model_name}")
-    print(f"   📊 RAG debug: http://localhost:{backend_port}/rag/debug")
+    print(f"   📊 RAG debug: http://{LOCAL_IP}:{backend_port}/rag/debug")
     print("\n   CTRL+C aby zatrzymać\n")
     print("=" * 55)
 
