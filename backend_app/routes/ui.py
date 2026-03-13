@@ -603,18 +603,33 @@ async function startUpload() {
         continue;
       }
 
-      // Parsuj JSON — pokaż surowy tekst jeśli się nie uda
+      // Parsuj JSON
       try {
         upData = JSON.parse(rawText);
       } catch(jsonErr) {
-        log(`  ❌ Serwer zwrócił błędną odpowiedź (HTTP ${upResp.status})`, 'log-err');
-        log(`  ℹ️  Odpowiedź: ${rawText.slice(0,200)}`, 'log-muted');
+        log(`  ❌ Serwer zwrócił nie-JSON (HTTP ${upResp.status})`, 'log-err');
+        log(`  📄 Odpowiedź: ${rawText.slice(0,300)}`, 'log-muted');
         continue;
       }
 
-      if (!upResp.ok || !upData) {
-        const detail = upData?.detail || upData?.message || rawText.slice(0,150) || upResp.status;
+      // HTTP 200 ale body null — backend zwrócił None
+      if (upData === null) {
+        log(`  ❌ Backend zwrócił null (HTTP ${upResp.status}) — prawdopodobny błąd w ingest.py`, 'log-err');
+        log(`  📄 Raw: ${rawText}`, 'log-muted');
+        log(`  ℹ️  Uruchom: python3 ingest_fix.py  i zrestartuj backend`, 'log-warn');
+        // Spróbuj sprawdzić /health żeby zobaczyć czy backend w ogóle działa
+        try {
+          const hResp = await fetch('/health');
+          const hData = await hResp.json();
+          log(`  🔍 Health: qdrant=${hData.qdrant} llm=${hData.llm} status=${hData.status}`, 'log-muted');
+        } catch(e) {}
+        continue;
+      }
+
+      if (!upResp.ok) {
+        const detail = upData?.detail || upData?.message || rawText.slice(0,150);
         log(`  ❌ Upload błąd (HTTP ${upResp.status}): ${detail}`, 'log-err');
+        log(`  📄 Pełna odpowiedź: ${rawText.slice(0,300)}`, 'log-muted');
         continue;
       }
 
@@ -627,10 +642,43 @@ async function startUpload() {
         continue;
       }
 
-      // Krok 2: Jeśli normalny tryb — backend już zaindeksował w tle
+      // Krok 2: Jeśli normalny tryb — backend już zaindeksował w tle, śledź postęp
       if (ingestMode === 'normal') {
         if (upData.indexing) {
           log(`  ⏳ Indeksowanie w tle...`, 'log-info');
+
+          // Polling przez 30s żeby pokazać kiedy chunki pojawią się w bazie
+          const normId = 'norm-progress-' + Date.now();
+          logBox.innerHTML += `<div id="${normId}" class="log-muted">  ⏱️  Czekam na chunki w Qdrant...</div>`;
+          logBox.scrollTop = logBox.scrollHeight;
+
+          let chunksBefore2 = 0;
+          try { const r = await fetch('/files/stats'); const d = await r.json(); chunksBefore2 = d.total_chunks||0; } catch(e){}
+
+          await new Promise(resolve => {
+            let attempts = 0;
+            const t = setInterval(async () => {
+              attempts++;
+              try {
+                const r = await fetch('/files/stats');
+                const d = await r.json();
+                const now = d.total_chunks || 0;
+                const el = document.getElementById(normId);
+                if (el) el.textContent = `  ⏱️  Indeksowanie... chunki w bazie: ${now} (+${now - chunksBefore2} nowych)`;
+                if (now > chunksBefore2 || attempts >= 15) {
+                  clearInterval(t);
+                  if (el) el.remove();
+                  if (now > chunksBefore2) {
+                    log(`  ✅ Zaindeksowano: +${now - chunksBefore2} chunków (łącznie: ${now})`, 'log-ok');
+                  } else {
+                    log(`  ℹ️  Chunki będą widoczne za chwilę (indeksowanie async)`, 'log-muted');
+                  }
+                  resolve();
+                }
+              } catch(e) { attempts++; }
+            }, 2000);
+          });
+
         } else {
           log(`  ℹ️  Format zapisany, indeksowanie nie dotyczy tego typu pliku`, 'log-muted');
         }
@@ -640,6 +688,45 @@ async function startUpload() {
       if (isPdf && ingestMode==='vlm' && savedPath) {
         log(`  🖼️  VLM: uruchamiam opis grafik w: ${f.name}`, 'log-warn');
         log(`  ⏳ To może potrwać kilka minut dla dużych PDF...`, 'log-muted');
+
+        // Pobierz chunki PRZED — żeby liczyć przyrost
+        let chunksBefore = 0;
+        try {
+          const sb = await fetch('/files/stats');
+          const db = await sb.json();
+          chunksBefore = db.total_chunks || 0;
+        } catch(e) {}
+
+        // Placeholder linii postępu — będziemy go aktualizować
+        const progressId = 'vlm-progress-' + Date.now();
+        logBox.innerHTML += `<div id="${progressId}" class="log-muted">  ⏱️  VLM pracuje... 0s | chunki: ${chunksBefore}</div>`;
+        logBox.scrollTop = logBox.scrollHeight;
+
+        const startTs = Date.now();
+        let pollTimer = null;
+        let lastChunks = chunksBefore;
+
+        // Polling co 4s — aktualizuj linię postępu
+        function startPolling() {
+          pollTimer = setInterval(async () => {
+            try {
+              const sp = await fetch('/files/stats');
+              const dp = await sp.json();
+              const nowChunks = dp.total_chunks || 0;
+              const elapsed   = Math.round((Date.now() - startTs) / 1000);
+              const newChunks = nowChunks - chunksBefore;
+              const el = document.getElementById(progressId);
+              if (el) {
+                const arrow = nowChunks > lastChunks ? ' ▲' : '';
+                el.textContent = `  ⏱️  VLM pracuje... ${elapsed}s | chunki w bazie: ${nowChunks}${arrow} (+${newChunks} nowych)`;
+                lastChunks = nowChunks;
+              }
+            } catch(e) {}
+          }, 4000);
+        }
+
+        startPolling();
+
         try {
           const vlmResp = await fetch('/ingest_pdf_vlm', {
             method: 'POST',
@@ -650,13 +737,23 @@ async function startUpload() {
           let vlmData;
           try { vlmData = JSON.parse(vlmRaw); } catch(e) { vlmData = null; }
 
+          clearInterval(pollTimer);
+          const elapsed = Math.round((Date.now() - startTs) / 1000);
+
+          // Usuń linię tymczasową
+          const el = document.getElementById(progressId);
+          if (el) el.remove();
+
           if (vlmResp.ok && vlmData) {
-            log(`  ✅ VLM gotowe: ${vlmData.chunks_processed} chunków | VLM użyto: ${vlmData.vlm_used}`, 'log-ok');
+            log(`  ✅ VLM gotowe (${elapsed}s): ${vlmData.chunks_processed} chunków | VLM użyto: ${vlmData.vlm_used}`, 'log-ok');
           } else {
             const vlmErr = vlmData?.detail || vlmRaw.slice(0,100);
-            log(`  ⚠️  VLM błąd: ${vlmErr} — plik zapisany ale bez opisów grafik`, 'log-warn');
+            log(`  ⚠️  VLM błąd po ${elapsed}s: ${vlmErr}`, 'log-warn');
           }
         } catch(vlmErr) {
+          clearInterval(pollTimer);
+          const el = document.getElementById(progressId);
+          if (el) el.remove();
           log(`  ⚠️  VLM timeout/błąd: ${vlmErr.message}`, 'log-warn');
         }
       }
