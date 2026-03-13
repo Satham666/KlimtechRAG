@@ -4,4 +4,3 @@ data/
 __pycache__/
 *.pyc
 logs/
-modele_LLM/

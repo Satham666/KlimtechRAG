@@ -73,7 +73,7 @@
 │  (port 8082)              │    │  - FastAPI                            │
 │  ┌────────────────────┐   │    │  - /v1/embeddings                     │
 │  │ Bielik-11B-v3.0    │   │    │  - /upload, /ingest_path              │
-│  │ Q5_K_M (~14GB VRAM)│   │    │  - /rag/debug                         │
+│  │ Q8_0 (~14GB VRAM)  │   │    │  - /rag/debug                         │
 │  └────────────────────┘   │    │  - Watchdog (Nextcloud)               │
 └──────────────────────────┘    └─────────────┬────────────────────────┘
                                               │
@@ -142,12 +142,42 @@
 
 ### 3.3 Modele AI
 
-| Typ | Model | Rozmiar | VRAM | Cel |
-|-----|-------|---------|------|-----|
-| **LLM** | Bielik-11B-v3.0-Instruct.Q5_K_M.gguf | ~7GB | ~14GB | Chat, generowanie |
-| **Embedding** | intfloat/multilingual-e5-large | 1.3GB | ~2.5GB GPU / CPU | Wektory (dim 1024) |
-| **VLM** | LFM2.5-VL-1.6B-F16.gguf | 2.3GB | - | Opis obrazów (⚠️ nie działa) |
-| **Whisper** | (planowany) | - | - | Audio → tekst |
+**Modele LLM (model_thinking/):**
+
+| Model | Rozmiar | VRAM | Kwantyzacja | Cel |
+|-------|---------|------|-------------|-----|
+| Bielik-11B-v3.0-Instruct | ~11B | ~14GB | Q8_0 | Chat, generowanie (główny) |
+| Bielik-4.5B-v3.0-Instruct | ~4.5B | ~6GB | Q8_0 | Szybszy wariant |
+| LFM2-2.6B | ~2.6B | ~3GB | F16 | Lekki model |
+
+**Modele Embedding (model_embedding/):**
+
+| Model | Wymiar | Rozmiar | Notatki |
+|-------|--------|---------|---------|
+| intfloat/multilingual-e5-large | 1024 | 1.3GB | Aktualnie używany (HuggingFace) |
+| bge-large-en-v1.5 | 1024 | ~1.3GB | Q8_0 GGUF (alternatywa) |
+| Bge-M3-567M | 1024 | ~567MB | F32 (wielojęzyczny) |
+
+**Modele Multimodalne:**
+
+| Typ | Model | Lokalizacja | Status |
+|-----|-------|-------------|--------|
+| **VLM** | LFM2.5-VL-1.6B-F16.gguf | model_video/ | ⚠️ Nie działa (brak mmproj) |
+| **Audio** | vocoder-LFM2.5-Audio-1.5B-F16.gguf | model_audio/ | 🔄 Do testów |
+| **Whisper** | (planowany) | - | 📋 Roadmap Q1 2026 |
+
+**Organizacja katalogów:**
+Modele są zorganizowane tematycznie według zastosowania:
+- `model_thinking/` - modele do rozumowania i generowania tekstu (LLM)
+- `model_embedding/` - modele do tworzenia wektorów (embedding)
+- `model_video/` - modele vision-language (VLM, obrazy)
+- `model_audio/` - modele audio (TTS, STT, vocoder)
+- `model_medical/`, `model_financial_analysis/` - zarezerwowane na przyszłość (modele domenowe)
+
+**Wybór modelu LLM (praktyczne wskazówki):**
+- **Bielik-11B-Q8_0** - najlepsza jakość, ~14GB VRAM, ~15 tokens/s (domyślny)
+- **Bielik-4.5B-Q8_0** - szybszy, ~6GB VRAM, ~25 tokens/s (gdy brakuje VRAM dla większego)
+- **LFM2-2.6B-F16** - bardzo szybki, ~3GB VRAM, ~40 tokens/s (testy, szybkie odpowiedzi)
 
 ### 3.4 Narzędzia przetwarzania
 
@@ -332,10 +362,20 @@ backend_app/
 │   ├── watchdog_stdout.log
 │   └── llm_command.txt               # Zapisana komenda LLM
 │
-├── modele_LLM/                       # Modele GGUF
-│   ├── Bielik-11B-v3.0-Instruct.Q5_K_M.gguf
-│   ├── LFM2.5-VL-1.6B-F16.gguf       # VLM
-│   └── AudioLLM/
+├── modele_LLM/                       # Modele GGUF (uporządkowane)
+│   ├── model_audio/                  # Modele audio (TTS/STT)
+│   │   └── vocoder-LFM2.5-Audio-1.5B-F16.gguf
+│   ├── model_embedding/              # Modele embeddingowe
+│   │   ├── bge-large-en-v1.5.Q8_0.gguf
+│   │   └── Bge-M3-567M-F32.gguf
+│   ├── model_financial_analysis/     # (zarezerwowane)
+│   ├── model_medical/                # (zarezerwowane)
+│   ├── model_thinking/               # Modele LLM (reasoning)
+│   │   ├── Bielik-11B-v3.0-Instruct.Q8_0.gguf
+│   │   ├── Bielik-4.5B-v3.0-Instruct.Q8_0.gguf
+│   │   └── LFM2-2.6B-F16.gguf
+│   └── model_video/                  # Modele VLM (vision-language)
+│       └── LFM2.5-VL-1.6B-F16.gguf
 │
 ├── llama.cpp/                        # llama.cpp build
 │   └── build/bin/
