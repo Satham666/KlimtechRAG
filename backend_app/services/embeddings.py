@@ -11,7 +11,7 @@ from ..config import settings
 
 logger = logging.getLogger("klimtechrag")
 
-EMBEDDING_DEVICE = os.getenv("KLIMTECH_EMBEDDING_DEVICE", "gpu")
+EMBEDDING_DEVICE = os.getenv("KLIMTECH_EMBEDDING_DEVICE", settings.embedding_device)
 embedding_device = ComponentDevice.from_str(EMBEDDING_DEVICE)
 logger.info("Embedding device: %s", EMBEDDING_DEVICE)
 
