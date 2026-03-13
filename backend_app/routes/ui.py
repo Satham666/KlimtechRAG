@@ -7,14 +7,13 @@ Układ:
 - PRAWA POŁOWA: Czat (pełna wysokość)
 
 Responsywny: na małych ekranach układ pionowy
+Nie wymaga nowych endpointów - działa z istniejącym backendem
 """
 from fastapi import APIRouter, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from typing import Optional, List
 import os
 import json
-import subprocess
-import asyncio
 
 router = APIRouter(tags=["UI"])
 
@@ -42,14 +41,7 @@ async def main_ui():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KlimtechRAG — System RAG</title>
     <style>
-        /* ============================================
-           RESET I BAZOWE STYLE
-           ============================================ */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         :root {
             --bg-primary: #0f0f1a;
@@ -68,15 +60,12 @@ async def main_ui():
         
         html, body {
             height: 100%;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
             overflow: hidden;
         }
         
-        /* ============================================
-           GŁÓWNY KONTENER
-           ============================================ */
         .app-container {
             display: flex;
             flex-direction: column;
@@ -84,9 +73,7 @@ async def main_ui():
             width: 100%;
         }
         
-        /* ============================================
-           NAGŁÓWEK
-           ============================================ */
+        /* HEADER */
         .header {
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border);
@@ -98,39 +85,22 @@ async def main_ui():
             z-index: 100;
         }
         
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+        .logo { display: flex; align-items: center; gap: 10px; }
         
         .logo-icon {
-            width: 32px;
-            height: 32px;
+            width: 32px; height: 32px;
             background: linear-gradient(135deg, var(--accent), var(--accent-hover));
             border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             font-size: 18px;
         }
         
-        .logo-text {
-            font-size: 20px;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
+        .logo-text { font-size: 20px; font-weight: 600; }
         
-        .header-actions {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
+        .header-actions { display: flex; gap: 10px; align-items: center; }
         
         .model-status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            display: flex; align-items: center; gap: 8px;
             padding: 8px 16px;
             background: var(--bg-card);
             border-radius: 20px;
@@ -138,33 +108,24 @@ async def main_ui():
         }
         
         .status-dot {
-            width: 10px;
-            height: 10px;
+            width: 10px; height: 10px;
             border-radius: 50%;
             background: var(--danger);
             animation: pulse 2s infinite;
         }
         
-        .status-dot.active {
-            background: var(--accent);
-        }
+        .status-dot.active { background: var(--accent); }
         
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         
-        /* ============================================
-           GŁÓWNA ZAWARTOŚĆ - DWIE KOLUMNY
-           ============================================ */
+        /* MAIN CONTENT */
         .main-content {
             display: flex;
             flex: 1;
             overflow: hidden;
-            gap: 0;
         }
         
-        /* LEWA KOLUMNA - Wgraj pliki + Statystyki */
+        /* LEFT COLUMN */
         .left-column {
             width: 45%;
             min-width: 350px;
@@ -175,7 +136,7 @@ async def main_ui():
             border-right: 1px solid var(--border);
         }
         
-        /* PRAWA KOLUMNA - Czat */
+        /* RIGHT COLUMN */
         .right-column {
             flex: 1;
             display: flex;
@@ -184,9 +145,7 @@ async def main_ui():
             min-width: 400px;
         }
         
-        /* ============================================
-           PANEL WGARJANIA PLIKÓW
-           ============================================ */
+        /* UPLOAD PANEL */
         .upload-panel {
             flex: 0 0 auto;
             max-height: 45%;
@@ -196,54 +155,30 @@ async def main_ui():
         }
         
         .panel-title {
-            font-size: 16px;
-            font-weight: 600;
+            font-size: 16px; font-weight: 600;
             margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            display: flex; align-items: center; gap: 8px;
         }
         
-        .panel-title .icon {
-            font-size: 20px;
-        }
-        
-        /* Drop zone */
         .drop-zone {
             border: 2px dashed var(--border);
             border-radius: 12px;
             padding: 30px 20px;
             text-align: center;
-            transition: all 0.3s;
             cursor: pointer;
             background: rgba(78, 204, 163, 0.05);
+            transition: all 0.3s;
         }
         
-        .drop-zone:hover,
-        .drop-zone.dragover {
+        .drop-zone:hover, .drop-zone.dragover {
             border-color: var(--accent);
             background: rgba(78, 204, 163, 0.1);
         }
         
-        .drop-zone-icon {
-            font-size: 48px;
-            margin-bottom: 10px;
-            opacity: 0.7;
-        }
+        .drop-zone-icon { font-size: 48px; margin-bottom: 10px; opacity: 0.7; }
+        .drop-zone-text { color: var(--text-secondary); font-size: 14px; margin-bottom: 15px; }
+        .drop-zone-hint { color: var(--text-secondary); font-size: 12px; opacity: 0.7; }
         
-        .drop-zone-text {
-            color: var(--text-secondary);
-            font-size: 14px;
-            margin-bottom: 15px;
-        }
-        
-        .drop-zone-hint {
-            color: var(--text-secondary);
-            font-size: 12px;
-            opacity: 0.7;
-        }
-        
-        /* Przyciski */
         .btn {
             padding: 10px 20px;
             border: none;
@@ -257,41 +192,12 @@ async def main_ui():
             gap: 6px;
         }
         
-        .btn-primary {
-            background: var(--accent);
-            color: var(--bg-primary);
-        }
+        .btn-primary { background: var(--accent); color: var(--bg-primary); }
+        .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
         
-        .btn-primary:hover {
-            background: var(--accent-hover);
-            transform: translateY(-1px);
-        }
-        
-        .btn-secondary {
-            background: var(--bg-card);
-            color: var(--text-primary);
-            border: 1px solid var(--border);
-        }
-        
-        .btn-secondary:hover {
-            background: var(--border);
-        }
-        
-        .btn-danger {
-            background: var(--danger);
-            color: white;
-        }
-        
-        .btn-sm {
-            padding: 6px 12px;
-            font-size: 12px;
-        }
-        
-        /* Tryb VLM */
+        /* VLM TOGGLE */
         .vlm-toggle {
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            display: flex; align-items: center; gap: 10px;
             margin-top: 15px;
             padding: 10px;
             background: var(--bg-card);
@@ -300,43 +206,30 @@ async def main_ui():
         
         .toggle-switch {
             position: relative;
-            width: 44px;
-            height: 24px;
+            width: 44px; height: 24px;
             background: var(--border);
             border-radius: 12px;
             cursor: pointer;
             transition: background 0.3s;
         }
         
-        .toggle-switch.active {
-            background: var(--accent);
-        }
+        .toggle-switch.active { background: var(--accent); }
         
         .toggle-switch::after {
             content: '';
             position: absolute;
-            top: 2px;
-            left: 2px;
-            width: 20px;
-            height: 20px;
+            top: 2px; left: 2px;
+            width: 20px; height: 20px;
             background: white;
             border-radius: 50%;
             transition: transform 0.3s;
         }
         
-        .toggle-switch.active::after {
-            transform: translateX(20px);
-        }
+        .toggle-switch.active::after { transform: translateX(20px); }
         
-        /* Progress bar */
-        .progress-container {
-            margin-top: 15px;
-            display: none;
-        }
-        
-        .progress-container.active {
-            display: block;
-        }
+        /* PROGRESS */
+        .progress-container { margin-top: 15px; display: none; }
+        .progress-container.active { display: block; }
         
         .progress-bar {
             height: 8px;
@@ -353,20 +246,10 @@ async def main_ui():
             width: 0%;
         }
         
-        .progress-text {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-top: 5px;
-        }
+        .progress-text { font-size: 12px; color: var(--text-secondary); margin-top: 5px; }
         
-        /* ============================================
-           PANEL STATYSTYK
-           ============================================ */
-        .stats-panel {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-        }
+        /* STATS PANEL */
+        .stats-panel { flex: 1; padding: 20px; overflow-y: auto; }
         
         .stats-grid {
             display: grid;
@@ -382,19 +265,10 @@ async def main_ui():
             text-align: center;
         }
         
-        .stat-value {
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--accent);
-        }
+        .stat-value { font-size: 24px; font-weight: 700; color: var(--accent); }
+        .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 5px; }
         
-        .stat-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-top: 5px;
-        }
-        
-        /* Lista plików */
+        /* FILES LIST */
         .files-list {
             background: var(--bg-card);
             border-radius: 10px;
@@ -418,21 +292,9 @@ async def main_ui():
             font-size: 13px;
         }
         
-        .file-item:last-child {
-            border-bottom: none;
-        }
-        
-        .file-icon {
-            margin-right: 10px;
-            font-size: 16px;
-        }
-        
-        .file-name {
-            flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
+        .file-item:last-child { border-bottom: none; }
+        .file-icon { margin-right: 10px; font-size: 16px; }
+        .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         
         .file-status {
             padding: 3px 8px;
@@ -441,30 +303,12 @@ async def main_ui():
             font-weight: 500;
         }
         
-        .file-status.pending {
-            background: var(--warning);
-            color: var(--bg-primary);
-        }
+        .file-status.pending { background: var(--warning); color: var(--bg-primary); }
+        .file-status.indexed { background: var(--accent); color: var(--bg-primary); }
+        .file-status.error { background: var(--danger); color: white; }
         
-        .file-status.indexed {
-            background: var(--accent);
-            color: var(--bg-primary);
-        }
-        
-        .file-status.error {
-            background: var(--danger);
-            color: white;
-        }
-        
-        /* ============================================
-           PANEL CZATU
-           ============================================ */
-        .chat-panel {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-        }
+        /* CHAT PANEL */
+        .chat-panel { flex: 1; display: flex; flex-direction: column; height: 100%; }
         
         .chat-messages {
             flex: 1;
@@ -478,38 +322,28 @@ async def main_ui():
         .message {
             display: flex;
             gap: 12px;
-            max-width: 90%;
+            max-width: 85%;
         }
         
-        .message.user {
-            flex-direction: row-reverse;
-            margin-left: auto;
-        }
+        .message.user { flex-direction: row-reverse; margin-left: auto; }
         
         .message-avatar {
-            width: 36px;
-            height: 36px;
+            width: 36px; height: 36px;
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             font-size: 16px;
             flex-shrink: 0;
         }
         
-        .message.user .message-avatar {
-            background: var(--chat-user);
-        }
-        
-        .message.assistant .message-avatar {
-            background: var(--chat-ai);
-        }
+        .message.user .message-avatar { background: var(--chat-user); }
+        .message.assistant .message-avatar { background: var(--chat-ai); }
         
         .message-content {
             background: var(--bg-card);
             border-radius: 16px;
             padding: 12px 16px;
-            line-height: 1.5;
+            line-height: 1.6;
+            max-width: 100%;
         }
         
         .message.user .message-content {
@@ -517,9 +351,7 @@ async def main_ui():
             border-bottom-right-radius: 4px;
         }
         
-        .message.assistant .message-content {
-            border-bottom-left-radius: 4px;
-        }
+        .message.assistant .message-content { border-bottom-left-radius: 4px; }
         
         .message-content pre {
             background: rgba(0,0,0,0.3);
@@ -545,30 +377,14 @@ async def main_ui():
             color: var(--text-secondary);
         }
         
-        .message-sources-title {
-            font-weight: 500;
-            margin-bottom: 5px;
-        }
-        
-        .source-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            margin: 3px 0;
-        }
-        
-        /* Input czatu */
+        /* CHAT INPUT */
         .chat-input-container {
             padding: 15px 20px;
             background: var(--bg-secondary);
             border-top: 1px solid var(--border);
         }
         
-        .chat-input-wrapper {
-            display: flex;
-            gap: 10px;
-            align-items: flex-end;
-        }
+        .chat-input-wrapper { display: flex; gap: 10px; align-items: flex-end; }
         
         .chat-input {
             flex: 1;
@@ -584,18 +400,11 @@ async def main_ui():
             line-height: 1.4;
         }
         
-        .chat-input:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-        
-        .chat-input::placeholder {
-            color: var(--text-secondary);
-        }
+        .chat-input:focus { outline: none; border-color: var(--accent); }
+        .chat-input::placeholder { color: var(--text-secondary); }
         
         .send-btn {
-            width: 48px;
-            height: 48px;
+            width: 48px; height: 48px;
             border-radius: 12px;
             background: var(--accent);
             border: none;
@@ -603,27 +412,14 @@ async def main_ui():
             font-size: 20px;
             cursor: pointer;
             transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
         }
         
-        .send-btn:hover {
-            background: var(--accent-hover);
-            transform: scale(1.05);
-        }
+        .send-btn:hover { background: var(--accent-hover); transform: scale(1.05); }
+        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
         
-        .send-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        /* Typing indicator */
-        .typing-indicator {
-            display: none;
-            padding: 10px 20px;
-        }
+        /* TYPING */
+        .typing-indicator { display: none; padding: 10px 20px; }
         
         .typing-indicator.active {
             display: flex;
@@ -632,8 +428,7 @@ async def main_ui():
         }
         
         .typing-dot {
-            width: 8px;
-            height: 8px;
+            width: 8px; height: 8px;
             background: var(--accent);
             border-radius: 50%;
             animation: typingBounce 1.4s infinite ease-in-out both;
@@ -647,176 +442,42 @@ async def main_ui():
             40% { transform: scale(1); }
         }
         
-        /* ============================================
-           PRZEŁĄCZANIE MODELI
-           ============================================ */
-        .model-switch-panel {
-            padding: 15px;
-            background: var(--bg-card);
-            border-radius: 10px;
-            margin-top: 15px;
-        }
-        
-        .model-switch-title {
-            font-size: 14px;
-            font-weight: 500;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .model-buttons {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .model-btn {
-            flex: 1;
-            padding: 10px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            background: transparent;
-            color: var(--text-secondary);
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
-        }
-        
-        .model-btn.active {
-            border-color: var(--accent);
-            color: var(--accent);
-            background: rgba(78, 204, 163, 0.1);
-        }
-        
-        .model-btn:hover:not(.active) {
-            border-color: var(--text-secondary);
-        }
-        
-        .model-btn-icon {
-            font-size: 20px;
-        }
-        
-        .model-btn-label {
-            font-weight: 500;
-        }
-        
-        .model-btn-hint {
-            font-size: 11px;
-            opacity: 0.7;
-        }
-        
-        /* ============================================
-           RESPONSYWNOŚĆ
-           ============================================ */
+        /* RESPONSIVE */
         @media (max-width: 900px) {
-            .main-content {
-                flex-direction: column;
-            }
-            
+            .main-content { flex-direction: column; }
             .left-column {
-                width: 100%;
-                max-width: none;
-                min-width: auto;
-                max-height: 50vh;
+                width: 100%; max-width: none; min-width: auto;
+                max-height: 45vh;
                 border-right: none;
                 border-bottom: 1px solid var(--border);
             }
-            
-            .right-column {
-                min-width: auto;
-            }
-            
-            .upload-panel {
-                max-height: none;
-            }
-            
-            .stats-grid {
-                grid-template-columns: repeat(4, 1fr);
-            }
+            .right-column { min-width: auto; }
         }
         
         @media (max-width: 600px) {
-            .header {
-                padding: 10px 15px;
-            }
-            
-            .logo-text {
-                font-size: 16px;
-            }
-            
-            .model-status {
-                padding: 6px 10px;
-                font-size: 12px;
-            }
-            
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .panel-title {
-                font-size: 14px;
-            }
-            
-            .drop-zone {
-                padding: 20px;
-            }
-            
-            .chat-input {
-                font-size: 16px; /* Zapobiega zoom na iOS */
-            }
+            .header { padding: 10px 15px; }
+            .logo-text { font-size: 16px; }
+            .model-status { padding: 6px 10px; font-size: 12px; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .chat-input { font-size: 16px; }
         }
         
-        /* ============================================
-           SCROLLBAR
-           ============================================ */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
+        /* SCROLLBAR */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
         
-        ::-webkit-scrollbar-track {
-            background: var(--bg-primary);
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 4px;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--text-secondary);
-        }
-        
-        /* ============================================
-           ANIMACJE
-           ============================================ */
-        .fade-in {
-            animation: fadeIn 0.3s ease-in-out;
-        }
-        
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .slide-in {
-            animation: slideIn 0.3s ease-out;
-        }
-        
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-20px); }
-            to { opacity: 1; transform: translateX(0); }
         }
     </style>
 </head>
 <body>
     <div class="app-container">
-        <!-- NAGŁÓWEK -->
+        <!-- HEADER -->
         <header class="header">
             <div class="logo">
                 <div class="logo-icon">🤖</div>
@@ -825,30 +486,26 @@ async def main_ui():
             <div class="header-actions">
                 <div class="model-status">
                     <span class="status-dot" id="statusDot"></span>
-                    <span id="modelType">Ładowanie...</span>
+                    <span id="modelStatus">Sprawdzam...</span>
                 </div>
             </div>
         </header>
         
-        <!-- GŁÓWNA ZAWARTOŚĆ -->
+        <!-- MAIN CONTENT -->
         <main class="main-content">
-            <!-- LEWA KOLUMNA -->
+            <!-- LEFT COLUMN -->
             <aside class="left-column">
-                <!-- PANEL WGARJANIA -->
+                <!-- UPLOAD PANEL -->
                 <section class="upload-panel">
                     <h2 class="panel-title">
-                        <span class="icon">📤</span>
+                        <span>📤</span>
                         Wgraj pliki do indeksu
                     </h2>
                     
                     <div class="drop-zone" id="dropZone">
                         <div class="drop-zone-icon">📁</div>
-                        <div class="drop-zone-text">
-                            Przeciągnij pliki tutaj lub kliknij
-                        </div>
-                        <div class="drop-zone-hint">
-                            PDF, DOCX, TXT, MD (max 50MB)
-                        </div>
+                        <div class="drop-zone-text">Przeciągnij pliki tutaj lub kliknij</div>
+                        <div class="drop-zone-hint">PDF, DOCX, TXT, MD (max 50MB)</div>
                         <input type="file" id="fileInput" multiple hidden 
                                accept=".pdf,.docx,.doc,.txt,.md,.json">
                     </div>
@@ -860,7 +517,7 @@ async def main_ui():
                         <div class="progress-text" id="progressText">Przygotowywanie...</div>
                     </div>
                     
-                    <!-- Tryb VLM -->
+                    <!-- VLM Toggle -->
                     <div class="vlm-toggle">
                         <div class="toggle-switch" id="vlmToggle" onclick="toggleVLM()"></div>
                         <div>
@@ -870,32 +527,12 @@ async def main_ui():
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- Przełączanie modeli -->
-                    <div class="model-switch-panel">
-                        <div class="model-switch-title">
-                            <span>🔄</span>
-                            Przełącz model
-                        </div>
-                        <div class="model-buttons">
-                            <button class="model-btn active" id="btnLLM" onclick="switchModel('llm')">
-                                <span class="model-btn-icon">💬</span>
-                                <span class="model-btn-label">LLM</span>
-                                <span class="model-btn-hint">Czat</span>
-                            </button>
-                            <button class="model-btn" id="btnVLM" onclick="switchModel('vlm')">
-                                <span class="model-btn-icon">📷</span>
-                                <span class="model-btn-label">VLM</span>
-                                <span class="model-btn-hint">Vision</span>
-                            </button>
-                        </div>
-                    </div>
                 </section>
                 
-                <!-- PANEL STATYSTYK -->
+                <!-- STATS PANEL -->
                 <section class="stats-panel">
                     <h2 class="panel-title">
-                        <span class="icon">📊</span>
+                        <span>📊</span>
                         Statystyki
                     </h2>
                     
@@ -921,20 +558,22 @@ async def main_ui():
                     <div class="files-list">
                         <div class="files-list-header">📋 Ostatnie pliki</div>
                         <div id="filesListContent">
-                            <!-- Dynamicznie wypełniane -->
+                            <div class="file-item" style="justify-content: center; color: var(--text-secondary);">
+                                Ładowanie...
+                            </div>
                         </div>
                     </div>
                 </section>
             </aside>
             
-            <!-- PRAWA KOLUMNA - CZAT -->
+            <!-- RIGHT COLUMN - CHAT -->
             <section class="right-column">
                 <div class="chat-panel">
                     <div class="chat-messages" id="chatMessages">
-                        <div class="message assistant">
+                        <div class="message assistant fade-in">
                             <div class="message-avatar">🤖</div>
                             <div class="message-content">
-                                Witam! Jestem asystentem RAG KlimtechRAG. 
+                                Witam! Jestem asystentem RAG KlimtechRAG.
                                 <br><br>
                                 Zadaj pytanie — przeszukam zaindeksowane dokumenty i odpowiem na podstawie ich treści.
                                 <br><br>
@@ -960,9 +599,7 @@ async def main_ui():
                                 placeholder="Zadaj pytanie na podstawie zaindeksowanych dokumentów..."
                                 rows="1"
                             ></textarea>
-                            <button class="send-btn" id="sendBtn" onclick="sendMessage()">
-                                ➤
-                            </button>
+                            <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
                         </div>
                     </div>
                 </div>
@@ -975,7 +612,6 @@ async def main_ui():
         // KONFIGURACJA
         // ============================================
         const API_BASE = window.location.origin;
-        let currentModel = 'llm';
         let vlmMode = false;
         
         // ============================================
@@ -984,14 +620,40 @@ async def main_ui():
         document.addEventListener('DOMContentLoaded', () => {
             loadStats();
             loadFiles();
-            checkModelStatus();
+            checkLLMStatus();
             
-            // Refresh co 30s
+            // Auto-refresh co 30s
             setInterval(() => {
                 loadStats();
-                checkModelStatus();
+                checkLLMStatus();
             }, 30000);
         });
+        
+        // ============================================
+        // SPRAWDZANIE STATUSU LLM
+        // ============================================
+        async function checkLLMStatus() {
+            const dot = document.getElementById('statusDot');
+            const status = document.getElementById('modelStatus');
+            
+            try {
+                const response = await fetch(`${API_BASE}/v1/models`, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(3000)
+                });
+                
+                if (response.ok) {
+                    dot.classList.add('active');
+                    status.textContent = 'LLM działa';
+                } else {
+                    dot.classList.remove('active');
+                    status.textContent = 'LLM błąd';
+                }
+            } catch (error) {
+                dot.classList.remove('active');
+                status.textContent = 'LLM niedostępny';
+            }
+        }
         
         // ============================================
         // WGARJANIE PLIKÓW
@@ -1032,14 +694,14 @@ async def main_ui():
             
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
-                const progress = ((i + 1) / files.length) * 100;
+                const progress = ((i) / files.length) * 100;
                 
                 progressText.textContent = `Wgrywanie: ${file.name}`;
                 progressFill.style.width = `${progress}%`;
                 
                 const formData = new FormData();
                 formData.append('file', file);
-                formData.append('use_vlm', vlmMode);
+                if (vlmMode) formData.append('use_vlm', 'true');
                 
                 try {
                     const response = await fetch(`${API_BASE}/upload`, {
@@ -1047,9 +709,9 @@ async def main_ui():
                         body: formData
                     });
                     
-                    const result = await response.json();
-                    console.log(`Uploaded: ${file.name}`, result);
-                    
+                    if (!response.ok) {
+                        console.error(`Upload failed: ${file.name}`);
+                    }
                 } catch (error) {
                     console.error(`Error uploading ${file.name}:`, error);
                 }
@@ -1066,80 +728,11 @@ async def main_ui():
         }
         
         // ============================================
-        // TRYB VLM
+        // VLM TOGGLE
         // ============================================
         function toggleVLM() {
             vlmMode = !vlmMode;
-            const toggle = document.getElementById('vlmToggle');
-            toggle.classList.toggle('active', vlmMode);
-        }
-        
-        // ============================================
-        // PRZEŁĄCZANIE MODELI
-        // ============================================
-        async function switchModel(type) {
-            const btnLLM = document.getElementById('btnLLM');
-            const btnVLM = document.getElementById('btnVLM');
-            
-            btnLLM.classList.remove('active');
-            btnVLM.classList.remove('active');
-            
-            if (type === 'llm') btnLLM.classList.add('active');
-            else btnVLM.classList.add('active');
-            
-            try {
-                const response = await fetch(`${API_BASE}/model/switch/${type}`, {
-                    method: 'POST'
-                });
-                const result = await response.json();
-                
-                if (result.success) {
-                    currentModel = type;
-                    updateModelStatus(type, true);
-                } else {
-                    alert('Błąd: ' + result.message);
-                }
-            } catch (error) {
-                console.error('Error switching model:', error);
-                alert('Błąd przełączania modelu');
-            }
-        }
-        
-        async function checkModelStatus() {
-            try {
-                const response = await fetch(`${API_BASE}/model/status`);
-                const data = await response.json();
-                
-                currentModel = data.model_type;
-                updateModelStatus(data.model_type, data.running);
-                
-                const btnLLM = document.getElementById('btnLLM');
-                const btnVLM = document.getElementById('btnVLM');
-                
-                btnLLM.classList.toggle('active', data.model_type === 'llm');
-                btnVLM.classList.toggle('active', data.model_type === 'vlm');
-                
-            } catch (error) {
-                console.error('Error checking model status:', error);
-                updateModelStatus('unknown', false);
-            }
-        }
-        
-        function updateModelStatus(type, running) {
-            const dot = document.getElementById('statusDot');
-            const text = document.getElementById('modelType');
-            
-            dot.classList.toggle('active', running);
-            
-            if (!running) {
-                text.textContent = 'Zatrzymany';
-            } else if (type === 'llm') {
-                text.textContent = 'LLM (Czat)';
-            } else if (type === 'vlm') {
-                text.textContent = 'VLM (Vision)';
-            } else {
-                text.textContent = type.toUpperCase();
-            }
+            document.getElementById('vlmToggle').classList.toggle('active', vlmMode);
         }
         
         // ============================================
@@ -1148,13 +741,13 @@ async def main_ui():
         async function loadStats() {
             try {
                 const response = await fetch(`${API_BASE}/files/stats`);
-                const data = await response.json();
-                
-                document.getElementById('totalDocs').textContent = data.total_files || 0;
-                document.getElementById('totalChunks').textContent = data.total_chunks || 0;
-                document.getElementById('pendingFiles').textContent = data.pending || 0;
-                document.getElementById('indexedToday').textContent = data.indexed_today || 0;
-                
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('totalDocs').textContent = data.total_files || 0;
+                    document.getElementById('totalChunks').textContent = data.total_chunks || 0;
+                    document.getElementById('pendingFiles').textContent = data.pending || 0;
+                    document.getElementById('indexedToday').textContent = data.indexed_today || 0;
+                }
             } catch (error) {
                 console.error('Error loading stats:', error);
             }
@@ -1164,7 +757,6 @@ async def main_ui():
             try {
                 const response = await fetch(`${API_BASE}/files/pending`);
                 const files = await response.json();
-                
                 const container = document.getElementById('filesListContent');
                 
                 if (!files || files.length === 0) {
@@ -1176,16 +768,15 @@ async def main_ui():
                     return;
                 }
                 
-                container.innerHTML = files.slice(0, 10).map(file => `
+                container.innerHTML = files.slice(0, 8).map(file => `
                     <div class="file-item fade-in">
                         <span class="file-icon">📄</span>
                         <span class="file-name">${file.name || file}</span>
                         <span class="file-status ${file.status || 'pending'}">
-                            ${file.status === 'indexed' ? 'Zaindeksowany' : 'Oczekuje'}
+                            ${file.status === 'indexed' ? 'OK' : 'Pend'}
                         </span>
                     </div>
                 `).join('');
-                
             } catch (error) {
                 console.error('Error loading files:', error);
             }
@@ -1199,13 +790,11 @@ async def main_ui():
         const typingIndicator = document.getElementById('typingIndicator');
         const sendBtn = document.getElementById('sendBtn');
         
-        // Auto-resize textarea
         chatInput.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 150) + 'px';
         });
         
-        // Enter to send
         chatInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -1217,21 +806,17 @@ async def main_ui():
             const message = chatInput.value.trim();
             if (!message) return;
             
-            // Dodaj wiadomość użytkownika
             addMessage(message, 'user');
             chatInput.value = '';
             chatInput.style.height = 'auto';
             
-            // Pokaż typing indicator
             typingIndicator.classList.add('active');
             sendBtn.disabled = true;
             
             try {
                 const response = await fetch(`${API_BASE}/v1/chat/completions`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         messages: [{ role: 'user', content: message }],
                         stream: false
@@ -1239,56 +824,36 @@ async def main_ui():
                 });
                 
                 const data = await response.json();
-                
                 typingIndicator.classList.remove('active');
                 sendBtn.disabled = false;
                 
-                const assistantMessage = data.choices?.[0]?.message?.content || 'Brak odpowiedzi';
-                addMessage(assistantMessage, 'assistant', data.sources);
+                const content = data.choices?.[0]?.message?.content || 'Brak odpowiedzi';
+                addMessage(content, 'assistant');
                 
             } catch (error) {
                 typingIndicator.classList.remove('active');
                 sendBtn.disabled = false;
-                addMessage('❌ Błąd połączenia z serwerem. Sprawdź czy LLM działa.', 'assistant');
+                addMessage('❌ Błąd połączenia. Sprawdź czy LLM działa (start_klimtech.py)', 'assistant');
                 console.error('Error:', error);
             }
         }
         
-        function addMessage(content, role, sources = null) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${role} fade-in`;
+        function addMessage(content, role) {
+            const div = document.createElement('div');
+            div.className = `message ${role} fade-in`;
             
             const avatar = role === 'user' ? '👤' : '🤖';
             
-            let sourcesHtml = '';
-            if (sources && sources.length > 0) {
-                sourcesHtml = `
-                    <div class="message-sources">
-                        <div class="message-sources-title">📚 Źródła:</div>
-                        ${sources.map(s => `
-                            <div class="source-item">
-                                <span>📄</span>
-                                <span>${s}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                `;
-            }
-            
-            messageDiv.innerHTML = `
+            div.innerHTML = `
                 <div class="message-avatar">${avatar}</div>
-                <div class="message-content">
-                    ${formatMessage(content)}
-                    ${sourcesHtml}
-                </div>
+                <div class="message-content">${formatContent(content)}</div>
             `;
             
-            chatMessages.appendChild(messageDiv);
+            chatMessages.appendChild(div);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
         
-        function formatMessage(content) {
-            // Proste formatowanie
+        function formatContent(content) {
             return content
                 .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
                 .replace(/`([^`]+)`/g, '<code>$1</code>')

@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-
+from routes import model_switch
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -50,7 +50,7 @@ app.include_router(ingest_router)
 app.include_router(filesystem_router)
 app.include_router(admin_router)
 app.include_router(ui_router)
-
+app.include_router(model_switch.router)
 
 @app.middleware("http")
 async def add_request_id_and_logging(request: Request, call_next):
