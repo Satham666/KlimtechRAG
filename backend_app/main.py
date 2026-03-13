@@ -12,7 +12,9 @@ from .routes import (
     filesystem_router,
     admin_router,
     ui_router,
+    model_switch_router,
 )
+
 from .services import doc_store
 from .file_registry import init_db as init_file_registry
 
