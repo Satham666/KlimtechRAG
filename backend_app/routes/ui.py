@@ -587,39 +587,82 @@ async function startUpload() {
       // Krok 1: Upload pliku
       const fd = new FormData();
       fd.append('file', f);
-      const upResp = await fetch('/upload', { method:'POST', body: fd });
-      const upData = await upResp.json();
 
-      if (!upResp.ok) {
-        log(`  ❌ Upload błąd: ${upData.detail||upResp.status}`, 'log-err');
+      const fileSizeMB = (f.size / 1048576).toFixed(1);
+      if (f.size > 50*1024*1024) {
+        log(`  ⏳ Duży plik (${fileSizeMB} MB) — przesyłanie może potrwać...`, 'log-warn');
+      }
+
+      let upResp, rawText, upData;
+      try {
+        upResp = await fetch('/upload', { method:'POST', body: fd });
+        rawText = await upResp.text();
+      } catch(fetchErr) {
+        log(`  ❌ Błąd połączenia: ${fetchErr.message}`, 'log-err');
+        log(`  ℹ️  Sprawdź czy backend działa i czy plik nie jest za duży (limit 200MB)`, 'log-muted');
+        continue;
+      }
+
+      // Parsuj JSON — pokaż surowy tekst jeśli się nie uda
+      try {
+        upData = JSON.parse(rawText);
+      } catch(jsonErr) {
+        log(`  ❌ Serwer zwrócił błędną odpowiedź (HTTP ${upResp.status})`, 'log-err');
+        log(`  ℹ️  Odpowiedź: ${rawText.slice(0,200)}`, 'log-muted');
+        continue;
+      }
+
+      if (!upResp.ok || !upData) {
+        const detail = upData?.detail || upData?.message || rawText.slice(0,150) || upResp.status;
+        log(`  ❌ Upload błąd (HTTP ${upResp.status}): ${detail}`, 'log-err');
         continue;
       }
 
       const savedPath = upData.saved_path || upData.path || null;
-      log(`  ✅ Zapisano: ${upData.nextcloud_folder||'?'} ${upData.indexing?'— indeksowanie...':''}`, 'log-ok');
+      log(`  ✅ Zapisano → ${upData.nextcloud_folder||'?'} | ${fileSizeMB} MB`, 'log-ok');
 
-      // Krok 2: VLM dla PDF jeśli wybrano
+      if (!savedPath && ingestMode === 'vlm' && isPdf) {
+        log(`  ⚠️  Brak saved_path w odpowiedzi — uruchom ingest_fix.py aby naprawić`, 'log-warn');
+        log(`  ℹ️  Plik zapisany, ale VLM nie może go przetworzyć bez ścieżki`, 'log-muted');
+        continue;
+      }
+
+      // Krok 2: Jeśli normalny tryb — backend już zaindeksował w tle
+      if (ingestMode === 'normal') {
+        if (upData.indexing) {
+          log(`  ⏳ Indeksowanie w tle...`, 'log-info');
+        } else {
+          log(`  ℹ️  Format zapisany, indeksowanie nie dotyczy tego typu pliku`, 'log-muted');
+        }
+      }
+
+      // Krok 3: VLM dla PDF
       if (isPdf && ingestMode==='vlm' && savedPath) {
-        log(`  🖼️  Uruchamiam VLM dla: ${f.name} (może potrwać kilka minut)`, 'log-warn');
+        log(`  🖼️  VLM: uruchamiam opis grafik w: ${f.name}`, 'log-warn');
+        log(`  ⏳ To może potrwać kilka minut dla dużych PDF...`, 'log-muted');
         try {
           const vlmResp = await fetch('/ingest_pdf_vlm', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ path: savedPath })
           });
-          const vlmData = await vlmResp.json();
-          if (vlmResp.ok) {
-            log(`  ✅ VLM: ${vlmData.chunks_processed} chunków (VLM: ${vlmData.vlm_used})`, 'log-ok');
+          const vlmRaw = await vlmResp.text();
+          let vlmData;
+          try { vlmData = JSON.parse(vlmRaw); } catch(e) { vlmData = null; }
+
+          if (vlmResp.ok && vlmData) {
+            log(`  ✅ VLM gotowe: ${vlmData.chunks_processed} chunków | VLM użyto: ${vlmData.vlm_used}`, 'log-ok');
           } else {
-            log(`  ⚠️  VLM błąd (${vlmData.detail}) — użyto normalnego parsera`, 'log-warn');
+            const vlmErr = vlmData?.detail || vlmRaw.slice(0,100);
+            log(`  ⚠️  VLM błąd: ${vlmErr} — plik zapisany ale bez opisów grafik`, 'log-warn');
           }
-        } catch(e) {
-          log(`  ⚠️  VLM niedostępny — użyto normalnego parsera`, 'log-warn');
+        } catch(vlmErr) {
+          log(`  ⚠️  VLM timeout/błąd: ${vlmErr.message}`, 'log-warn');
         }
       }
 
     } catch(e) {
-      log(`  ❌ Błąd: ${e.message}`, 'log-err');
+      log(`  ❌ Nieoczekiwany błąd: ${e.message}`, 'log-err');
     }
 
     done++;
