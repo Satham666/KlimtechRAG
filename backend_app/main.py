@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-from routes import model_switch
+from .routes import model_switch
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
