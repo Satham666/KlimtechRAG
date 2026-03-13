@@ -464,7 +464,7 @@ def start_process(name: str, command: list, cwd: str,
             time.sleep(wait_seconds)
 
         if proc.poll() is not None:
-            print(f"❌ {name} padł przy starcie! Sprawdź logi: logs/")
+            print(f"❌ {name} padł przy starcie! Sprawdź logs/")
             return False
 
         print(f"✅ {name} działa (PID: {proc.pid})")
@@ -707,7 +707,7 @@ def main():
     
     # 4. Uruchom LLM/VLM Server
     if not start_llm_server(initial_model, initial_type):
-        print("\n⛔ Start serwera nieudany. Sprawdź logi/llm_server_stderr.log")
+        print("\n⛔ Start serwera nieudany. Sprawdź logs/llm_server_stderr.log")
         sys.exit(1)
 
     # 5. Kontenery Podman
@@ -724,7 +724,7 @@ def main():
     }
     if not start_process("Backend FastAPI", backend_cmd, BASE_DIR,
                          env_vars=backend_env, wait_seconds=5):
-        print("\n⛔ Start Backend nieudany. Sprawdź logi/backend_fastapi_stderr.log")
+        print("\n⛔ Start Backend nieudany. Sprawdź logs/backend_fastapi_stderr.log")
         sys.exit(1)
 
     # 7. Watchdog
