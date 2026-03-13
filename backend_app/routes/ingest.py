@@ -293,13 +293,23 @@ async def upload_file_to_rag(
             extra={"request_id": request_id},
         )
 
-        return {
+"""        return {
             "status": "ok",
             "filename": os.path.basename(target_path),
             "nextcloud_folder": f"RAG_Dane/{subdir}",
             "size_bytes": file_size,
             "indexing": ext in TEXT_INDEXABLE,
             "message": f"Plik zapisany w Nextcloud/{subdir}. {index_msg}",
+        }
+"""
+            return {
+             "status": "ok",
+             "filename": os.path.basename(target_path),
+             "saved_path": target_path,                    # ← NOWE — potrzebne dla VLM
+             "nextcloud_folder": f"RAG_Dane/{subdir}",
+             "size_bytes": file_size,
+             "indexing": ext in TEXT_INDEXABLE,
+             "message": f"Plik zapisany w Nextcloud/{subdir}. {index_msg}",
         }
 
     except HTTPException:
