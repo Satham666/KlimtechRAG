@@ -291,57 +291,6 @@ def stop_llm_server():
     print("   ✅ VRAM zwolniony")
 
 
-def ensure_mmproj(model_path: str) -> Optional[str]:
-    """
-    Sprawdza czy VLM ma mmproj w katalogu.
-    Jeśli nie ma - próbuje pobrać automatycznie.
-    
-    Returns:
-        Ścieżka do mmproj lub None
-    """
-    model_dir = os.path.dirname(model_path)
-    model_name = os.path.basename(model_path).lower()
-    
-    # Szukaj mmproj w katalogu
-    mmproj_files = glob.glob(os.path.join(model_dir, "*mmproj*"))
-    if mmproj_files:
-        return mmproj_files[0]
-    
-    # Jeśli nie ma - spróbuj pobrać
-    print("\n   ⚠️  Nie znaleziono mmproj - próbuję pobrać...")
-    
-    # Mapa modeli do mmproj
-    mmproj_urls = {
-        "qwen2-vl": "https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct-GGUF/resolve/main/mmproj-Qwen2-VL-7B-Instruct-f16.gguf",
-        "qwen2.5-vl": "https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-7B-Instruct-f16.gguf",
-    }
-    
-    # Znajdź odpowiedni URL
-    mmproj_url = None
-    for key, url in mmproj_urls.items():
-        if key in model_name:
-            mmproj_url = url
-            break
-    
-    if not mmproj_url:
-        print("   ❌ Nie znaleziono mmproj dla tego modelu")
-        print("   Pobierz ręcznie z HuggingFace i umieść w katalogu modelu")
-        return None
-    
-    # Pobierz mmproj
-    mmproj_path = os.path.join(model_dir, "mmproj.gguf")
-    print(f"   📥 Pobieranie: {mmproj_url}")
-    
-    try:
-        import urllib.request
-        urllib.request.urlretrieve(mmproj_url, mmproj_path)
-        print(f"   ✅ Pobrano: {mmproj_path}")
-        return mmproj_path
-    except Exception as e:
-        print(f"   ❌ Błąd pobierania: {e}")
-        return None
-
-
 def start_llm_server(model_path: str, model_type: str = "llm", port: str = "8082") -> bool:
     """
     Uruchamia serwer LLM lub VLM.
@@ -392,16 +341,16 @@ def start_llm_server(model_path: str, model_type: str = "llm", port: str = "8082
         "--port", port,
     ] + llama_args
     
-    # Dla VLM dodaj specjalne flagi
+    # Dla VLM dodaj mmproj jeśli istnieje
     if model_type == "vlm":
-        # Sprawdź/pobierz mmproj
-        mmproj_path = ensure_mmproj(model_path)
-        if mmproj_path:
-            llama_cmd.extend(["--mmproj", mmproj_path])
-            print(f"   📷 mmproj: {os.path.basename(mmproj_path)}")
+        # Szukaj mmproj w katalogu modelu (bez automatycznego pobierania!)
+        model_dir = os.path.dirname(model_path)
+        mmproj_files = glob.glob(os.path.join(model_dir, "*mmproj*"))
+        if mmproj_files:
+            llama_cmd.extend(["--mmproj", mmproj_files[0]])
+            print(f"   📷 mmproj: {os.path.basename(mmproj_files[0])}")
         else:
-            print("   ⚠️  Nie znaleziono mmproj - VLM może nie działać poprawnie")
-            print("   Pobierz mmproj z HuggingFace i umieść w katalogu modelu")
+            print("   ℹ️  Brak mmproj - VLM działa w trybie tekstowym")
     
     # Zapisz komendę do pliku (dla debugowania)
     os.makedirs(LOG_DIR, exist_ok=True)
