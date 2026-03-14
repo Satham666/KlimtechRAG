@@ -15,7 +15,7 @@
 **Główne zastosowania:**
 - Odpowiadanie na pytania na podstawie zaindeksowanych dokumentów PDF/DOCX/TXT
 - Automatyczne OCR skanów i indeksowanie
-- Obsługa dokumentów z obrazkami (tryb VLM)
+- Obsługa dokumentów z obrazkami (tryb VLM / ColPali)
 - Baza wiedzy firmowej / technicznej
 
 ---
@@ -35,6 +35,7 @@
         │  - /upload  (wgrywanie plików)        │
         │  - /ingest  (indeksowanie)            │
         │  - /model/switch/{llm|vlm}            │
+        │  - /model/list  (lista modeli)        │
         │  - /v1/embeddings                     │
         │  - /files/stats, /files/pending       │
         │  - /rag/debug                         │
@@ -42,11 +43,12 @@
                │               │
    ┌───────────▼───┐   ┌───────▼──────────────┐
    │ llama.cpp     │   │  Qdrant (port 6333)  │
-   │ -server       │   │  kolekcja:           │
-   │ Port: 8082    │   │  klimtech_docs       │
-   │ LLM lub VLM   │   │  dim: 1024           │
-   │ (przełączalne)│   │  5114+ punktów       │
-   └───────────────┘   └──────────────────────┘
+   │ -server       │   │  kolekcje:           │
+   │ Port: 8082    │   │  - klimtech_docs     │
+   │ LLM lub VLM   │   │    (e5-large, 1024d) │
+   │ (przełączalne)│   │  - klimtech_colpali  │
+   └───────────────┘   │    (ColPali, 128d)   │
+                       └──────────────────────┘
                │
    ┌───────────▼──────────────────────────────┐
    │  Podman kontenery                        │
@@ -57,7 +59,7 @@
    └──────────────────────────────────────────┘
 ```
 
-> ⚠️ **Open WebUI zostało usunięte** z architektury — zastąpione własnym interfejsem w `routes/ui.py`.
+> ⚠️ **Open WebUI usunięte** — zastąpione własnym interfejsem w `routes/ui.py`
 
 ---
 
@@ -66,25 +68,27 @@
 | Warstwa | Technologia | Uwagi |
 |---------|-------------|-------|
 | **System** | Linux Mint / Ubuntu 24 | Serwer + Laptop |
-| **Python** | 3.11+ (venv `/home/lobo/klimtech_venv`) | — |
-| **GPU** | AMD Instinct 16 GB | ROCm/HIP, HSA_OVERRIDE_GFX_VERSION=9.0.6 |
+| **Python** | 3.12 (venv `/home/lobo/klimtech_venv`) | — |
+| **GPU** | AMD Instinct 16 GB (AMD Radeon Pro VII) | ROCm 7.2, HSA_OVERRIDE_GFX_VERSION=9.0.6 |
+| **PyTorch** | 2.5.1+rocm6.2 | ✅ podmieniony z CUDA na ROCm |
 | **Backend** | FastAPI + Haystack 2.x | Port 8000 |
 | **LLM/VLM** | llama.cpp-server | Port 8082 |
 | **Wektory** | Qdrant | Port 6333, Podman |
-| **Embedding** | intfloat/multilingual-e5-large | dim=1024, HuggingFace |
+| **Embedding (tekst)** | intfloat/multilingual-e5-large | dim=1024, HuggingFace |
+| **Embedding (PDF)** | ColPali v1.3 (vidore/colpali-v1.3-hf) | dim=128 multi-vector, HuggingFace |
 | **Kontenery** | Podman | qdrant, nextcloud, postgres, n8n |
 | **UI** | HTML/JS wbudowany w FastAPI | `routes/ui.py` |
-| **Sync** | Git → GitHub | `git push --force` |
+| **Sync** | Git → GitHub | laptop → push, serwer → pull |
 
 ### Modele GGUF (katalogi)
 
 ```
 modele_LLM/
-├── model_thinking/     ← LLM do czatu (wybierany przy starcie)
+├── model_thinking/     ← LLM do czatu
 │   ├── Bielik-11B-v3.0-Instruct.Q8_0.gguf   (~14 GB VRAM)
 │   ├── Bielik-4.5B-v3.0-Instruct.Q8_0.gguf  (~6 GB VRAM)
 │   └── LFM2-2.6B-F16.gguf                   (~3 GB VRAM)
-├── model_video/        ← VLM (obrazki, wybierany przy starcie)
+├── model_video/        ← VLM (obrazki)
 │   └── LFM2.5-VL-1.6B-F16.gguf
 ├── model_audio/        ← TTS/STT (do testów)
 │   └── vocoder-LFM2.5-Audio-1.5B-F16.gguf
@@ -93,88 +97,73 @@ modele_LLM/
     └── Bge-M3-567M-F32.gguf
 ```
 
+### Modele HuggingFace (pobierane automatycznie)
+- `intfloat/multilingual-e5-large` — główny embedding tekstu
+- `vidore/colpali-v1.3-hf` — ColPali, embedding wizualny PDF
+
 ---
 
-## 4. Historia sesji i co zostało zrobione
+## 4. Historia sesji
 
 ### Sesja 1 — Diagnoza (2026-02-20)
-- ✅ Wykryto i naprawiono problem z OCR (`bitmap_area_threshold=0.0`, język PL)
-- ✅ Zwiększono `top_k` z 3 → 10
-- ✅ Stworzono skrypty `ingest_pdfCPU.py`, `ingest_pdfGPU.py`
+- ✅ Naprawiono OCR (`bitmap_area_threshold=0.0`, język PL)
+- ✅ `top_k` zwiększone z 3 → 10
+- ✅ Skrypty `ingest_pdfCPU.py`, `ingest_pdfGPU.py`
 - ✅ Reset Qdrant i `file_registry.db`
 
 ### Sesja 2 — Refaktoryzacja (2026-02-20 19:17)
-- ✅ Monolit `main.py` (1350 linii) → moduły (93% redukcja, 89 linii main)
+- ✅ Monolit `main.py` (1350 linii) → moduły (89 linii main, -93%)
 - ✅ Nowa struktura: `routes/`, `services/`, `models/`, `utils/`, `scripts/`
-- ✅ Config używa Pydantic Settings (`.env`)
-- ✅ Endpoint `/rag/debug`
-- ✅ Logi do pliku `logs/backend.log`
-- ✅ PID file dla watchdog (eliminacja dubli)
+- ✅ Pydantic Settings + `.env`
+- ✅ `/rag/debug`, logi do pliku, PID file dla watchdog
 
 ### Sesja 3 — GPU Embedding i VLM (2026-02-21 01:20)
 - ✅ GPU embedding: **13× szybszy** (batch: 18s → 1.4s)
-- ✅ PDF 20 MB (307 chunków): **~70× szybszy** (~15 min → 13s)
-- ✅ `ingest_gpu.py` — masowe indeksowanie na GPU
-- ✅ Ekstrakcja obrazów z PDF (PyMuPDF) działa
+- ✅ PDF 20MB (307 chunków): **~70× szybszy** (~15 min → 13s)
+- ✅ `ingest_gpu.py`, ekstrakcja obrazów z PDF (PyMuPDF)
 - ✅ HNSW threshold naprawiony w `services/qdrant.py`
 - ❌ VLM opis obrazów nie działa (brak mmproj)
 
-### Sesja 4 — Własny interfejs UI (2026-02-xx)
-- ✅ Własny HTML/JS czat wbudowany w FastAPI (`routes/ui.py`)
-- ✅ Sidebar z historią sesji (localStorage)
-- ✅ Eksport/import rozmów (JSON)
-- ✅ Upload drag&drop plików
-- ✅ Przycisk "🧠 Indeksuj pliki w RAG"
-- ✅ Toggle VLM/LLM w UI
-- ✅ Statystyki: Zaindeksowane / Wektory RAG / Do indeksu / Dzisiaj
-- ✅ Wskaźnik statusu backendu (dot + tekst)
+### Sesja 4 — Własny UI (2026-02-xx)
+- ✅ HTML/JS czat wbudowany w FastAPI (`routes/ui.py`)
+- ✅ Sidebar z historią sesji, eksport/import JSON
+- ✅ Upload drag&drop, przycisk "🧠 Indeksuj pliki w RAG"
+- ✅ Toggle VLM/LLM, statystyki, wskaźnik statusu backendu
 
 ### Sesja 5 — Model Switch API (2026-02-xx)
-- ✅ `routes/model_switch.py` — API do przełączania modeli
-- ✅ `GET /model/status` — status serwera LLM/VLM
-- ✅ `POST /model/switch/llm` — przełącz na LLM
-- ✅ `POST /model/switch/vlm` — przełącz na VLM
-- ✅ `GET /model/list` — lista dostępnych modeli
-- ✅ `GET /model/config` — aktualna konfiguracja
+- ✅ `routes/model_switch.py` — API przełączania modeli
+- ✅ `GET /model/status`, `POST /model/switch/{llm|vlm}`
+- ✅ `GET /model/list`, `GET /model/config`
 
 ### Sesja 6 — start_klimtech_v3.py (2026-03-xx)
-- ✅ Skrypt v7.0 — Dual Model Selection
-- ✅ Dwie listy modeli przy starcie: LLM (model_thinking/) + VLM (model_video/)
-- ✅ Wybór trybu startowego: czat (LLM) lub VLM (ingest z obrazkami)
+- ✅ Skrypt v7.0 — Dual Model Selection (LLM + VLM przy starcie)
 - ✅ Automatyczne zarządzanie VRAM (pkill + czekanie)
 - ✅ Konfiguracja zapisywana do `logs/models_config.json`
-- ✅ Interaktywne menu w terminalu (opcje 1–5, q)
-- ✅ Kontenery: qdrant, nextcloud, postgres_nextcloud, n8n
-- ✅ `model_parametr.py` — obliczanie parametrów VRAM dla modelu
+- ✅ Interaktywne menu terminalu (opcje 1–5, q)
+- ✅ `model_parametr.py` — obliczanie parametrów VRAM
 
-### Sesja 7 — Bieżące wymagania (2026-03-14) ← OBECNA
-Zdefiniowano nowe wymagania do implementacji:
+### Sesja 7 — Wymagania i ColPali (2026-03-13/14)
+- ✅ Wygenerowano nowe `PODSUMOWANIE.md`
+- ✅ Zdefiniowano wymagania UI (wybór modelu, okienko POSTĘP, menu przyciski)
+- ✅ Napisano `backend_app/services/colpali_embedder.py`
+- ✅ Napisano `backend_app/scripts/ingest_colpali.py`
+- ✅ ColPali dodany do `get_available_models()` w `model_manager.py`
+- ✅ Wyczyszczono `.env` (usunięto duplikaty OWUI, BACKEND_API_PORT, KLIMTECH_DATA_PATH)
 
-**1. UI — czat z wyborem modelu:**
-- Użytkownik sam wybiera model LLM (lista z model_thinking/)
-- Żadnych modeli na sztywno w UI
-
-**2. UI — czysty embedding z wyborem modelu:**
-- Użytkownik wybiera model do embeddingu (z listy)
-- Upload plików do okienka
-- Po wgraniu: lista zaindeksowanych plików z nazwą, hashem i rozmiarem
-- Deduplikacja przez SQLite `file_registry.db` (hash + rozmiar)
-
-**3. UI — ikonka "Backend niedostępny":**
-- Przenieść ikonkę statusu obok przycisku "Wgraj pliki" (sidebar)
-
-**4. Rezygnacja z Open WebUI:**
-- OpenWebUI **usunięte** z `start_klimtech_v3.py` i architektury
-- Własny lekki interfejs w `routes/ui.py` jest wystarczający
-
-**5. start_klimtech_v3.py — tylko kontenery + backend:**
-- Uruchamia TYLKO: qdrant, nextcloud, postgres_nextcloud, n8n, Backend FastAPI
-- **NIE** uruchamia llama.cpp-server automatycznie
-- W kolumnie sidebar (pod "Ostatnie pliki") dodać okienko **POSTĘP** wyświetlające logi startu w czasie rzeczywistym (WebSocket lub polling)
-
-**6. Menu operacji pod okienkiem POSTĘP:**
-- Przyciski zamiast wpisywania liter
-- Opcje: LLM czat / VLM obrazki / Przełącz LLM↔VLM / Status / Zatrzymaj wszystko / Wyjście
+### Sesja 8 — ROCm + Backend (2026-03-14) ← OBECNA
+- ✅ **Podmieniono PyTorch CUDA → ROCm 6.2** (`torch 2.5.1+rocm6.2`)
+  - Poprzednio był PyTorch CUDA (Nvidia) — błąd `Found no NVIDIA driver`
+  - Komenda: `pip install torch torchvision --index-url https://download.pytorch.org/whl/rocm6.2 --force-reinstall`
+  - GPU działa: `AMD Radeon (TM) Pro VII`, `torch.cuda.is_available() = True`
+- ✅ **Zdiagnozowano i uruchomiono backend** po awarii
+  - Backend wyłączył się bo `start_klimtech_v3.py` dostał Ctrl+C
+  - Backend uruchamiany teraz bezpośrednio: `KLIMTECH_EMBEDDING_DEVICE=cuda:0 python3 -m uvicorn backend_app.main:app --host 0.0.0.0 --port 8000`
+- ✅ **Potwierdzono działanie GPU embeddingu**
+  - VRAM: 7.2 GB zajęte podczas indeksowania
+  - Temperatura GPU: 85-90°C (normalnie pod obciążeniem)
+  - Log `GPU: 0%` to błąd `monitoring.py` (źle parsuje ROCm output) — nie wpływa na działanie
+- ✅ **Wyczyszczono `.env`** — usunięto zbędne zmienne
+- ✅ **ColPali widoczny w `/model/list`** — `vidore/colpali-v1.3-hf` w liście embeddingów
 
 ---
 
@@ -183,207 +172,134 @@ Zdefiniowano nowe wymagania do implementacji:
 ```
 /media/lobo/BACKUP/KlimtechRAG/
 │
-├── .env                              # Zmienne środowiskowe
+├── .env                              # ✅ Wyczyszczone (bez duplikatów)
 ├── .gitignore
 │
-├── start_klimtech_v3.py              # ← GŁÓWNY skrypt startowy (v7.0)
-├── start_backend_gpu.py              # Backend z GPU embedding (indeksowanie)
-├── stop_klimtech.py                  # Zatrzymanie systemu
-├── fix_start.py                      # Naprawa startowych problemów
+├── start_klimtech_v3.py              # Główny skrypt startowy (v7.0)
+├── start_backend_gpu.py              # Indeksowanie GPU (bez LLM)
+├── stop_klimtech.py
 │
 ├── backend_app/
-│   ├── main.py                       # 89 linii — FastAPI app + middleware
-│   ├── config.py                     # Pydantic Settings (.env)
-│   ├── file_registry.py              # SQLite — status plików (hash, rozmiar)
-│   ├── monitoring.py                 # Metryki GPU/CPU
-│   ├── fs_tools.py                   # Narzędzia systemowe
-│   │
-│   ├── models/
-│   │   └── schemas.py                # Pydantic models
+│   ├── main.py
+│   ├── config.py                     # Pydantic Settings
+│   ├── file_registry.py              # SQLite (hash, rozmiar, status)
+│   ├── monitoring.py                 # ⚠️ GPU% nie działa dla ROCm
 │   │
 │   ├── routes/
-│   │   ├── chat.py                   # /query /v1/chat/completions /rag/debug /v1/models /v1/embeddings
-│   │   ├── ingest.py                 # /upload /ingest /ingest_path /ingest_all
-│   │   ├── filesystem.py             # /fs/*
-│   │   ├── admin.py                  # /health /files/stats /files/pending
-│   │   ├── model_switch.py           # /model/status /model/switch/* /model/list
-│   │   └── ui.py                     # ← Główny UI (HTML/JS — czat + upload + stats)
+│   │   ├── chat.py                   # /v1/chat/completions, /v1/embeddings
+│   │   ├── ingest.py                 # /upload, /ingest
+│   │   ├── admin.py                  # /health, /files/stats, /files/pending
+│   │   ├── model_switch.py           # /model/status, /model/switch, /model/list
+│   │   └── ui.py                     # Główny UI HTML/JS
 │   │
 │   ├── services/
-│   │   ├── qdrant.py                 # QdrantDocumentStore singleton
-│   │   ├── embeddings.py             # Embedder singleton (e5-large)
-│   │   ├── rag.py                    # RAG pipeline
-│   │   └── llm.py                    # OpenAIGenerator wrapper
-│   │
-│   ├── ingest/
-│   │   └── image_handler.py          # Ekstrakcja + opis obrazów (VLM)
-│   │
-│   ├── utils/
-│   │   ├── rate_limit.py
-│   │   ├── tools.py
-│   │   └── dependencies.py
+│   │   ├── qdrant.py
+│   │   ├── embeddings.py             # e5-large (cuda:0 / cpu)
+│   │   ├── rag.py
+│   │   ├── llm.py
+│   │   ├── model_manager.py          # ✅ ColPali dodany do listy embeddingów
+│   │   └── colpali_embedder.py       # ✅ NOWY — ColPali multi-vector embedding
 │   │
 │   └── scripts/
-│       ├── watch_nextcloud.py        # Watchdog Nextcloud (PID file)
-│       ├── ingest_gpu.py             # Masowe indeksowanie GPU
-│       ├── ingest_pdfCPU.py
-│       ├── ingest_pdfGPU.py
-│       ├── ingest_repo.py            # Indeksowanie repozytoriów Git
-│       └── model_parametr.py         # Obliczanie parametrów VRAM
-│
-├── data/
-│   ├── file_registry.db              # SQLite (hash, rozmiar, status)
-│   ├── uploads/                      # Backup wgranych plików
-│   │   ├── pdf_RAG/ Doc_RAG/ txt_RAG/ json_RAG/
-│   │   ├── Audio_RAG/ Video_RAG/ Images_RAG/
-│   └── nextcloud/data/admin/files/RAG_Dane/
-│
-├── logs/
-│   ├── backend.log
-│   ├── llm_server_stdout.log / stderr.log
-│   ├── llm_command.txt
-│   ├── models_config.json            # Wybrane modele (llm/vlm/current_type)
-│   └── watchdog_stdout.log / stderr.log
+│       ├── watch_nextcloud.py
+│       ├── ingest_gpu.py
+│       ├── ingest_colpali.py         # ✅ NOWY — masowe indeksowanie PDF przez ColPali
+│       └── model_parametr.py
 │
 ├── modele_LLM/
-│   ├── model_thinking/               # LLM (czat)
-│   ├── model_video/                  # VLM (obrazki)
+│   ├── model_thinking/               # LLM
+│   ├── model_video/                  # VLM
 │   ├── model_audio/                  # Audio
 │   └── model_embedding/              # Embedding GGUF
-│
-├── llama.cpp/build/bin/
-│   ├── llama-server                  # LLM/VLM server
-│   └── llama-cli
 │
 └── PODSUMOWANIE.md                   ← ten plik
 ```
 
 ---
 
-## 6. Znane problemy
+## 6. ColPali — co to jest i jak używać
+
+### Czym różni się od e5-large
+
+| | e5-large | ColPali |
+|---|---|---|
+| **Wejście** | tekst (chunki) | obraz strony PDF |
+| **Wyjście** | 1 wektor × 1024 dim | ~1000 wektorów × 128 dim |
+| **Kolekcja Qdrant** | `klimtech_docs` | `klimtech_colpali` |
+| **OCR potrzebny?** | ✅ tak | ❌ nie — widzi wizualnie |
+| **Tabele/wykresy** | ❌ słabo | ✅ rozumie układ strony |
+| **VRAM** | ~2.5 GB | ~6-8 GB |
+| **Scoring** | cosine similarity | MAX_SIM (late interaction) |
+
+### Uruchamianie indeksowania ColPali
+
+```bash
+# WAŻNE: zatrzymaj LLM przed uruchomieniem (konflikt VRAM)
+pkill -f llama-server
+
+# Jeden plik:
+python3 -m backend_app.scripts.ingest_colpali --file data/uploads/pdf_RAG/plik.pdf
+
+# Cały katalog:
+python3 -m backend_app.scripts.ingest_colpali --dir data/uploads/pdf_RAG
+
+# Status kolekcji:
+python3 -m backend_app.scripts.ingest_colpali --status
+
+# Test wyszukiwania:
+python3 -m backend_app.scripts.ingest_colpali --search "szukana fraza"
+```
+
+---
+
+## 7. Znane problemy
 
 | # | Priorytet | Problem | Status |
 |---|-----------|---------|--------|
 | 1 | 🔴 | VLM opis obrazów nie działa (brak mmproj) | Nierozwiązane |
 | 2 | 🔴 | `ingest_gpu.py` zabija `start_klimtech.py` (konflikt GPU) | Nierozwiązane |
-| 3 | 🟡 | `stop_klimtech.py` nie zabija wszystkich procesów | Do naprawy |
-| 4 | 🟡 | Backend po ingest_gpu wraca na CPU embedding | Projektowe (VRAM) |
+| 3 | 🟡 | `monitoring.py` zwraca `GPU: 0%` dla AMD ROCm | Kosmetyczny |
+| 4 | 🟡 | `stop_klimtech.py` nie zabija wszystkich procesów | Do naprawy |
 | 5 | 🟢 | `@router.on_event("startup")` deprecated | Nie wpływa na działanie |
-
----
-
-## 7. Wymagania do implementacji (Sesja 7)
-
-### 7.1 `start_klimtech_v3.py` — zmiany
-
-**Co powinien robić:**
-```
-1. Uruchom kontenery Podman:
-   ✅ qdrant
-   ✅ nextcloud
-   ✅ postgres_nextcloud
-   ✅ n8n
-2. Uruchom Backend FastAPI (port 8000)
-3. NIE uruchamia llama.cpp-server automatycznie
-4. Wyświetla w okienku POSTĘP (sidebar UI) logi startu
-```
-
-**Co wyświetlać w okienku POSTĘP (sidebar → pod "Ostatnie pliki"):**
-```
-a) KlimtechRAG v7.0 — Dual Model Selection
-b) 📚 ZNALEZIONE MODELE (wg katalogów)
-c) 📦 LISTA 1: MODELE LLM DO CZATU (model_thinking/)
-d) 📷 LISTA 2: MODELE VLM - VISION (model_video/)
-e) 🚀 URUCHAMIANIE LLM (CZAT) SERVER
-f) ANALIZA ZASOBÓW VRAM
-g) 🔍 Test kontekstu 98304 tokenów
-h) 📋 WYBRANE PARAMETRY
-i) ⏳ Czekam 15s...  →  ✅ LLM (Czat) Server działa (PID: ...)
-j) 🚀 Uruchamianie: Backend FastAPI...
-k) ⏳ Czekam 5s...  →  ✅ Backend FastAPI działa
-```
-
-### 7.2 Menu operacji (pod okienkiem POSTĘP)
-
-```
-📋 MENU OPERACJI
-[1] 💬 Przełącz na LLM (czat)
-[2] 📷 Przełącz na VLM (obrazki)
-[3] 🔄 Przełącz model LLM ↔ VLM
-[4] 📊 Status systemu
-[5] 🛑 Zatrzymaj wszystko
-[q] ❌ Wyjście
-```
-Każda opcja → przycisk HTML (nie wpisywanie liter).
-
-### 7.3 UI — czat
-
-- Dropdown z listą modeli LLM (z `model_thinking/`)
-- Użytkownik wybiera model i klika "Załaduj" → backend `/model/switch/llm`
-- Brak modelu na sztywno w kodzie
-
-### 7.4 UI — embedding
-
-- Dropdown z listą modeli embeddingowych (z `model_embedding/` + HuggingFace)
-- Upload plików → po wgraniu wyświetlana lista:
-  - Nazwa pliku
-  - Hash MD5/SHA256
-  - Rozmiar (KB/MB)
-  - Status (nowy / już zaindeksowany)
-- Deduplikacja przez `file_registry.db` (hash + rozmiar)
-
-### 7.5 UI — ikonka statusu backendu
-
-- Przenieść ikonkę (dot + "Backend niedostępny") bezpośrednio obok przycisku "Wgraj pliki"
-- Aktualizacja co 10s (polling `/health`)
 
 ---
 
 ## 8. Komendy operacyjne
 
-### Sync z GitHub (laptop → serwer)
+### Sync kodu
 ```bash
-# Laptop (wysyłanie):
+# Laptop → GitHub:
 git add -A && git commit -m "Sync" -a || true && git push --force
 
-# Serwer (pobieranie):
-git pull
+# Serwer ← GitHub:
+git config pull.rebase false && git pull
 ```
 
-### Uruchomienie systemu
+### Uruchomienie backendu
 ```bash
+source /home/lobo/klimtech_venv/bin/activate
 cd /media/lobo/BACKUP/KlimtechRAG
-python3 start_klimtech_v3.py
+KLIMTECH_EMBEDDING_DEVICE=cuda:0 python3 -m uvicorn backend_app.main:app --host 0.0.0.0 --port 8000
 ```
 
-### Zatrzymanie
+### Sprawdzenie GPU
 ```bash
-python3 stop_klimtech.py
-# lub ręcznie:
-pkill -f "uvicorn backend_app"
-pkill -f "llama-server"
-fuser -k 8000/tcp 2>/dev/null
-fuser -k 8082/tcp 2>/dev/null
+python3 -c "import torch; print(torch.__version__); print('GPU:', torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
+# Oczekiwany wynik: 2.5.1+rocm6.2 / GPU: True / AMD Radeon (TM) Pro VII
 ```
 
-### Indeksowanie GPU (bez LLM)
+### Reinstalacja PyTorch ROCm (jeśli potrzeba)
 ```bash
-python3 start_backend_gpu.py
-# Po zakończeniu CTRL+C → wraca do start_klimtech_v3.py
+pip install torch torchvision --index-url https://download.pytorch.org/whl/rocm6.2 --force-reinstall --break-system-packages
 ```
 
-### Diagnostyka RAG
+### Diagnostyka
 ```bash
+curl http://192.168.31.70:8000/health
+curl http://192.168.31.70:8000/model/list | python3 -m json.tool
 curl http://192.168.31.70:8000/rag/debug | python3 -m json.tool
-curl http://192.168.31.70:6333/collections/klimtech_docs
-```
-
-### Przełączanie modeli (API)
-```bash
-curl -X POST http://192.168.31.70:8000/model/switch/llm
-curl -X POST http://192.168.31.70:8000/model/switch/vlm
-curl http://192.168.31.70:8000/model/status
-curl http://192.168.31.70:8000/model/list
+rocm-smi
+nvtop
 ```
 
 ---
@@ -392,21 +308,20 @@ curl http://192.168.31.70:8000/model/list
 
 | Endpoint | Metoda | Opis |
 |----------|--------|------|
-| `/` | GET | Główny UI (czat) |
-| `/v1/chat/completions` | POST | RAG czat (OpenAI-compatible) |
+| `/` | GET | Główny UI |
+| `/v1/chat/completions` | POST | RAG czat |
 | `/v1/embeddings` | POST | Embedding (OpenAI-compatible) |
 | `/v1/models` | GET | Lista modeli |
 | `/upload` | POST | Wgraj plik |
-| `/ingest` | POST | Indeksuj wgrany plik |
-| `/ingest_path` | POST | Indeksuj z ścieżki |
+| `/ingest` | POST | Indeksuj plik |
 | `/ingest_all` | POST | Indeksuj wszystkie pending |
 | `/model/status` | GET | Status LLM/VLM serwera |
 | `/model/switch/llm` | POST | Przełącz na LLM |
 | `/model/switch/vlm` | POST | Przełącz na VLM |
-| `/model/list` | GET | Lista modeli GGUF |
+| `/model/list` | GET | Lista wszystkich modeli (+ ColPali) |
 | `/model/config` | GET | Aktualna konfiguracja |
 | `/files/stats` | GET | Statystyki plików/wektorów |
-| `/files/pending` | GET | Pliki oczekujące na indeksowanie |
+| `/files/pending` | GET | Pliki oczekujące |
 | `/health` | GET | Status systemu |
 | `/rag/debug` | GET | Debug RAG pipeline |
 
@@ -424,5 +339,4 @@ curl http://192.168.31.70:8000/model/list
 
 ---
 
-*Plik wygenerowany automatycznie na podstawie przeglądu repozytorium i historii sesji.*
-*Następna aktualizacja: po implementacji wymagań Sesji 7.*
+*Ostatnia aktualizacja: 2026-03-14 — Sesja 8 (ROCm fix, ColPali)*
