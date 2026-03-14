@@ -728,153 +728,43 @@ function fmtDateFile(ts){
   return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
 }
 async function startEmbedding(){
-  const btn=document.getElementById('embedBtn');
-  const status=document.getElementById('embedStatus');
-  const prog=document.getElementById('embedProg');
-  const fill=document.getElementById('embedFill');
-  const txt=document.getElementById('embedTxt');
-
-  // Sprawdź ile pending
-  let pending=0;
-  try{
-    const s=await fetch(B+'/files/stats').then(r=>r.json());
-    pending=s.pending??0;
-  }catch{}
-
-  if(pending===0){
-    status.textContent='Brak plików do zaindeksowania';
-    status.style.color='var(--a)';
-    return;
-  }
-
-  btn.disabled=true;
-  btn.textContent='⏳ Indeksuję...';
-  prog.classList.add('show');
-  fill.style.width='5%';
-  txt.textContent='Uruchamiam indeksowanie...';
-  status.textContent=\`Indeksuję ${pending} plików...\`;
-  status.style.color='var(--warn)';
-
-  try{
-    // Wywołaj ingest_all w tle (nie czekaj na odpowiedź - może trwać długo)
-    fetch(B+\`/ingest_all?limit=${pending}\`,{method:'POST'}).then(async r=>{
-      const d=await r.json();
-      const done=d.indexed??0;
-      fill.style.width='100%';
-      txt.textContent=\`Gotowe: ${done} plików\`;
-      status.textContent=\`✓ Zaindeksowano ${done} plików\`;
-      status.style.color='var(--a)';
-      btn.textContent='🧠 Indeksuj pliki w RAG';
-      btn.disabled=false;
-      setTimeout(()=>prog.classList.remove('show'),3000);
-      loadStats(); loadFiles();
-    }).catch(e=>{
-      status.textContent='Błąd: '+e.message;
-      status.style.color='var(--err)';
-      btn.textContent='🧠 Indeksuj pliki w RAG';
-      btn.disabled=false;
-      prog.classList.remove('show');
-    });
-
-    // Polling postępu co 3s
-    let attempts=0;
-    const poll=setInterval(async()=>{
-      attempts++;
-      try{
-        const s=await fetch(B+'/files/stats').then(r=>r.json());
-        const left=s.pending??0;
-        const done=pending-left;
-        const pct=Math.min(95, 5 + (done/pending)*90);
-        fill.style.width=pct+'%';
-        txt.textContent=\`Przetworzono: ${done}/${pending}\`;
-        loadStats();
-        if(left===0||attempts>60) clearInterval(poll);
-      }catch{ clearInterval(poll); }
-    },3000);
-
-  }catch(e){
-    status.textContent='Błąd połączenia';
-    status.style.color='var(--err)';
-    btn.textContent='🧠 Indeksuj pliki w RAG';
-    btn.disabled=false;
-    prog.classList.remove('show');
-  }
+  var btn=document.getElementById("embedBtn");
+  var status=document.getElementById("embedStatus");
+  var prog=document.getElementById("embedProg");
+  var fill=document.getElementById("embedFill");
+  var txt=document.getElementById("embedTxt");
+  var pending=0;
+  try{var s=await fetch(B+"/files/stats").then(function(r){return r.json();});pending=s.pending||0;}catch(e){}
+  if(pending===0){status.textContent="Brak plikow";status.style.color="var(--a)";return;}
+  btn.disabled=true;btn.textContent="Indeksuje...";
+  prog.classList.add("show");fill.style.width="5%";
+  status.textContent="Indeksuje "+pending+" plikow...";status.style.color="var(--warn)";
+  var poll=null;var attempts=0;
+  fetch(B+"/ingest_all?limit="+pending,{method:"POST"}).then(function(r){return r.json();}).then(function(d){
+    if(poll)clearInterval(poll);
+    fill.style.width="100%";
+    status.textContent="Zaindeksowano "+(d.indexed||0)+" plikow";
+    status.style.color="var(--a)";
+    btn.textContent="Indeksuj pliki w RAG";btn.disabled=false;
+    setTimeout(function(){prog.classList.remove("show");},3000);
+    loadStats();loadFiles();
+  }).catch(function(e){
+    if(poll)clearInterval(poll);
+    status.textContent="Blad: "+e.message;status.style.color="var(--err)";
+    btn.textContent="Indeksuj pliki w RAG";btn.disabled=false;
+    prog.classList.remove("show");
+  });
+  poll=setInterval(function(){
+    attempts++;
+    fetch(B+"/files/stats").then(function(r){return r.json();}).then(function(s){
+      var left=s.pending||0;
+      fill.style.width=Math.min(95,5+((pending-left)/pending)*90)+"%";
+      txt.textContent="Przetworzono: "+(pending-left)+"/"+pending;
+      loadStats();
+      if(left===0||attempts>60)clearInterval(poll);
+    }).catch(function(){clearInterval(poll);});
+  },3000);
 }
-
-async function startEmbedding(){
-  const btn=document.getElementById('embedBtn');
-  const status=document.getElementById('embedStatus');
-  const prog=document.getElementById('embedProg');
-  const fill=document.getElementById('embedFill');
-  const txt=document.getElementById('embedTxt');
-
-  // Sprawdź ile pending
-  let pending=0;
-  try{
-    const s=await fetch(B+'/files/stats').then(r=>r.json());
-    pending=s.pending??0;
-  }catch{}
-
-  if(pending===0){
-    status.textContent='Brak plików do zaindeksowania';
-    status.style.color='var(--a)';
-    return;
-  }
-
-  btn.disabled=true;
-  btn.textContent='⏳ Indeksuję...';
-  prog.classList.add('show');
-  fill.style.width='5%';
-  txt.textContent='Uruchamiam indeksowanie...';
-  status.textContent=\`Indeksuję ${pending} plików...\`;
-  status.style.color='var(--warn)';
-
-  try{
-    // Wywołaj ingest_all w tle (nie czekaj na odpowiedź - może trwać długo)
-    fetch(B+\`/ingest_all?limit=${pending}\`,{method:'POST'}).then(async r=>{
-      const d=await r.json();
-      const done=d.indexed??0;
-      fill.style.width='100%';
-      txt.textContent=\`Gotowe: ${done} plików\`;
-      status.textContent=\`✓ Zaindeksowano ${done} plików\`;
-      status.style.color='var(--a)';
-      btn.textContent='🧠 Indeksuj pliki w RAG';
-      btn.disabled=false;
-      setTimeout(()=>prog.classList.remove('show'),3000);
-      loadStats(); loadFiles();
-    }).catch(e=>{
-      status.textContent='Błąd: '+e.message;
-      status.style.color='var(--err)';
-      btn.textContent='🧠 Indeksuj pliki w RAG';
-      btn.disabled=false;
-      prog.classList.remove('show');
-    });
-
-    // Polling postępu co 3s
-    let attempts=0;
-    const poll=setInterval(async()=>{
-      attempts++;
-      try{
-        const s=await fetch(B+'/files/stats').then(r=>r.json());
-        const left=s.pending??0;
-        const done=pending-left;
-        const pct=Math.min(95, 5 + (done/pending)*90);
-        fill.style.width=pct+'%';
-        txt.textContent=\`Przetworzono: ${done}/${pending}\`;
-        loadStats();
-        if(left===0||attempts>60) clearInterval(poll);
-      }catch{ clearInterval(poll); }
-    },3000);
-
-  }catch(e){
-    status.textContent='Błąd połączenia';
-    status.style.color='var(--err)';
-    btn.textContent='🧠 Indeksuj pliki w RAG';
-    btn.disabled=false;
-    prog.classList.remove('show');
-  }
-}
-
 function toast(msg,dur=2800){
   const el=document.getElementById('toast');
   el.textContent=msg; el.classList.add('show');
