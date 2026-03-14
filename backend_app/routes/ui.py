@@ -335,22 +335,7 @@ input[type=file]{display:none}
           </button>
         </div>
 
-        <div class="sb-s">
-          <div class="sb-lbl">Indeksowanie RAG</div>
-          <div id="embedStatus" style="font-size:11px;color:var(--t3);margin-bottom:8px">
-            Kliknij aby zaindeksować oczekujące pliki
-          </div>
-          <div class="prog-wrap" id="embedProg">
-            <div class="prog-bar"><div class="prog-fill" id="embedFill"></div></div>
-            <div class="prog-txt" id="embedTxt"></div>
-          </div>
-          <button onclick="startEmbedding()" id="embedBtn" style="
-            width:100%;padding:9px;border-radius:8px;border:1px solid var(--a);
-            background:var(--ad);color:var(--a);font-size:12px;font-weight:600;
-            cursor:pointer;transition:background .15s;font-family:inherit;margin-top:4px">
-            🧠 Indeksuj pliki w RAG
-          </button>
-        </div>
+        
 
         <div class="sb-s" style="flex:1">
           <div class="sb-lbl">Ostatnie pliki</div>
@@ -563,12 +548,12 @@ function doImport(mode){
 async function checkStatus(){
   const dot=document.getElementById('dot'), txt=document.getElementById('statusTxt');
   try{
-    const r=await fetch(`${B}/model/status`,{signal:AbortSignal.timeout(4000)});
+    const r=await fetch(`${B}/model/status`,{signal:AbortSignal.timeout(8000)});
     if(!r.ok) throw 0;
     const d=await r.json();
     dot.className='dot '+(d.running?'on':'err');
     if(!switching) setVLMVisual(d.model_type==='vlm');
-    txt.textContent=d.running?(d.model_type==='vlm'?'VLM aktywny':'LLM aktywny'):'Model zatrzymany';
+    txt.textContent=d.running?(d.model_type==='vlm'?'VLM aktywny':d.model_type==='unknown'?'Model aktywny':'LLM aktywny'):'Model zatrzymany';
   }catch{ dot.className='dot err'; txt.textContent='Backend niedostępny'; }
 }
 
