@@ -318,6 +318,40 @@ input[type=file]{display:none}
           </div>
         </div>
 
+        <div class="sb-s">
+          <div class="sb-lbl">Indeksowanie RAG</div>
+          <div id="embedStatus" style="font-size:11px;color:var(--t3);margin-bottom:8px">
+            Kliknij aby zaindeksować oczekujące pliki
+          </div>
+          <div class="prog-wrap" id="embedProg">
+            <div class="prog-bar"><div class="prog-fill" id="embedFill"></div></div>
+            <div class="prog-txt" id="embedTxt"></div>
+          </div>
+          <button onclick="startEmbedding()" id="embedBtn" style="
+            width:100%;padding:9px;border-radius:8px;border:1px solid var(--a);
+            background:var(--ad);color:var(--a);font-size:12px;font-weight:600;
+            cursor:pointer;transition:background .15s;font-family:inherit;margin-top:4px">
+            🧠 Indeksuj pliki w RAG
+          </button>
+        </div>
+
+        <div class="sb-s">
+          <div class="sb-lbl">Indeksowanie RAG</div>
+          <div id="embedStatus" style="font-size:11px;color:var(--t3);margin-bottom:8px">
+            Kliknij aby zaindeksować oczekujące pliki
+          </div>
+          <div class="prog-wrap" id="embedProg">
+            <div class="prog-bar"><div class="prog-fill" id="embedFill"></div></div>
+            <div class="prog-txt" id="embedTxt"></div>
+          </div>
+          <button onclick="startEmbedding()" id="embedBtn" style="
+            width:100%;padding:9px;border-radius:8px;border:1px solid var(--a);
+            background:var(--ad);color:var(--a);font-size:12px;font-weight:600;
+            cursor:pointer;transition:background .15s;font-family:inherit;margin-top:4px">
+            🧠 Indeksuj pliki w RAG
+          </button>
+        </div>
+
         <div class="sb-s" style="flex:1">
           <div class="sb-lbl">Ostatnie pliki</div>
           <div id="fileList" class="flist"><div class="empty">Ładowanie...</div></div>
@@ -708,6 +742,154 @@ function fmtDateFile(ts){
   const d=new Date(ts);
   return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
 }
+async function startEmbedding(){
+  const btn=document.getElementById('embedBtn');
+  const status=document.getElementById('embedStatus');
+  const prog=document.getElementById('embedProg');
+  const fill=document.getElementById('embedFill');
+  const txt=document.getElementById('embedTxt');
+
+  // Sprawdź ile pending
+  let pending=0;
+  try{
+    const s=await fetch(B+'/files/stats').then(r=>r.json());
+    pending=s.pending??0;
+  }catch{}
+
+  if(pending===0){
+    status.textContent='Brak plików do zaindeksowania';
+    status.style.color='var(--a)';
+    return;
+  }
+
+  btn.disabled=true;
+  btn.textContent='⏳ Indeksuję...';
+  prog.classList.add('show');
+  fill.style.width='5%';
+  txt.textContent='Uruchamiam indeksowanie...';
+  status.textContent=\`Indeksuję ${pending} plików...\`;
+  status.style.color='var(--warn)';
+
+  try{
+    // Wywołaj ingest_all w tle (nie czekaj na odpowiedź - może trwać długo)
+    fetch(B+\`/ingest_all?limit=${pending}\`,{method:'POST'}).then(async r=>{
+      const d=await r.json();
+      const done=d.indexed??0;
+      fill.style.width='100%';
+      txt.textContent=\`Gotowe: ${done} plików\`;
+      status.textContent=\`✓ Zaindeksowano ${done} plików\`;
+      status.style.color='var(--a)';
+      btn.textContent='🧠 Indeksuj pliki w RAG';
+      btn.disabled=false;
+      setTimeout(()=>prog.classList.remove('show'),3000);
+      loadStats(); loadFiles();
+    }).catch(e=>{
+      status.textContent='Błąd: '+e.message;
+      status.style.color='var(--err)';
+      btn.textContent='🧠 Indeksuj pliki w RAG';
+      btn.disabled=false;
+      prog.classList.remove('show');
+    });
+
+    // Polling postępu co 3s
+    let attempts=0;
+    const poll=setInterval(async()=>{
+      attempts++;
+      try{
+        const s=await fetch(B+'/files/stats').then(r=>r.json());
+        const left=s.pending??0;
+        const done=pending-left;
+        const pct=Math.min(95, 5 + (done/pending)*90);
+        fill.style.width=pct+'%';
+        txt.textContent=\`Przetworzono: ${done}/${pending}\`;
+        loadStats();
+        if(left===0||attempts>60) clearInterval(poll);
+      }catch{ clearInterval(poll); }
+    },3000);
+
+  }catch(e){
+    status.textContent='Błąd połączenia';
+    status.style.color='var(--err)';
+    btn.textContent='🧠 Indeksuj pliki w RAG';
+    btn.disabled=false;
+    prog.classList.remove('show');
+  }
+}
+
+async function startEmbedding(){
+  const btn=document.getElementById('embedBtn');
+  const status=document.getElementById('embedStatus');
+  const prog=document.getElementById('embedProg');
+  const fill=document.getElementById('embedFill');
+  const txt=document.getElementById('embedTxt');
+
+  // Sprawdź ile pending
+  let pending=0;
+  try{
+    const s=await fetch(B+'/files/stats').then(r=>r.json());
+    pending=s.pending??0;
+  }catch{}
+
+  if(pending===0){
+    status.textContent='Brak plików do zaindeksowania';
+    status.style.color='var(--a)';
+    return;
+  }
+
+  btn.disabled=true;
+  btn.textContent='⏳ Indeksuję...';
+  prog.classList.add('show');
+  fill.style.width='5%';
+  txt.textContent='Uruchamiam indeksowanie...';
+  status.textContent=\`Indeksuję ${pending} plików...\`;
+  status.style.color='var(--warn)';
+
+  try{
+    // Wywołaj ingest_all w tle (nie czekaj na odpowiedź - może trwać długo)
+    fetch(B+\`/ingest_all?limit=${pending}\`,{method:'POST'}).then(async r=>{
+      const d=await r.json();
+      const done=d.indexed??0;
+      fill.style.width='100%';
+      txt.textContent=\`Gotowe: ${done} plików\`;
+      status.textContent=\`✓ Zaindeksowano ${done} plików\`;
+      status.style.color='var(--a)';
+      btn.textContent='🧠 Indeksuj pliki w RAG';
+      btn.disabled=false;
+      setTimeout(()=>prog.classList.remove('show'),3000);
+      loadStats(); loadFiles();
+    }).catch(e=>{
+      status.textContent='Błąd: '+e.message;
+      status.style.color='var(--err)';
+      btn.textContent='🧠 Indeksuj pliki w RAG';
+      btn.disabled=false;
+      prog.classList.remove('show');
+    });
+
+    // Polling postępu co 3s
+    let attempts=0;
+    const poll=setInterval(async()=>{
+      attempts++;
+      try{
+        const s=await fetch(B+'/files/stats').then(r=>r.json());
+        const left=s.pending??0;
+        const done=pending-left;
+        const pct=Math.min(95, 5 + (done/pending)*90);
+        fill.style.width=pct+'%';
+        txt.textContent=\`Przetworzono: ${done}/${pending}\`;
+        loadStats();
+        if(left===0||attempts>60) clearInterval(poll);
+      }catch{ clearInterval(poll); }
+    },3000);
+
+  }catch(e){
+    status.textContent='Błąd połączenia';
+    status.style.color='var(--err)';
+    btn.textContent='🧠 Indeksuj pliki w RAG';
+    btn.disabled=false;
+    prog.classList.remove('show');
+  }
+}
+
 function toast(msg,dur=2800){
   const el=document.getElementById('toast');
   el.textContent=msg; el.classList.add('show');
