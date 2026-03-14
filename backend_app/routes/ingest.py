@@ -273,9 +273,25 @@ async def upload_file_to_rag(
                 detail=f"Plik za duży: {file_size / 1024 / 1024:.1f} MB (limit {settings.max_file_size_bytes / 1024 / 1024:.0f} MB)",
             )
 
+        # 0. Dedup
+        _h = _hash_bytes(content)
+        _ex = find_duplicate_by_hash(_h)
+        if _ex:
+            return {"message":"Plik juz istnieje","duplicate":True,"filename":file.filename,"existing_path":_ex}
+        # 0. Dedup
+        _h = _hash_bytes(content)
+        _ex = find_duplicate_by_hash(_h)
+        if _ex:
+            return {"message":"Plik juz istnieje","duplicate":True,"filename":file.filename,"existing_path":_ex}
         # 1. Zapisz do Nextcloud
         target_path, subdir = save_to_nextcloud(content, file.filename, ext)
         register_file(target_path)
+        from ..file_registry import get_connection as _gc
+        with _gc() as _c:
+            _c.execute("UPDATE files SET content_hash=? WHERE path=?",(  _h,target_path)); _c.commit()
+        from ..file_registry import get_connection as _gc
+        with _gc() as _c:
+            _c.execute("UPDATE files SET content_hash=? WHERE path=?",(  _h,target_path)); _c.commit()
 
         # 2. Odśwież Nextcloud (w tle — nie blokuje odpowiedzi)
         background_tasks.add_task(rescan_nextcloud, subdir)
@@ -292,9 +308,7 @@ async def upload_file_to_rag(
             file.filename, subdir, file_size / 1024, index_msg,
             extra={"request_id": request_id},
         )
-
-
-
+        return {"message":"Plik zapisany","filename":file.filename,"duplicate":False,"size_bytes":file_size}
     except HTTPException:
         raise
     except Exception as e:
