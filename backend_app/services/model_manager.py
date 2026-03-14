@@ -336,6 +336,15 @@ def get_available_models() -> Dict[str, list]:
                         "folder": folder
                     })
     
+    # ── ColPali — model HuggingFace (nie GGUF, dodawany na stałe) ──
+    models["embedding"].append({
+        "path":     "vidore/colpali-v1.3-hf",
+        "name":     "ColPali v1.3 — PDF wizualny (obrazy stron)",
+        "size_gb":  5.0,
+        "folder":   "huggingface",
+        "type":     "colpali",
+    })
+
     return models
 
 
