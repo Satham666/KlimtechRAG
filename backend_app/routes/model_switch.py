@@ -454,3 +454,53 @@ async def model_switch_ui():
     
     from fastapi.responses import HTMLResponse
     return HTMLResponse(content=html)
+
+
+# ─── START / PROGRESS ─────────────────────────────────────────────────────────
+
+from pydantic import BaseModel as _BM
+
+class StartModelRequest(_BM):
+    model_path: str
+    model_type: str = "llm"   # "llm" | "vlm"
+
+@router.post("/start")
+async def start_model(req: StartModelRequest):
+    """
+    Uruchamia llama-server dla podanego modelu w tle.
+    Postęp logowany do llm_progress.log — pobieraj przez /model/progress-log
+    """
+    try:
+        from services.model_manager import start_model_with_progress, LLAMA_PORT
+    except ImportError:
+        from ..services.model_manager import start_model_with_progress, LLAMA_PORT
+    result = start_model_with_progress(req.model_path, req.model_type, LLAMA_PORT)
+    return result
+
+@router.get("/progress-log")
+async def progress_log(since: int = 0):
+    """
+    Zwraca linie progress logu od indeksu `since`.
+    Użyj do pollingu z UI (co 500ms).
+    """
+    try:
+        from services.model_manager import get_progress_lines, get_server_status
+    except ImportError:
+        from ..services.model_manager import get_progress_lines, get_server_status
+    data = get_progress_lines(since)
+    status = get_server_status()
+    data["server_running"] = status.get("running", False)
+    return data
+
+@router.post("/stop")
+async def stop_model():
+    """Zatrzymuje aktualnie działający serwer LLM/VLM."""
+    try:
+        from services.model_manager import stop_llm_server, clear_progress_log, _log
+    except ImportError:
+        from ..services.model_manager import stop_llm_server, clear_progress_log, _log
+    clear_progress_log()
+    _log("🛑 Zatrzymywanie serwera LLM/VLM...")
+    result = stop_llm_server()
+    _log("✅ VRAM zwolniony")
+    return result

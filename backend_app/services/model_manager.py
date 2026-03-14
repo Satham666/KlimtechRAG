@@ -337,3 +337,179 @@ def get_available_models() -> Dict[str, list]:
                     })
     
     return models
+
+
+# ─── PROGRESS LOG ────────────────────────────────────────────────────────────
+PROGRESS_LOG = os.path.join(LOG_DIR, "llm_progress.log")
+
+def _log(msg: str) -> None:
+    """Zapisuje linię do progress logu (z timestampem)."""
+    os.makedirs(LOG_DIR, exist_ok=True)
+    ts = time.strftime("%H:%M:%S")
+    line = f"[{ts}] {msg}\n"
+    with open(PROGRESS_LOG, "a", encoding="utf-8") as f:
+        f.write(line)
+
+def clear_progress_log() -> None:
+    """Czyści log postępu."""
+    try:
+        if os.path.exists(PROGRESS_LOG):
+            os.remove(PROGRESS_LOG)
+    except Exception:
+        pass
+
+def get_progress_lines(since: int = 0) -> dict:
+    """Zwraca linie logu od indeksu `since`."""
+    if not os.path.exists(PROGRESS_LOG):
+        return {"lines": [], "total": 0}
+    try:
+        with open(PROGRESS_LOG, "r", encoding="utf-8") as f:
+            all_lines = f.readlines()
+        new_lines = [l.rstrip() for l in all_lines[since:]]
+        return {"lines": new_lines, "total": len(all_lines)}
+    except Exception:
+        return {"lines": [], "total": 0}
+
+
+def start_model_with_progress(model_path: str, model_type: str = "llm",
+                               llama_port: str = "8082") -> dict:
+    """
+    Uruchamia llama-server w tle, pisząc postęp do PROGRESS_LOG.
+    Zwraca natychmiast: {"ok": True, "pid": None} — PID jest logowany.
+    """
+    import threading
+
+    def _run():
+        clear_progress_log()
+
+        _log("=" * 60)
+        _log("KlimtechRAG v7.0 — Dual Model Selection")
+        _log("=" * 60)
+
+        model_name = os.path.basename(model_path)
+        size_gb = 0
+        try:
+            size_gb = os.path.getsize(model_path) / (1024 ** 3)
+        except Exception:
+            pass
+
+        label = "VLM (Vision)" if model_type == "vlm" else "LLM (Czat)"
+
+        _log(f"📚 ZNALEZIONE MODELE (wg katalogów)")
+        models = get_available_models()
+        _log(f"   LLM  (model_thinking/): {len(models['llm'])} modeli")
+        _log(f"   VLM  (model_video/):    {len(models['vlm'])} modeli")
+        _log(f"   Emb  (model_embedding/): {len(models['embedding'])} modeli")
+
+        _log(f"")
+        if model_type == "llm":
+            _log(f"📦 LISTA 1: MODELE LLM DO CZATU (model_thinking/)")
+            for m in models["llm"]:
+                marker = "➤" if m["path"] == model_path else " "
+                _log(f"   {marker} {m['name']}  ({m['size_gb']:.1f} GB)")
+        else:
+            _log(f"📷 LISTA 2: MODELE VLM - VISION (model_video/)")
+            for m in models["vlm"]:
+                marker = "➤" if m["path"] == model_path else " "
+                _log(f"   {marker} {m['name']}  ({m['size_gb']:.1f} GB)")
+
+        _log(f"")
+        _log(f"🚀 URUCHAMIANIE {label.upper()} SERVER")
+        _log(f"   Model: {model_name}  ({size_gb:.1f} GB)")
+        _log(f"   Port:  {llama_port}")
+
+        # Sprawdź VRAM
+        _log(f"")
+        _log("ANALIZA ZASOBÓW VRAM")
+        try:
+            r = subprocess.run(
+                ["rocm-smi", "--showmeminfo", "vram"],
+                capture_output=True, text=True, timeout=5
+            )
+            if r.returncode == 0:
+                for line in r.stdout.splitlines():
+                    if any(k in line for k in ["VRAM", "Total", "Used", "Free"]):
+                        _log(f"   {line.strip()}")
+            else:
+                _log("   (brak rocm-smi lub GPU niedostępne)")
+        except Exception:
+            _log("   (nie można pobrać info VRAM)")
+
+        # Parametry
+        _log(f"")
+        _log("🔍 Test kontekstu — obliczanie parametrów...")
+        try:
+            sys.path.insert(0, BASE_DIR)
+            from backend_app.scripts.model_parametr import calculate_params
+            params = calculate_params(model_path)
+        except Exception:
+            params = "-ngl 99 -c 8192"
+        _log(f"📋 WYBRANE PARAMETRY: {params}")
+
+        # Stop istniejącego serwera
+        stop_llm_server()
+
+        # Znajdź binarkę
+        llama_bin = os.path.join(BASE_DIR, "llama.cpp", "build", "bin", "llama-server")
+        if not os.path.exists(llama_bin):
+            llama_bin = os.path.join(BASE_DIR, "llama.cpp", "llama-server")
+        if not os.path.exists(llama_bin):
+            _log(f"❌ Nie znaleziono llama-server!")
+            return
+
+        cmd = [llama_bin, "-m", model_path,
+               "--host", "0.0.0.0", "--port", llama_port] + params.split()
+
+        # VLM: mmproj
+        if model_type == "vlm":
+            model_dir = os.path.dirname(model_path)
+            mmp = glob.glob(os.path.join(model_dir, "*mmproj*"))
+            if mmp:
+                cmd += ["--mmproj", mmp[0]]
+                _log(f"   📷 mmproj: {os.path.basename(mmp[0])}")
+
+        amd_env = os.environ.copy()
+        amd_env.update({
+            "HIP_VISIBLE_DEVICES": "0",
+            "GPU_MAX_ALLOC_PERCENT": "100",
+            "HSA_ENABLE_SDMA": "0",
+            "HSA_OVERRIDE_GFX_VERSION": "9.0.6",
+        })
+
+        log_out = open(os.path.join(LOG_DIR, "llm_server_stdout.log"), "a")
+        log_err = open(os.path.join(LOG_DIR, "llm_server_stderr.log"), "a")
+
+        try:
+            proc = subprocess.Popen(
+                cmd, cwd=os.path.join(BASE_DIR, "llama.cpp"),
+                stdout=log_out, stderr=log_err,
+                start_new_session=True, env=amd_env
+            )
+
+            # Zapisz konfigurację
+            config = get_models_config() or {}
+            if model_type == "llm":
+                config["llm_model"] = model_path
+            else:
+                config["vlm_model"] = model_path
+            config["current_model_type"] = model_type
+            save_models_config(config)
+
+            _log(f"⏳ Czekam 15s na załadowanie modelu...")
+            time.sleep(15)
+
+            if proc.poll() is not None:
+                _log(f"❌ Serwer padł (kod: {proc.returncode})")
+                _log(f"   Sprawdź: {LOG_DIR}/llm_server_stderr.log")
+            else:
+                _log(f"✅ {label} Server działa (PID: {proc.pid})")
+
+        except Exception as e:
+            _log(f"❌ Błąd uruchamiania: {e}")
+
+        _log("")
+        _log("=" * 60)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    return {"ok": True}

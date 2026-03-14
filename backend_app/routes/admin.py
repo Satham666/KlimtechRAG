@@ -125,6 +125,8 @@ async def files_list(
                 "filename": f.filename,
                 "extension": f.extension,
                 "size_kb": round(f.size_bytes / 1024, 1),
+                "size_bytes": f.size_bytes,
+                "content_hash": f.content_hash,
                 "status": f.status,
                 "chunks": f.chunks_count,
                 "indexed_at": f.indexed_at,

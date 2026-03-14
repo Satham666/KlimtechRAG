@@ -154,6 +154,13 @@ def register_file(path: str, compute_hash: bool = False) -> Optional[int]:
         return cursor.lastrowid
 
 
+
+def find_duplicate_by_hash(content_hash: str):
+    if not content_hash: return None
+    with get_connection() as conn:
+        row = conn.execute("SELECT path FROM files WHERE content_hash = ? LIMIT 1",(content_hash,)).fetchone()
+        return row["path"] if row else None
+
 def mark_indexed(path: str, chunks_count: int):
     with get_connection() as conn:
         conn.execute(
