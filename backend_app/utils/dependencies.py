@@ -6,8 +6,14 @@ from ..config import settings
 def require_api_key(request: Request) -> None:
     if not settings.api_key:
         return
-    header_key = request.headers.get("X-API-Key")
-    if header_key != settings.api_key:
+    # Sprawdź X-API-Key header (KlimtechRAG UI)
+    key = request.headers.get("X-API-Key")
+    # Fallback: Authorization: Bearer <key> (Nextcloud integration_openai)
+    if not key:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            key = auth[7:]
+    if key != settings.api_key:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 

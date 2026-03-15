@@ -7,6 +7,7 @@ Funkcje:
 - Zatrzymianie/startowanie serwera llama.cpp
 - Odczyt/zapis konfiguracji modeli
 """
+
 import subprocess
 import os
 import json
@@ -14,17 +15,25 @@ import time
 import glob
 from typing import Optional, Dict, Any
 
+from ..config import settings
+
 # ---------------------------------------------------------------------------
 # KONFIGURACJA
 # ---------------------------------------------------------------------------
 
+
 def _detect_base():
     from pathlib import Path
+
     env = os.environ.get("KLIMTECH_BASE_PATH", "").strip()
-    if env and Path(env).exists(): return env
+    if env and Path(env).exists():
+        return env
     h = Path.home() / "KlimtechRAG"
-    if h.exists(): return str(h)
+    if h.exists():
+        return str(h)
     return "/media/lobo/BACKUP/KlimtechRAG"
+
+
 BASE_DIR = _detect_base()
 LLAMA_DIR = os.path.join(BASE_DIR, "llama.cpp")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
@@ -45,6 +54,7 @@ MODEL_CATEGORIES = {
 # ---------------------------------------------------------------------------
 # FUNKCJE POMOCNICZE
 # ---------------------------------------------------------------------------
+
 
 def get_models_config() -> Optional[Dict[str, Any]]:
     """Wczytuje konfigurację wybranych modeli."""
@@ -74,54 +84,53 @@ def get_server_status() -> Dict[str, Any]:
     """Sprawdza status serwera LLM/VLM."""
     result = subprocess.run(["pgrep", "-f", "llama-server"], capture_output=True)
     running = result.returncode == 0
-    
+
     config = get_models_config()
     current_type = config.get("current_model_type", "unknown") if config else "unknown"
-    
-    return {
-        "running": running,
-        "model_type": current_type,
-        "port": LLAMA_PORT
-    }
+
+    return {"running": running, "model_type": current_type, "port": LLAMA_PORT}
 
 
 # ---------------------------------------------------------------------------
 # ZARZĄDZANIE SERWEREM
 # ---------------------------------------------------------------------------
 
+
 def stop_llm_server() -> Dict[str, Any]:
     """Zatrzymuje serwer LLM/VLM."""
     result = {"success": True, "message": "Serwer zatrzymany"}
-    
+
     try:
         # Zabij przez pkill
         subprocess.run(["pkill", "-f", "llama-server"], capture_output=True, timeout=10)
         subprocess.run(["pkill", "-f", "llama-cli"], capture_output=True, timeout=10)
-        
+
         # Zabij port
-        subprocess.run(["fuser", "-k", f"{LLAMA_PORT}/tcp"], capture_output=True, timeout=5)
-        
+        subprocess.run(
+            ["fuser", "-k", f"{LLAMA_PORT}/tcp"], capture_output=True, timeout=5
+        )
+
         # Czekaj na zwolnienie
         time.sleep(3)
-        
+
     except subprocess.TimeoutExpired:
         result["success"] = False
         result["message"] = "Timeout przy zatrzymywaniu serwera"
     except Exception as e:
         result["success"] = False
         result["message"] = f"Błąd: {str(e)}"
-    
+
     return result
 
 
 def start_llm_server(model_path: str, model_type: str = "llm") -> Dict[str, Any]:
     """
     Uruchamia serwer LLM lub VLM.
-    
+
     Args:
         model_path: Ścieżka do modelu GGUF
         model_type: "llm" lub "vlm"
-    
+
     Returns:
         Dict z wynikiem operacji
     """
@@ -130,13 +139,13 @@ def start_llm_server(model_path: str, model_type: str = "llm") -> Dict[str, Any]
         "message": "",
         "pid": None,
         "model": os.path.basename(model_path),
-        "model_type": model_type
+        "model_type": model_type,
     }
-    
+
     if not os.path.exists(model_path):
         result["message"] = f"Model nie istnieje: {model_path}"
         return result
-    
+
     # AMD GPU env
     amd_env = {
         "HIP_VISIBLE_DEVICES": "0",
@@ -144,25 +153,34 @@ def start_llm_server(model_path: str, model_type: str = "llm") -> Dict[str, Any]
         "HSA_ENABLE_SDMA": "0",
         "HSA_OVERRIDE_GFX_VERSION": "9.0.6",
     }
-    
+
     # Znajdź binarkę llama-server
     llama_binary = os.path.join(LLAMA_DIR, "build", "bin", "llama-server")
     if not os.path.exists(llama_binary):
         llama_binary = os.path.join(LLAMA_DIR, "llama-server")
-    
+
     if not os.path.exists(llama_binary):
         result["message"] = f"Nie znaleziono llama-server"
         return result
-    
+
     # Parametry modelu
+    model_alias = settings.llm_model_name or "klimtech-bielik"
     llama_cmd = [
-        llama_binary, "-m", model_path,
-        "--host", "0.0.0.0",
-        "--port", LLAMA_PORT,
-        "-ngl", "99",
-        "-c", "8192",
+        llama_binary,
+        "-m",
+        model_path,
+        "--host",
+        "0.0.0.0",
+        "--port",
+        LLAMA_PORT,
+        "--alias",
+        model_alias,
+        "-ngl",
+        "99",
+        "-c",
+        "8192",
     ]
-    
+
     # Dla VLM dodaj mmproj
     if model_type == "vlm":
         model_dir = os.path.dirname(model_path)
@@ -170,30 +188,34 @@ def start_llm_server(model_path: str, model_type: str = "llm") -> Dict[str, Any]
         if mmproj_files:
             llama_cmd.extend(["--mmproj", mmproj_files[0]])
             result["mmproj"] = os.path.basename(mmproj_files[0])
-    
+
     # Zapisz komendę do pliku
     try:
         os.makedirs(LOG_DIR, exist_ok=True)
         with open(LLM_COMMAND_FILE, "w") as f:
-            json.dump({
-                "command": llama_cmd,
-                "cwd": LLAMA_DIR,
-                "env_vars": amd_env,
-                "model_type": model_type,
-                "model_path": model_path
-            }, f, indent=2)
+            json.dump(
+                {
+                    "command": llama_cmd,
+                    "cwd": LLAMA_DIR,
+                    "env_vars": amd_env,
+                    "model_type": model_type,
+                    "model_path": model_path,
+                },
+                f,
+                indent=2,
+            )
     except Exception as e:
         result["message"] = f"Błąd zapisu komendy: {e}"
         return result
-    
+
     # Uruchom proces
     try:
         log_stdout = open(os.path.join(LOG_DIR, "llm_server_stdout.log"), "a")
         log_stderr = open(os.path.join(LOG_DIR, "llm_server_stderr.log"), "a")
-        
+
         process_env = os.environ.copy()
         process_env.update(amd_env)
-        
+
         proc = subprocess.Popen(
             llama_cmd,
             cwd=LLAMA_DIR,
@@ -202,25 +224,25 @@ def start_llm_server(model_path: str, model_type: str = "llm") -> Dict[str, Any]
             start_new_session=True,
             env=process_env,
         )
-        
+
         # Czekaj na inicjalizację
         time.sleep(15)
-        
+
         if proc.poll() is not None:
             result["message"] = f"Serwer padł przy starcie (kod: {proc.returncode})"
             return result
-        
+
         result["success"] = True
         result["message"] = f"Serwer {model_type.upper()} uruchomiony"
         result["pid"] = proc.pid
-        
+
         # Zapisz PID
         with open(os.path.join(LOG_DIR, "llm_server.pid"), "w") as f:
             f.write(str(proc.pid))
-        
+
     except Exception as e:
         result["message"] = f"Błąd startu serwera: {e}"
-    
+
     return result
 
 
@@ -228,13 +250,14 @@ def start_llm_server(model_path: str, model_type: str = "llm") -> Dict[str, Any]
 # PRZEŁĄCZANIE MODELÓW
 # ---------------------------------------------------------------------------
 
+
 def switch_model(model_type: str) -> Dict[str, Any]:
     """
     Przełącza na wybrany typ modelu.
-    
+
     Args:
         model_type: "llm" lub "vlm"
-    
+
     Returns:
         Dict z wynikiem operacji
     """
@@ -243,54 +266,54 @@ def switch_model(model_type: str) -> Dict[str, Any]:
         "message": "",
         "previous_type": None,
         "new_type": model_type,
-        "model": None
+        "model": None,
     }
-    
+
     # Pobierz konfigurację
     config = get_models_config()
     if not config:
         result["message"] = "Brak konfiguracji modeli. Uruchom start_klimtech_v3.py"
         return result
-    
+
     result["previous_type"] = config.get("current_model_type", "unknown")
-    
+
     # Pobierz ścieżkę do modelu
     model_path = config.get(f"{model_type}_model")
     if not model_path:
         result["message"] = f"Brak skonfigurowanego modelu {model_type.upper()}"
         return result
-    
+
     result["model"] = os.path.basename(model_path)
-    
+
     # Sprawdź czy już działa ten typ
     if result["previous_type"] == model_type:
         result["success"] = True
         result["message"] = f"Model {model_type.upper()} już działa"
         return result
-    
+
     # Zatrzymaj obecny serwer
     stop_result = stop_llm_server()
     if not stop_result["success"]:
         result["message"] = f"Błąd zatrzymywania: {stop_result['message']}"
         return result
-    
+
     # Czekaj na zwolnienie VRAM
     time.sleep(5)
-    
+
     # Uruchom nowy model
     start_result = start_llm_server(model_path, model_type)
     if not start_result["success"]:
         result["message"] = f"Błąd startu: {start_result['message']}"
         return result
-    
+
     # Aktualizuj konfigurację
     config["current_model_type"] = model_type
     save_models_config(config)
-    
+
     result["success"] = True
     result["message"] = f"Przełączono na {model_type.upper()}: {result['model']}"
     result["pid"] = start_result.get("pid")
-    
+
     return result
 
 
@@ -308,48 +331,50 @@ def switch_to_vlm() -> Dict[str, Any]:
 # LISTA MODELI
 # ---------------------------------------------------------------------------
 
+
 def get_available_models() -> Dict[str, list]:
     """Pobiera listę dostępnych modeli z katalogów."""
-    models_dir = os.environ.get("LLAMA_MODELS_DIR", 
-                                  os.path.join(BASE_DIR, "modele_LLM"))
-    
-    models = {
-        "llm": [],
-        "vlm": [],
-        "audio": [],
-        "embedding": []
-    }
-    
+    models_dir = os.environ.get(
+        "LLAMA_MODELS_DIR", os.path.join(BASE_DIR, "modele_LLM")
+    )
+
+    models = {"llm": [], "vlm": [], "audio": [], "embedding": []}
+
     if not os.path.exists(models_dir):
         return models
-    
+
     for category, folders in MODEL_CATEGORIES.items():
         for folder in folders:
             folder_path = os.path.join(models_dir, folder)
             if os.path.exists(folder_path):
                 gguf_files = glob.glob(os.path.join(folder_path, "*.gguf"))
                 for f in sorted(gguf_files):
-                    models[category].append({
-                        "path": f,
-                        "name": os.path.basename(f),
-                        "size_gb": round(os.path.getsize(f) / (1024**3), 2),
-                        "folder": folder
-                    })
-    
+                    models[category].append(
+                        {
+                            "path": f,
+                            "name": os.path.basename(f),
+                            "size_gb": round(os.path.getsize(f) / (1024**3), 2),
+                            "folder": folder,
+                        }
+                    )
+
     # ── ColPali — model HuggingFace (nie GGUF, dodawany na stałe) ──
-    models["embedding"].append({
-        "path":     "vidore/colpali-v1.3-hf",
-        "name":     "ColPali v1.3 — PDF wizualny (obrazy stron)",
-        "size_gb":  5.0,
-        "folder":   "huggingface",
-        "type":     "colpali",
-    })
+    models["embedding"].append(
+        {
+            "path": "vidore/colpali-v1.3-hf",
+            "name": "ColPali v1.3 — PDF wizualny (obrazy stron)",
+            "size_gb": 5.0,
+            "folder": "huggingface",
+            "type": "colpali",
+        }
+    )
 
     return models
 
 
 # ─── PROGRESS LOG ────────────────────────────────────────────────────────────
 PROGRESS_LOG = os.path.join(LOG_DIR, "llm_progress.log")
+
 
 def _log(msg: str) -> None:
     """Zapisuje linię do progress logu (z timestampem)."""
@@ -359,6 +384,7 @@ def _log(msg: str) -> None:
     with open(PROGRESS_LOG, "a", encoding="utf-8") as f:
         f.write(line)
 
+
 def clear_progress_log() -> None:
     """Czyści log postępu."""
     try:
@@ -366,6 +392,7 @@ def clear_progress_log() -> None:
             os.remove(PROGRESS_LOG)
     except Exception:
         pass
+
 
 def get_progress_lines(since: int = 0) -> dict:
     """Zwraca linie logu od indeksu `since`."""
@@ -380,8 +407,9 @@ def get_progress_lines(since: int = 0) -> dict:
         return {"lines": [], "total": 0}
 
 
-def start_model_with_progress(model_path: str, model_type: str = "llm",
-                               llama_port: str = "8082") -> dict:
+def start_model_with_progress(
+    model_path: str, model_type: str = "llm", llama_port: str = "8082"
+) -> dict:
     """
     Uruchamia llama-server w tle, pisząc postęp do PROGRESS_LOG.
     Zwraca natychmiast: {"ok": True, "pid": None} — PID jest logowany.
@@ -398,7 +426,7 @@ def start_model_with_progress(model_path: str, model_type: str = "llm",
         model_name = os.path.basename(model_path)
         size_gb = 0
         try:
-            size_gb = os.path.getsize(model_path) / (1024 ** 3)
+            size_gb = os.path.getsize(model_path) / (1024**3)
         except Exception:
             pass
 
@@ -433,7 +461,9 @@ def start_model_with_progress(model_path: str, model_type: str = "llm",
         try:
             r = subprocess.run(
                 ["rocm-smi", "--showmeminfo", "vram"],
-                capture_output=True, text=True, timeout=5
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if r.returncode == 0:
                 for line in r.stdout.splitlines():
@@ -450,6 +480,7 @@ def start_model_with_progress(model_path: str, model_type: str = "llm",
         try:
             sys.path.insert(0, BASE_DIR)
             from backend_app.scripts.model_parametr import calculate_params
+
             params = calculate_params(model_path)
         except Exception:
             params = "-ngl 99 -c 8192"
@@ -466,8 +497,18 @@ def start_model_with_progress(model_path: str, model_type: str = "llm",
             _log(f"❌ Nie znaleziono llama-server!")
             return
 
-        cmd = [llama_bin, "-m", model_path,
-               "--host", "0.0.0.0", "--port", llama_port] + params.split()
+        model_alias = settings.llm_model_name or "klimtech-bielik"
+        cmd = [
+            llama_bin,
+            "-m",
+            model_path,
+            "--host",
+            "0.0.0.0",
+            "--port",
+            llama_port,
+            "--alias",
+            model_alias,
+        ] + params.split()
 
         # VLM: mmproj
         if model_type == "vlm":
@@ -478,21 +519,26 @@ def start_model_with_progress(model_path: str, model_type: str = "llm",
                 _log(f"   📷 mmproj: {os.path.basename(mmp[0])}")
 
         amd_env = os.environ.copy()
-        amd_env.update({
-            "HIP_VISIBLE_DEVICES": "0",
-            "GPU_MAX_ALLOC_PERCENT": "100",
-            "HSA_ENABLE_SDMA": "0",
-            "HSA_OVERRIDE_GFX_VERSION": "9.0.6",
-        })
+        amd_env.update(
+            {
+                "HIP_VISIBLE_DEVICES": "0",
+                "GPU_MAX_ALLOC_PERCENT": "100",
+                "HSA_ENABLE_SDMA": "0",
+                "HSA_OVERRIDE_GFX_VERSION": "9.0.6",
+            }
+        )
 
         log_out = open(os.path.join(LOG_DIR, "llm_server_stdout.log"), "a")
         log_err = open(os.path.join(LOG_DIR, "llm_server_stderr.log"), "a")
 
         try:
             proc = subprocess.Popen(
-                cmd, cwd=os.path.join(BASE_DIR, "llama.cpp"),
-                stdout=log_out, stderr=log_err,
-                start_new_session=True, env=amd_env
+                cmd,
+                cwd=os.path.join(BASE_DIR, "llama.cpp"),
+                stdout=log_out,
+                stderr=log_err,
+                start_new_session=True,
+                env=amd_env,
             )
 
             # Zapisz konfigurację

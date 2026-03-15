@@ -3,6 +3,7 @@ import os
 import time
 from .routes import model_switch
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
@@ -46,6 +47,24 @@ class RequestIdFilter(logging.Filter):
 logger.addFilter(RequestIdFilter())
 
 app = FastAPI()
+
+# ---------------------------------------------------------------------------
+# CORS — wymagane dla Nextcloud AI Assistant (cross-origin requests)
+# ---------------------------------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://192.168.31.70:8443",  # Nextcloud
+        "http://192.168.31.70:8000",  # Backend UI
+        "http://localhost:8443",
+        "http://localhost:8000",
+        "http://127.0.0.1:8443",
+        "http://127.0.0.1:8000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(chat_router)
 app.include_router(ingest_router)

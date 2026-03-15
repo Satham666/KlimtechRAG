@@ -26,6 +26,7 @@
 | **n8n workflow JSON** | **BRAK** | Tylko opis w PODSUMOWANIE.md |
 | **VRAM management API** | **BRAK** | Brak dedykowanego mechanizmu dla n8n |
 | **Mini LLM serwis** | **BRAK** | Brak drugiego llama-server |
+| **Whisper STT** | **BRAK** | Brak Speech-to-Text (endpoint + model) |
 
 ---
 
@@ -153,8 +154,10 @@ W panelu **Admin -> Artificial Intelligence**, dla każdego z poniższych typów
 | Context Write | OpenAI and LocalAI integration | Pisanie z kontekstem |
 | Extract topics | OpenAI and LocalAI integration | Ekstrakcja tematów |
 
+**Obsługiwane po wdrożeniu Whisper (Faza 4):**
+- Speech-to-text -> OpenAI and LocalAI integration (po dodaniu `/v1/audio/transcriptions`)
+
 **NIE obsługiwane (zostawić domyślne lub wyłączyć):**
-- Speech-to-text (wymaga Whisper)
 - Image generation (wymaga Stable Diffusion / DALL-E)
 
 ### 11.5 Dodanie CORS do backendu — WYMAGANE
@@ -495,6 +498,180 @@ def require_api_key(request: Request):
 
 ---
 
+## SEKCJA BONUS: Whisper — Speech-to-Text (wisienka na torcie)
+
+### B.1 Czym jest Whisper
+
+[OpenAI Whisper](https://github.com/openai/whisper) to uniwersalny model rozpoznawania mowy. Obsługuje transkrypcję wielojęzyczną (w tym polski), tłumaczenie mowy na angielski i identyfikację języka. Licencja MIT — w pełni lokalne użycie.
+
+**Dostępne rozmiary modeli:**
+
+| Rozmiar | Parametry | VRAM | Szybkość wzgl. | Uwagi |
+|---------|-----------|------|----------------|-------|
+| tiny | 39M | ~1 GB | ~10x | Szybki, niska jakość |
+| base | 74M | ~1 GB | ~7x | Dobry kompromis dla prostych zadań |
+| small | 244M | ~2 GB | ~4x | Dobra jakość polskiego |
+| medium | 769M | ~5 GB | ~2x | Bardzo dobra jakość polskiego |
+| large-v3 | 1550M | ~10 GB | 1x | Najlepsza jakość, wolny |
+| turbo | 809M | ~6 GB | ~8x | Zoptymalizowany large-v3, szybki |
+
+**Rekomendacja dla KlimtechRAG:** Model `small` lub `medium` — dobra jakość polskiego przy rozsądnym VRAM.
+- `small` (~2 GB) — zmieści się obok Bielik-11B (14+2=16 GB, ciasno ale możliwe)
+- `medium` (~5 GB) — wymaga przełączenia VRAM (jak inne modele)
+- `turbo` (~6 GB) — najlepsza relacja jakość/szybkość, ale nie tłumaczy (tylko transkrypcja)
+
+### B.2 Cel integracji
+
+1. **Nextcloud Speech-to-Text** — Nextcloud Assistant obsługuje zadanie "Speech-to-text". Aktualnie oznaczone jako "NIE obsługiwane". Po integracji Whisper stanie się dostępne.
+2. **Transkrypcja plików audio** — pliki z `Audio_RAG/` mogą być automatycznie transkrybowane i indeksowane w Qdrant jako tekst.
+3. **Wzbogacenie RAG** — transkrypcje nagrań (spotkania, rozmowy, notatki głosowe) stają się częścią bazy wiedzy.
+
+### B.3 Instalacja Whisper
+
+```bash
+# Aktywacja venv projektu
+source /media/lobo/BACKUP/KlimtechRAG/venv/bin/activate
+
+# Instalacja Whisper
+pip install -U openai-whisper
+
+# Wymagane: ffmpeg (prawdopodobnie już zainstalowany)
+sudo apt install ffmpeg
+```
+
+**Weryfikacja:**
+```bash
+python3 -c "import whisper; print(whisper.available_models())"
+# Oczekiwany wynik: ['tiny.en', 'tiny', 'base.en', 'base', 'small.en', 'small', 'medium.en', 'medium', 'large-v1', 'large-v2', 'large-v3', 'large', 'turbo']
+```
+
+### B.4 Nowy endpoint: `/v1/audio/transcriptions`
+
+**Cel:** Endpoint OpenAI-compatible do transkrypcji audio. Nextcloud `integration_openai` używa tego endpointu dla Speech-to-text task.
+
+**Plik:** `backend_app/routes/whisper_stt.py` (NOWY)
+
+**Schemat API (OpenAI-compatible):**
+
+```
+POST /v1/audio/transcriptions
+Content-Type: multipart/form-data
+
+Pola:
+  file: <plik audio> (mp3, wav, flac, m4a, ogg, webm)
+  model: "whisper-1" (ignorowane — używamy lokalny)
+  language: "pl" (opcjonalne — auto-detect jeśli brak)
+  response_format: "json" | "text" | "verbose_json" (domyślnie "json")
+
+Odpowiedź:
+{
+  "text": "Transkrybowany tekst..."
+}
+```
+
+**Schemat kodu:**
+
+```python
+import whisper
+from fastapi import APIRouter, UploadFile, File, Form
+import tempfile, os
+
+router = APIRouter(tags=["whisper"])
+
+# Model ładowany leniwie (lazy loading) — nie zajmuje VRAM do pierwszego użycia
+_whisper_model = None
+
+def get_whisper_model(size="small"):
+    global _whisper_model
+    if _whisper_model is None:
+        _whisper_model = whisper.load_model(size, device="cuda:0")
+    return _whisper_model
+
+@router.post("/v1/audio/transcriptions")
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    model: str = Form("whisper-1"),
+    language: str = Form(None),
+    response_format: str = Form("json"),
+):
+    with tempfile.NamedTemporaryFile(suffix=os.path.splitext(file.filename)[1], delete=False) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+
+    try:
+        whisper_model = get_whisper_model()
+        result = whisper_model.transcribe(
+            tmp_path,
+            language=language,
+            fp16=True,  # szybsze na GPU
+        )
+        text = result["text"].strip()
+    finally:
+        os.unlink(tmp_path)
+
+    if response_format == "text":
+        return text
+    return {"text": text}
+```
+
+### B.5 Integracja z Nextcloud
+
+**Mapowanie zadania w Nextcloud Admin -> Artificial Intelligence:**
+
+| Typ zadania | Provider | Uwagi |
+|-------------|----------|-------|
+| Speech-to-text | OpenAI and LocalAI integration | NOWE — po dodaniu `/v1/audio/transcriptions` |
+
+Nextcloud wysyła plik audio do `/v1/audio/transcriptions` i otrzymuje transkrypcję. Działa bezpośrednio z Nextcloud Talk (transkrypcja wiadomości głosowych) i z plikami audio w Nextcloud Files.
+
+### B.6 Integracja z pipeline RAG (auto-transkrypcja)
+
+**Cel:** Pliki audio wrzucone do `Audio_RAG/` automatycznie transkrybowane i indeksowane.
+
+**Rozszerzenie watchdog (`watch_nextcloud.py`):**
+- Dodać rozszerzenia audio: `.mp3`, `.wav`, `.flac`, `.m4a`, `.ogg`, `.webm`
+- Nowy flow: audio -> Whisper transkrypcja -> zapis .txt -> e5-large embedding -> Qdrant
+
+**Rozszerzenie n8n workflow (auto-indeksowanie):**
+```
+IF rozszerzenie in (.mp3, .wav, .flac, .m4a, .ogg)
+    |
+    v
+HTTP POST /v1/audio/transcriptions (plik audio)
+    |
+    v
+HTTP POST /ingest_path (transkrybowany tekst -> e5-large -> Qdrant)
+```
+
+### B.7 Zarządzanie VRAM z Whisper
+
+| Model Whisper | VRAM | Koegzystencja z Bielik-11B (~14 GB) |
+|---------------|------|--------------------------------------|
+| tiny | ~1 GB | TAK (14+1=15 GB) |
+| base | ~1 GB | TAK (14+1=15 GB) |
+| small | ~2 GB | CIASNO (14+2=16 GB) — na granicy |
+| medium | ~5 GB | NIE — wymaga przełączenia VRAM |
+| turbo | ~6 GB | NIE — wymaga przełączenia VRAM |
+
+**Strategia:**
+- `small` lub `base` — lazy loading, współdzielenie GPU z Bielik-11B
+- `medium`/`turbo` — wymagają `/model/stop` przed transkrypcją (jak ColPali)
+
+**Dodać do n8n VRAM management workflow:**
+
+| Zadanie | Model | VRAM | Akcja |
+|---------|-------|------|-------|
+| Transkrypcja (mały) | Whisper small | ~2 GB | Lazy load obok LLM |
+| Transkrypcja (duży) | Whisper medium | ~5 GB | Stop LLM -> Whisper -> Start LLM |
+
+### B.8 Powiązanie z istniejącym modelem audio
+
+W `modele_LLM/model_audio/` istnieje już `LFM2.5-Audio-1.5B` (~2.2 GB) — model audio od LiquidAI działający przez llama.cpp. Whisper jest alternatywą z dojrzalszym ekosystemem i lepszym wsparciem polskiego. Obie opcje mogą współistnieć:
+- **Whisper** — dedykowany STT, OpenAI-compatible API, integracja z Nextcloud
+- **LFM2.5-Audio** — ogólny model audio (llama.cpp), może obsługiwać inne zadania audio w przyszłości
+
+---
+
 ## Kolejność implementacji
 
 ### Faza 1: Backend (zmiany w kodzie)
@@ -517,12 +694,20 @@ def require_api_key(request: Request):
 13. [ ] Utworzyć i zaimportować workflow: VRAM management
 14. [ ] Przetestować pełny cykl: upload pliku -> auto-index -> czat
 
-### Faza 4: Opcjonalne ulepszenia
-15. [ ] Skrypt `scripts/setup_nextcloud_ai.sh`
-16. [ ] Heurystyka RAG off dla summarize
-17. [ ] Chunked summarization dla długich dokumentów
-18. [ ] Nextcloud webhook_listeners (event-driven zamiast polling)
-19. [ ] Auto-start watchdog w `start_klimtech_v3.py`
+### Faza 4: Whisper Speech-to-Text
+15. [ ] Zainstalować openai-whisper + ffmpeg w venv
+16. [ ] Utworzyć endpoint `/v1/audio/transcriptions` (whisper_stt.py)
+17. [ ] Zarejestrować router w main.py
+18. [ ] Przetestować transkrypcję curlem
+19. [ ] Zmapować Speech-to-text w Nextcloud Assistant
+20. [ ] Rozszerzyć watchdog/n8n o auto-transkrypcję audio
+
+### Faza 5: Opcjonalne ulepszenia
+21. [ ] Skrypt `scripts/setup_nextcloud_ai.sh`
+22. [ ] Heurystyka RAG off dla summarize
+23. [ ] Chunked summarization dla długich dokumentów
+24. [ ] Nextcloud webhook_listeners (event-driven zamiast polling)
+25. [ ] Auto-start watchdog w `start_klimtech_v3.py`
 
 ---
 
@@ -537,6 +722,7 @@ def require_api_key(request: Request):
 | `n8n_workflows/workflow_auto_index.json` | NOWY — workflow JSON | 12 |
 | `n8n_workflows/workflow_chat_webhook.json` | NOWY — workflow JSON | 12 |
 | `n8n_workflows/workflow_vram_manager.json` | NOWY — workflow JSON | 12 |
+| `backend_app/routes/whisper_stt.py` | NOWY — endpoint STT | Bonus |
 
 ---
 
@@ -553,7 +739,10 @@ def require_api_key(request: Request):
 | 7 | n8n auto-index | Upload pliku do NC -> czekaj 5 min | Plik w Qdrant |
 | 8 | n8n VRAM switch | Trigger workflow | Model zmieniony |
 | 9 | ColPali PDF | Upload PDF skanu -> n8n -> ColPali ingest | Punkt w `klimtech_colpali` |
+| 10 | Whisper STT | `curl -F file=@audio.mp3 .../v1/audio/transcriptions` | JSON z transkrypcją |
+| 11 | NC Speech-to-text | Nextcloud Talk -> transkrybuj | Tekst z audio |
 
 ---
 
 *Plan utworzony: 2026-03-15 — gotowy do implementacji faza po fazie*
+*Zaktualizowany: 2026-03-15 — dodano sekcję Whisper STT (wisienka na torcie)*
