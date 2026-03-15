@@ -18,6 +18,7 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
     use_rag: bool = True
     top_k: int = 5
+    web_search: bool = False
 
 
 class ChatCompletionChoice(BaseModel):

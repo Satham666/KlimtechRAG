@@ -1,2 +1,2 @@
 cd /media/lobo/BACKUP/KlimtechRAG;
-KLIMTECH_EMBEDDING_DEVICE=cuda:0 /home/lobo/klimtech_venv/bin/python3 -m backend_app.main &
+KLIMTECH_EMBEDDING_DEVICE=cuda:0 /media/lobo/BACKUP/KlimtechRAG/venv/bin/python3 -m backend_app.main &

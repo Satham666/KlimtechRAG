@@ -1,0 +1,799 @@
+# T (T-for-text) - a text processing language and utility
+
+`t` is a concise language for manipulating text, replacing common usage patterns of Unix utilities like grep, sed, cut, awk, sort, and uniq.
+
+
+![Histogram](histogram.svg)
+
+
+## Usage
+
+```
+t [<flags>] <programme> [<file> ...]
+```
+
+## Example - top 20 most frequent words, lowercased
+
+Using traditional Unix utilities:
+
+```bash
+tr -s '[:space:]' '\n' < file | tr A-Z a-z | sort | uniq -c | sort -rn | head -20
+```
+
+The equivalent in `t` would be:
+
+```bash
+t 'sfld:20' file
+```
+
+Going through the programme step by step gives us:
+
+| Op | State | Description |
+|----|-------|-------------|
+| | `[line, line, ...]` | lines of input |
+| `s` | `[[word, word], [word], ...]` | split each line into words |
+| `f` | `[word, word, word, ...]` | flatten into single list |
+| `l` | `[word, word, word, ...]` | lowercase each word |
+| `d` | `[[5, "the"], [3, "cat"], ...]` | dedupe with counts |
+| `:20` | `[[5, "the"], [3, "cat"], ...]` | take first 20 |
+
+## Installation
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/alecthomas/t/master/install.sh | sh
+```
+
+To install a specific version or to a custom directory:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/alecthomas/t/master/install.sh | sh -s v0.0.1
+curl -fsSL https://raw.githubusercontent.com/alecthomas/t/master/install.sh | INSTALL_DIR=~/.local/bin sh
+```
+
+## Data Model
+
+By default, input is a flat stream of lines, with each input file's lines concatenated together: `[line, line, ...]`.
+
+Most operators apply to each element of the current array individually. For example, `l` (lowercase) on `["Hello", "World"]` produces `["hello", "world"]`—each element is lowercased independently.
+
+Operators come in three kinds:
+
+- **Transform** (map): apply to each element. `l` on `["Hello", "World"]` → `["hello", "world"]`
+- **Filter**: keep or remove elements. `/x/` on `["ax", "", "cx"]` → `["ax", "cx"]`
+- **Reduce**: collapse array to a value. `#` on `["a", "b", "c"]` → `3`
+
+Element-wise transforms (`u`, `l`, `t`, `n`, `r`, `+`) recurse through nested arrays automatically. Structural operators (`d`, `#`, `o`, `O`, selection) operate on the top-level array only—use `@` to apply them at deeper levels.
+
+Selection (`0`, `:3`, `0,2:5,8`) is a reduce operator—it collapses the array to a subset. To apply selection within each element of a nested structure, use `@` to descend first.
+
+Use `@` to descend into nested structures, `^` to ascend back up. 
+
+## Type System
+
+There are three types:
+
+| Type | Description |
+|------|-------------|
+| array | ordered collection of values |
+| string | text |
+| number | numeric value (converted from string via `n`) |
+
+Input is always an array of strings (lines). Operators like `s` create nested arrays, `j` joins them back. Numbers only exist after explicit conversion with `n`, and are used by numeric operators like `+`.
+
+## Split/Join Semantics
+
+`s` and `j` are inverse operations—`sj` always returns the original value.
+
+Arrays have a semantic "level" that determines how `s` splits and `j` joins:
+
+| Array Level | `s` splits text into | `j` joins with |
+|-------------|----------------------|----------------|
+| file | lines | newline |
+| line | words | space |
+| word | chars | nothing |
+
+`s` operates only on the direct text elements of an array—it does not recurse into nested arrays. To split at deeper levels, use `@` to descend first.
+
+`j` joins the elements of each nested array back into text, reversing the effect of `s`. It does not flatten—use `@` to join at deeper levels.
+
+## Operators
+
+### Quick Reference
+
+#### Structural
+
+| Operator | Meaning |
+|----------|---------|
+| `s` | split natural |
+| `S<char>` or `S"<delim>"` | split on delimiter |
+| `j` | join natural (inverse of `s`) |
+| `J<char>` or `J"<delim>"` | join with delimiter |
+| `f` | flatten one level |
+
+#### Transform
+
+| Operator | Meaning |
+|----------|---------|
+| `l` | lowercase |
+| `L<selection>` | lowercase selected |
+| `u` | uppercase |
+| `U<selection>` | uppercase selected |
+| `r[<selection>]/<old>/<new>/` | replace (regex), optionally in selected |
+| `n` | to number |
+| `N<selection>` | to number selected |
+| `t` | trim whitespace |
+| `T<selection>` | trim selected |
+
+#### Filter
+
+| Operator | Meaning |
+|----------|---------|
+| `/<regex>/` | keep matching |
+| `!/<regex>/` | keep non-matching |
+| `m/<regex>/` | extract all matches |
+| `x` | delete empty |
+
+#### Reduce
+
+| Operator | Meaning |
+|----------|---------|
+| `<selection>` | select elements (index, slice, or multi) |
+| `o` | sort descending |
+| `O` | sort ascending |
+| `g<selection>` | group by |
+| `d` | dedupe with counts |
+| `D<selection>` | dedupe by selected field |
+| `#` | count |
+| `+` | sum |
+| `c` | columnate |
+| `p<selection>` | partition at indices |
+
+#### Navigation
+
+| Operator | Meaning |
+|----------|---------|
+| `@` | descend |
+| `^` | ascend |
+
+#### Misc
+
+| Operator | Meaning |
+|----------|---------|
+| `;` | separator (no-op) |
+
+### Operator Details
+
+#### `s` - Split
+
+Splits text elements of the current array according to the array's semantic level:
+
+- **file** array → splits text into lines (on newlines)
+- **line** array → splits text into words (on whitespace)
+- **word** array → splits text into characters
+
+Array elements are left unchanged—`s` does not recurse. Use `@` to descend and split at deeper levels.
+
+```
+# Split lines into words (line array)
+["hello world", "foo bar"]  →  [["hello", "world"], ["foo", "bar"]]
+
+# Split words into chars (word array, after sj)
+["hello", "world"]  →  [["h","e","l","l","o"], ["w","o","r","l","d"]]
+```
+
+#### `S<delim>` - Split on Delimiter
+
+Splits on a custom delimiter. Use a single character directly, or quotes for multi-character delimiters:
+
+- `S,` splits on comma
+- `S:` splits on colon
+- `S"::"` splits on `::`
+
+```
+# Split CSV
+"a,b,c"  →  ["a", "b", "c"]   (with S,)
+
+# Split on ::
+"a::b::c"  →  ["a", "b", "c"]   (with S"::")
+```
+
+#### `j` - Join
+
+The inverse of `s`—joins nested arrays back into text using the appropriate delimiter for the array level. `sj` always returns the original value.
+
+```
+# Join words back into lines (after s)
+[["hello", "world"], ["foo", "bar"]]  →  ["hello world", "foo bar"]
+
+# Join chars back into words (after s@s)
+[["h","e","l","l","o"], ["w","o","r","l","d"]]  →  ["hello", "world"]
+```
+
+#### `J<delim>` - Join with Delimiter
+
+Joins array elements with a custom delimiter:
+
+- `J,` joins with comma
+- `J"\n"` joins with newline
+
+```
+["a", "b", "c"]  →  "a,b,c"   (with J,)
+```
+
+#### `f` - Flatten
+
+Flattens nested arrays by one level. Non-array elements are kept as-is.
+
+```
+[["a", "b"], ["c"]]  →  ["a", "b", "c"]
+[["a", ["b", "c"]], ["d"]]  →  ["a", ["b", "c"], "d"]   (only one level)
+```
+
+#### `l` - Lowercase
+
+Converts all text to lowercase. Works recursively on arrays.
+
+```
+["Hello", "WORLD"]  →  ["hello", "world"]
+```
+
+#### `L<selection>` - Lowercase Selected
+
+Lowercases only the elements at the specified indices:
+
+```
+["HELLO", "WORLD", "FOO"]  →  ["hello", "WORLD", "FOO"]   (with L0)
+["HELLO", "WORLD", "FOO"]  →  ["hello", "world", "FOO"]   (with L:2)
+```
+
+#### `u` - Uppercase
+
+Converts all text to uppercase. Works recursively on arrays.
+
+```
+["Hello", "world"]  →  ["HELLO", "WORLD"]
+```
+
+#### `U<selection>` - Uppercase Selected
+
+Uppercases only the elements at the specified indices.
+
+#### `r[<selection>]/<old>/<new>/` - Replace (Regex)
+
+Replaces matches of regex `<old>` with `<new>`. Recurses through nested arrays.
+
+With an optional selection, applies replacement only to elements at the specified indices.
+
+```
+# Remove prefix
+["ERROR: fail", "ERROR: crash"]  →  ["fail", "crash"]   (with r/ERROR: //)
+
+# Replace pattern
+["cat", "hat"]  →  ["dog", "hat"]   (with r/cat/dog/)
+
+# Replace only in first element
+["cat", "cat"]  →  ["dog", "cat"]   (with r0/cat/dog/)
+```
+
+#### `n` - To Number
+
+Converts strings to numbers. Recurses through nested arrays. Non-numeric strings error.
+
+```
+["42", "3.14", "100"]  →  [42, 3.14, 100]
+```
+
+#### `N<selection>` - To Number Selected
+
+Converts only the elements at the specified indices to numbers.
+
+#### `t` - Trim
+
+Removes leading and trailing whitespace from each string. Recurses through nested arrays.
+
+```
+["  hello  ", "\tworld\n"]  →  ["hello", "world"]
+```
+
+#### `T<selection>` - Trim Selected
+
+Trims only the elements at the specified indices.
+
+#### `/<regex>/` - Filter Keep
+
+Keeps only elements matching the regex.
+
+```
+["apple", "banana", "apricot"]  →  ["apple", "apricot"]   (with /^a/)
+```
+
+#### `!/<regex>/` - Filter Remove
+
+Removes elements matching the regex (keeps non-matching).
+
+```
+["apple", "banana", "apricot"]  →  ["banana"]   (with !/^a/)
+```
+
+#### `m/<regex>/` - Match All
+
+Extracts all regex matches from each element, returning an array of matches per element. This is the equivalent of `grep -o`.
+
+```
+# Extract all IP addresses from each line
+["192.168.1.1 to 10.0.0.1", "from 172.16.0.1"]  →  [["192.168.1.1", "10.0.0.1"], ["172.16.0.1"]]
+   (with m/\d+\.\d+\.\d+\.\d+/)
+
+# Extract all numbers
+"price: $42, qty: 7"  →  ["42", "7"]   (with m/\d+/)
+
+# Get first match only
+m/pattern/@0
+
+# Flatten all matches into single list
+m/pattern/f
+```
+
+#### `x` - Delete Empty
+
+Removes empty strings and empty arrays from the current array.
+
+```
+["hello", "", "world", ""]  →  ["hello", "world"]
+```
+
+#### `<selection>` - Select
+
+Selects elements by index, slice, or combination. See [Selection](#selection) for full syntax.
+
+- Single index returns the element itself
+- Multiple indices or slices return an array
+
+Also works on strings, treating them as character arrays:
+
+```
+"hello"  →  "h"       (with 0)
+"hello"  →  "olleh"   (with ::-1)
+```
+
+#### `o` - Sort Descending
+
+Sorts the array in descending order. For arrays of arrays, sorts lexicographically (first element, then second, etc.).
+
+```
+[3, 1, 4, 1, 5]  →  [5, 4, 3, 1, 1]
+[[2, "b"], [1, "a"], [2, "a"]]  →  [[2, "b"], [2, "a"], [1, "a"]]
+```
+
+#### `O` - Sort Ascending
+
+Sorts the array in ascending order.
+
+```
+[3, 1, 4, 1, 5]  →  [1, 1, 3, 4, 5]
+```
+
+#### `g<selection>` - Group By
+
+Groups elements by the value(s) at the specified selection. Produces `[[key, [elements...]], ...]`.
+
+```
+# Group by first element
+[["a", 1], ["b", 2], ["a", 3]]  →  [["a", [["a", 1], ["a", 3]]], ["b", [["b", 2]]]]   (with g0)
+
+# Group by slice (composite key)
+g0:2  →  key is [first, second] elements
+```
+
+#### `d` - Dedupe with Counts
+
+Removes duplicates and counts occurrences. Returns `[[count, value], ...]` sorted by count descending.
+
+```
+["a", "b", "a", "a", "b"]  →  [[3, "a"], [2, "b"]]
+```
+
+#### `D<selection>` - Dedupe by Field
+
+Removes duplicates based on the value at the specified selection, counting occurrences. Returns `[[count, element], ...]` sorted by count descending.
+
+```
+# Dedupe by first element
+[["a", 1], ["b", 2], ["a", 3]]  →  [[2, ["a", 1]], [1, ["b", 2]]]   (with D0)
+```
+
+#### `#` - Count
+
+Returns the number of elements in the array.
+
+```
+["a", "b", "c"]  →  3
+```
+
+#### `+` - Sum
+
+Sums all numeric values. Recurses through nested arrays. Strings are coerced to numbers (non-numeric strings contribute 0).
+
+```
+[1, 2, 3, 4]  →  10
+[["1", "2"], ["3", "4"]]  →  10
+```
+
+#### `c` - Columnate
+
+Formats array of arrays as aligned columns (like `column -t`). Each column width is automatically determined by the widest element in that column.
+
+```
+[["name", "age"], ["alice", "30"], ["bob", "25"]]
+→
+name   age
+alice  30
+bob    25
+```
+
+#### `p<selection>` - Partition
+
+Splits an array or string at the specified indices. Each index becomes a split point.
+
+```
+# Split at index 2
+["a", "b", "c", "d", "e"]  →  [["a", "b"], ["c", "d", "e"]]   (with p2)
+
+# Split at multiple indices
+["a", "b", "c", "d", "e"]  →  [["a"], ["b", "c"], ["d", "e"]]   (with p1,3)
+
+# Chunk into groups of 2 (split at every 2nd index)
+["a", "b", "c", "d", "e", "f"]  →  [["a", "b"], ["c", "d"], ["e", "f"]]   (with p::2)
+```
+
+Also works on strings:
+
+```
+"hello"  →  ["he", "llo"]   (with p2)
+"abcdef"  →  ["ab", "cd", "ef"]   (with p::2)
+```
+
+#### `@` - Descend
+
+Descends one level into the data structure. Subsequent operations apply to each element of the current array, rather than the array itself.
+
+```
+# Without @: select first element of outer array
+[["a", "b"], ["c", "d"]]  →  ["a", "b"]   (with 0)
+
+# With @: select first element of EACH inner array
+[["a", "b"], ["c", "d"]]  →  ["a", "c"]   (with @0)
+```
+
+Multiple `@` descends multiple levels:
+
+```
+# @@0 operates on elements of elements of elements
+```
+
+#### `^` - Ascend
+
+Ascends one level, undoing a previous `@`. Returns focus to the parent array.
+
+```
+# Split, descend, select first word, ascend
+"hello world\nfoo bar"  →  ["hello", "foo"]   (with s@0)
+```
+
+#### `;` - Separator
+
+A no-op operator that does nothing. Useful for visually separating groups of operators in complex programmes.
+
+```
+# Without separator
+s@0^do:10
+
+# With separator for readability
+s@0^;d;o;:10
+```
+
+## Selection
+
+Selection is a reduce operator—it collapses the array to a subset. Selecting a single element returns that element; selecting multiple returns an array:
+
+| Syntax | Meaning | Result |
+|--------|---------|--------|
+| `<n>` | single index (0-based) | element |
+| `-<n>` | negative index (from end) | element |
+| `<n>:<m>` | slice (exclusive end) | array |
+| `<n>:` | slice to end | array |
+| `:<m>` | slice from start | array |
+| `<n>:<m>:<s>` | slice with stride | array |
+| `<n>,<m>,<p>` | select multiple | array |
+| `<n>,<m>:<p>` | mixed index + slice | array |
+
+To apply selection within each element of a nested structure, use `@` to descend first:
+
+```bash
+# Select first 3 lines
+t ':3' file
+
+# Split lines into words, then select first word of each line
+t 's@0' file
+
+# Split on colon, select first and last fields of each line
+t 'S:@0,-1' /etc/passwd
+
+# Split into words, select 1st, 3rd, 4th of each line
+t 's@0,2,3' file
+
+# Reorder columns: last column first, then rest
+t 's@-1,0:-1' file
+```
+
+## Grouping
+
+`g<selection>` groups elements by the value(s) at the specified selection, producing `[[key, [element, ...]], ...]`.
+
+| Syntax | Meaning |
+|--------|---------|
+| `g0` | group by first element |
+| `g-1` | group by last element |
+| `g1,2` | group by composite key (elements 1 and 2) |
+| `g0:3` | group by first three elements as key |
+
+Examples:
+
+```bash
+# Group log lines by IP (first field)
+t 'sg0' access.log
+# → [["192.168.1.1", [[192.168.1.1, -, -, ...], ...]], ["10.0.0.5", [...]], ...]
+
+# Group CSV rows by region (field 2)
+t 'S,g2' sales.csv
+
+# Group by composite key: method + status code
+t 'sg0,8' access.log
+
+# Group by IP (first field), showing all requests per IP
+t 'sg0' access.log
+# → [["192.168.1.1", [[...], [...]]], ["10.0.0.5", [[...]]]]
+
+# Group by IP, show top 10 offenders with their actual requests
+t 'sg0o:10' access.log
+```
+
+## Aggregation & Cleaning
+
+| Operator | Behavior | Example |
+|----------|----------|---------|
+| `#` | count: `[a, b, c]` → `3` | `t '#' file` (line count) |
+| `+` | sum: `[1, 2, 3]` → `6` | `t 'S,@1n+' data.csv` (sum column 2) |
+| `t` | trim whitespace (per element) | `t 't' file` (trim each line) |
+| `x` | delete empty elements | `t 'x' file` (remove blank lines) |
+
+## Interactive Mode
+
+Interactive mode allows a user to live preview programmes as they're typed.
+Pressing `^J` will toggle between text and JSON modes.
+
+```bash
+$ t -i access.log
+Loaded 124847 lines
+t> s                     # live preview as you type
+[[192.168.1.1, -, -, ...], [10.0.0.5, -, -, ...], ...]
+t> s@8
+["200", "404", "200", "500", ...]
+t> s@8^d
+[[98423, "200"], [1042, "404"], [89, "500"], ...]
+t> s@8^do
+[[98423, "200"], [1042, "404"], [89, "500"], ...]
+t> s@8^do:10<Enter>      # enter commits
+```
+
+## CLI Flags
+
+| Flag | Meaning |
+|------|---------|
+| `-d <delim>` | input delimiter (what `s` splits on) |
+| `-D <delim>` | output delimiter (what `j` joins with) |
+| `-c` | CSV mode (split/join handle quoted fields) |
+| `-e <prog>` | explain |
+| `-p <prog>` | parse tree |
+| `-i` | interactive |
+| `-j` | json output |
+
+## Rosetta Stone
+
+### Filtering
+
+**Lines with "fail" but not "expected":**
+```bash
+grep fail file | grep -v expected
+t '/fail/!/expected/' file
+```
+
+**Error messages, deduped and sorted by frequency:**
+```bash
+grep ERROR app.log | sed 's/.*ERROR: //' | sort | uniq -c | sort -rn
+t '/ERROR/r/.*ERROR: //do' app.log
+```
+
+### Field Selection
+
+**Select specific columns (1st, 3rd, 4th) from whitespace-delimited file:**
+```bash
+awk '{print $1, $3, $4}' file
+t 's@0,2,3' file
+```
+
+**Extract username and shell from /etc/passwd:**
+```bash
+awk -F: '{print $1, $7}' /etc/passwd
+t 'S:@0,-1' /etc/passwd
+```
+
+**Reorder CSV columns (swap first two, keep rest):**
+```bash
+awk -F, -v OFS=, '{print $2, $1, $3}' file
+t 'S,@1,0,2:J,' file
+```
+
+**Colon-delimited: 5th field, lowercased, reversed:**
+```bash
+cut -d: -f5 /etc/passwd | tr A-Z a-z | rev
+t 'S:@4ls::-1j' /etc/passwd
+```
+
+### Grouping
+
+**Group log lines by IP, see all requests from each:**
+```bash
+# No simple Unix equivalent - requires awk with arrays
+awk '{a[$1] = a[$1] ? a[$1] "\n" $0 : $0} END {for (k in a) print "==" k "==\n" a[k]}' access.log
+t 'sg0' access.log
+```
+
+**Group errors by error type, show all occurrences:**
+```bash
+# Complex in traditional tools
+t '/ERROR/r/.*ERROR: //sg0' app.log
+```
+
+**Group by field:**
+```bash
+# No simple Unix equivalent - requires awk with arrays
+t 'sg0' access.log
+```
+
+**Group CSV by category (column 3), extract values (column 2):**
+```bash
+awk -F, '{a[$3] = a[$3] " " $2} END {for (k in a) print k, a[k]}' data.csv
+t 'S,g2@1@1' data.csv
+```
+
+### Frequency & Deduplication
+
+**Request counts by IP (first field of log):**
+```bash
+awk '{print $1}' access.log | sort | uniq -c | sort -rn
+t 's@0^do' access.log
+```
+
+**HTTP status code distribution (9th field):**
+```bash
+awk '{print $9}' access.log | sort | uniq -c | sort -rn
+t 's@8^do' access.log
+```
+
+**Most requested URLs (7th field), top 20:**
+```bash
+awk '{print $7}' access.log | sort | uniq -c | sort -rn | head -20
+t 's@6^do:20' access.log
+```
+
+**Top 10 file extensions:**
+```bash
+ls -1 | grep '\.' | rev | cut -d. -f1 | rev | sort | uniq -c | sort -rn | head -10
+t '/\./S.@-1^do:10' filelist
+```
+
+**CSV: value frequency in column 1:**
+```bash
+cut -d, -f1 data.csv | sort | uniq -c | sort -rn
+t 'S,@0^do' data.csv
+```
+
+**CSV: unique values in column 3, sorted:**
+```bash
+cut -d, -f3 data.csv | sort -u
+t --csv 's@2^d@1^O' data.csv
+```
+
+**Extract and count email domains:**
+```bash
+grep -E '@' file | sed 's/.*@//' | sed 's/[^a-zA-Z0-9.-].*//' | sort | uniq -c | sort -rn
+t '/@/S@@-1^do' file
+```
+
+**Remove duplicate words within each line:**
+```bash
+awk '{delete a; for(i=1;i<=NF;i++) if(!a[$i]++) printf "%s ", $i; print ""}' file
+t 's@D0@1^J" "' file
+```
+
+### Counting & Aggregation
+
+**Count lines (like wc -l):**
+```bash
+wc -l < file
+t '#' file
+```
+
+**Count words (like wc -w):**
+```bash
+wc -w < file
+t 'sf#' file
+```
+
+**Sum a column of numbers:**
+```bash
+awk '{sum+=$1} END{print sum}' file
+t 'n+' file
+```
+
+**Sum column 2 of a CSV:**
+```bash
+awk -F, '{sum+=$2} END{print sum}' data.csv
+t 'S,@1n+' data.csv
+```
+
+### Cleaning & Transformation
+
+**Remove blank lines:**
+```bash
+sed '/^$/d' file
+t 'x' file
+```
+
+**Trim whitespace from each line:**
+```bash
+sed 's/^[ \t]*//;s/[ \t]*$//' file
+t 't' file
+```
+
+**Reverse words within each line:**
+```bash
+awk '{for(i=NF;i>=1;i--) printf "%s ", $i; print ""}' file
+t 's@::-1j' file
+```
+
+**Reverse each word's characters (hello world → olleh dlrow):**
+```bash
+# Bash equivalent is ugly:
+while IFS= read -r line; do echo "$line" | xargs -n1 | rev | xargs; done < file
+t 's@s@::-1^j^j' file
+```
+
+### Extraction
+
+**Extract all IP addresses from log file (like grep -o):**
+```bash
+grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' access.log
+t 'm/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/f' access.log
+```
+
+**Extract all numbers from text:**
+```bash
+grep -oE '[0-9]+' file
+t 'm/[0-9]+/f' file
+```
+
+**Extract email addresses:**
+```bash
+grep -oE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' file
+t 'm/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/f' file
+```
+
+### Slicing
+
+**Every 3rd line, starting from line 2:**
+```bash
+awk 'NR%3==2' file
+t '1::3' file
+```

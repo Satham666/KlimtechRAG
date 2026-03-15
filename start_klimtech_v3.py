@@ -13,7 +13,7 @@ import subprocess, os, time, signal, sys
 # ─── KONFIGURACJA ───────────────────────────────────────────────────
 BASE_DIR     = "/media/lobo/BACKUP/KlimtechRAG"
 LOG_DIR      = os.path.join(BASE_DIR, "logs")
-PYTHON_VENV  = "/home/lobo/klimtech_venv/bin/python3"
+PYTHON_VENV  = "/media/lobo/BACKUP/KlimtechRAG/venv/bin/python3"
 INTERFACE    = "enp9s0"
 BACKEND_PORT = "8000"
 QDRANT_PORT  = "6333"

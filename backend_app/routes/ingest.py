@@ -74,6 +74,11 @@ TEXT_INDEXABLE = {".pdf", ".txt", ".md", ".py", ".js", ".ts",
 # Helpery tekstu
 # ---------------------------------------------------------------------------
 
+def _get_embedding_model(request: Request) -> str:
+    """Zwraca embedding model z nagłówka X-Embedding-Model lub wartość domyślną."""
+    return request.headers.get("X-Embedding-Model", settings.embedding_model).strip()
+
+
 def clean_text(text: str) -> str:
     import re
     text = re.sub(r"[ \t]+", " ", text)
@@ -347,6 +352,18 @@ async def ingest_file(
         if file_size > settings.max_file_size_bytes:
             raise HTTPException(status_code=413, detail=f"File too large: {file_size} bytes")
 
+        # Sprawdzenie czy użytkownik wybrał ColPali
+        embedding_model = _get_embedding_model(request)
+        if embedding_model.lower().startswith("vidore/colpali"):
+            if suffix != ".pdf":
+                raise HTTPException(status_code=400, detail="ColPali obsługuje tylko pliki PDF")
+            from ..services.colpali_embedder import index_pdf as colpali_index_pdf, unload_model
+            try:
+                pages = colpali_index_pdf(pdf_path=temp_file_path, doc_id=file.filename, model_name=embedding_model)
+            finally:
+                unload_model()
+            return {"message": "Zaindeksowano przez ColPali", "pages_processed": pages, "collection": "klimtech_colpali"}
+
         if suffix == ".pdf":
             markdown_text = parse_with_docling(temp_file_path)
         elif suffix in TEXT_INDEXABLE:
@@ -400,6 +417,22 @@ async def ingest_by_path(
     if suffix not in TEXT_INDEXABLE:
         return {"message": f"Format {suffix} not text-indexable yet", "chunks_processed": 0, "filename": filename}
 
+    # Sprawdzenie czy użytkownik wybrał ColPali
+    embedding_model = _get_embedding_model(req)
+    if embedding_model.lower().startswith("vidore/colpali"):
+        if suffix != ".pdf":
+            raise HTTPException(status_code=400, detail="ColPali obsługuje tylko pliki PDF")
+        from ..services.colpali_embedder import index_pdf as colpali_index_pdf, unload_model
+        from ..routes.chat import clear_cache
+        try:
+            pages = colpali_index_pdf(pdf_path=file_path, doc_id=filename, model_name=embedding_model)
+        finally:
+            unload_model()
+        mark_indexed(file_path, pages)
+        ensure_indexed()
+        clear_cache()
+        return {"message": "OK (ColPali)", "chunks_processed": pages, "filename": filename}
+
     try:
         if suffix == ".pdf":
             markdown_text = parse_with_docling(file_path)
@@ -439,11 +472,28 @@ async def ingest_all_pending(req: Request, limit: int = 10):
     files = get_pending_files()[:limit]
     results = []
 
+    # Sprawdzenie czy użytkownik wybrał ColPali
+    embedding_model = _get_embedding_model(req)
+    use_colpali = embedding_model.lower().startswith("vidore/colpali")
+
     for f in files:
         if f.extension not in TEXT_INDEXABLE:
             mark_indexed(f.path, 0)  # oznacz jako skipped żeby nie wracać
             results.append({"filename": f.filename, "chunks": 0, "status": "skipped_format"})
             continue
+
+        # Obsługa ColPali dla PDF
+        if f.extension == ".pdf" and use_colpali:
+            try:
+                from ..services.colpali_embedder import index_pdf as colpali_index_pdf
+                pages = colpali_index_pdf(pdf_path=f.path, doc_id=f.filename, model_name=embedding_model)
+                mark_indexed(f.path, pages)
+                results.append({"filename": f.filename, "chunks": pages, "status": "ok_colpali"})
+            except Exception as e:
+                mark_failed(f.path, str(e)[:100])
+                results.append({"filename": f.filename, "chunks": 0, "status": "error", "error": str(e)[:100]})
+            continue
+
         try:
             if f.extension == ".pdf":
                 markdown_text = parse_with_docling(f.path)
@@ -464,6 +514,11 @@ async def ingest_all_pending(req: Request, limit: int = 10):
         except Exception as e:
             mark_failed(f.path, str(e)[:100])
             results.append({"filename": f.filename, "chunks": 0, "status": "error", "error": str(e)[:100]})
+
+    # Zwolnij VRAM z ColPali przed powrotem
+    if use_colpali:
+        from ..services.colpali_embedder import unload_model
+        unload_model()
 
     ensure_indexed()
     clear_cache()

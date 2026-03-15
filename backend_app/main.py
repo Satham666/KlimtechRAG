@@ -12,6 +12,7 @@ from .routes import (
     filesystem_router,
     admin_router,
     ui_router,
+    web_search_router,
 )
 
 from .services import doc_store
@@ -52,6 +53,8 @@ app.include_router(filesystem_router)
 app.include_router(admin_router)
 app.include_router(ui_router)
 app.include_router(model_switch.router)
+app.include_router(web_search_router)
+
 
 @app.middleware("http")
 async def add_request_id_and_logging(request: Request, call_next):

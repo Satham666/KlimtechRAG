@@ -219,7 +219,7 @@ curl -X POST "http://localhost:8000/ingest_all?limit=200"
    ✅ n8n
 
 🚀 Uruchamianie: Backend FastAPI...
-   Komenda: /home/lobo/klimtech_venv/bin/python3 -m backend_app.main
+   Komenda: /media/lobo/BACKUP/KlimtechRAG/venv/bin/python3 -m backend_app.main
    Env: {'HIP_VISIBLE_DEVICES': '0', 'HSA_OVERRIDE_GFX_VERSION': '9.0.6', 'KLIMTECH_EMBEDDING_DEVICE': 'cuda:0', 'KLIMTECH_BASE_PATH': '/media/lobo/BACKUP/KlimtechRAG'}
    ⏳ Czekam 5s na inicjalizację...
 ✅ Backend FastAPI działa (PID: 31805)

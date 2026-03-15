@@ -1,0 +1,55 @@
+SvxLink
+=======
+
+image:https://github.com/sm0svx/svxlink/actions/workflows/codeql-analysis.yml/badge.svg["CodeQL", link="https://github.com/sm0svx/svxlink/actions/workflows/codeql-analysis.yml"]
+//image:https://travis-ci.org/sm0svx/svxlink.svg?branch=master["Build Status", link="https://travis-ci.org/sm0svx/svxlink"]
+image:https://badges.gitter.im/Join%20Chat.svg[link="https://gitter.im/sm0svx/svxlink?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge"]
+
+SvxLink is a project that develops software targeting the ham radio community.
+It started out as an EchoLink application for Linux back in 2003 but has now
+evolved to be something much more advanced.
+
+== SvxLink Server ==
+The SvxLink Server, often just called SvxLink, is a general purpose voice
+services system, which when connected to a transceiver, can act as both an
+advanced repeater system and can also operate on a simplex channel. One could
+call it a radio operating system.
+
+SvxLink is very extensible and modular. Voice services are implemented as
+modules which are isolated from each other.  Modules can be implemented in
+either C++ or TCL. Examples of modules are:
+
+* *Help*               -- A help system
+* *Parrot*             -- Play back everything that is received
+* *EchoLink*           -- Connect to other EchoLink stations
+* *DtmfRepeater*       -- Repeater received DTMF digits
+* *TclVoiceMail*       -- Send voice mail to other local users
+* *PropagationMonitor* -- Announce propagation warnings from dxmaps.com
+* *SelCall*            -- Send selective calling sequences by entering DTMF codes
+* *MetarInformation*   -- Play airport weather information
+* *Frn*                -- Connect to Free Radio Network (FRN) servers
+* *Trx*                -- Remote control tranceivers using DTMF
+
+== Qtel ==
+Qtel, the Qt EchoLink client, is a graphical application used to access the
+EchoLink network.
+
+== Resources ==
+These are some of the resources connected to SvxLink:
+
+:gh_pages:    https://svxlink.org/
+:gh_wiki:     https://github.com/sm0svx/svxlink/wiki
+:gh_issues:   https://github.com/sm0svx/svxlink/issues
+:gh_releases: https://github.com/sm0svx/svxlink/releases
+:gh_sndclips: https://github.com/sm0svx/svxlink-sounds-en_US-heather/releases
+:gh_main:     https://github.com/sm0svx/svxlink
+:gi_svxlink:  https://groups.io/g/svxlink
+
+* {gh_pages}[Project Home Page] -- The main project page
+* {gh_wiki}[Wiki Pages] -- Main documentation
+* {gh_issues}[Issue Tracker] -- Report bugs and feature requests
+* {gh_releases}[Download Releases] -- Download source code releases here
+* {gh_sndclips}[Download Sound Clips] -- Download English sound clip files for
+  SvxLink Server from here
+* {gh_main}[GitHub Main Page] -- The project site on GitHub
+* {gi_svxlink}[Groups.io SvxLink] -- Communicate with other SvxLink users

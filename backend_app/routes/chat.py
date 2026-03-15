@@ -32,7 +32,7 @@ logger = logging.getLogger("klimtechrag")
 # ---------------------------------------------------------------------------
 
 _answer_cache: Dict[str, Tuple[str, float]] = {}
-CACHE_TTL = 3600          # 1 godzina
+CACHE_TTL = 3600  # 1 godzina
 CACHE_MAX_SIZE = 500
 
 
@@ -72,6 +72,7 @@ powiedz o tym szczerze. Odpowiadaj po polsku, chyba że użytkownik pyta w innym
 # GET /v1/models — wymagane przez Open WebUI
 # ---------------------------------------------------------------------------
 
+
 @router.get("/v1/models")
 async def list_models():
     """Zwraca dostępne modele — wymagane przez klientów OpenAI-compatible (np. OWUI)."""
@@ -96,6 +97,7 @@ async def list_models():
 # POST /v1/embeddings — wymagane przez OWUI RAG (Wariant C)
 # ---------------------------------------------------------------------------
 
+
 @router.post("/v1/embeddings")
 async def create_embeddings(body: dict, req: Request):
     """
@@ -112,18 +114,22 @@ async def create_embeddings(body: dict, req: Request):
     elif isinstance(input_data, list):
         inputs = input_data
     else:
-        raise HTTPException(status_code=400, detail="'input' must be string or list of strings")
+        raise HTTPException(
+            status_code=400, detail="'input' must be string or list of strings"
+        )
 
     embeddings = []
     for i, text in enumerate(inputs):
         try:
             result = text_embedder.run(text=str(text))
             embedding = result["embedding"]
-            embeddings.append({
-                "object": "embedding",
-                "embedding": embedding,
-                "index": i,
-            })
+            embeddings.append(
+                {
+                    "object": "embedding",
+                    "embedding": embedding,
+                    "index": i,
+                }
+            )
         except Exception as e:
             logger.exception("[Embeddings] Błąd dla inputu %d: %s", i, e)
             raise HTTPException(status_code=500, detail=f"Embedding error: {e}")
@@ -143,6 +149,7 @@ async def create_embeddings(body: dict, req: Request):
 # ---------------------------------------------------------------------------
 # POST /query — podstawowy RAG query
 # ---------------------------------------------------------------------------
+
 
 @router.post("/query")
 async def query_rag(
@@ -178,7 +185,9 @@ async def query_rag(
 
         final_docs = list(local_docs)
         if web_snippet:
-            final_docs.append(HaystackDocument(content=web_snippet, meta={"source": "Web Search"}))
+            final_docs.append(
+                HaystackDocument(content=web_snippet, meta={"source": "Web Search"})
+            )
 
         prompt_text = ""
         for doc in final_docs:
@@ -218,6 +227,7 @@ async def query_rag(
 # POST /v1/chat/completions — OpenAI-compatible (główny endpoint OWUI)
 # ---------------------------------------------------------------------------
 
+
 @router.post("/v1/chat/completions")
 @router.post("/chat/completions")
 async def openai_chat_completions(
@@ -241,19 +251,102 @@ async def openai_chat_completions(
     sources = []
 
     if request.use_rag:
+        embedding_model = req.headers.get(
+            "X-Embedding-Model", settings.embedding_model
+        ).strip()
+
+        if embedding_model.lower().startswith("vidore/colpali"):
+            try:
+                from ..services.colpali_embedder import (
+                    search as colpali_search,
+                    scored_points_to_context,
+                )
+
+                colpali_results = colpali_search(
+                    query=user_message, top_k=request.top_k, model_name=embedding_model
+                )
+                if colpali_results:
+                    context_text = scored_points_to_context(colpali_results)
+                    sources = [
+                        sp.payload.get("doc_id", "unknown")
+                        for sp in colpali_results
+                        if sp.payload
+                    ]
+                    logger.info(
+                        "[ColPali] %d stron: %s",
+                        len(colpali_results),
+                        ", ".join(sources),
+                        extra={"request_id": request_id},
+                    )
+            except Exception as e:
+                logger.warning(
+                    "[ColPali] Błąd retrieval: %s",
+                    str(e),
+                    extra={"request_id": request_id},
+                )
+        else:
+            try:
+                from haystack_integrations.components.retrievers.qdrant import (
+                    QdrantEmbeddingRetriever,
+                )
+
+                query_embedding = text_embedder.run(text=user_message)
+                retriever = QdrantEmbeddingRetriever(
+                    document_store=doc_store, top_k=request.top_k
+                )
+                retrieval_result = retriever.run(
+                    query_embedding=query_embedding["embedding"]
+                )
+                docs = retrieval_result.get("documents", [])
+                if docs:
+                    context_text = "\n\n---\n\n".join(
+                        doc.content for doc in docs if doc.content
+                    )
+                    sources = [doc.meta.get("source", "unknown") for doc in docs]
+                    logger.info(
+                        "[RAG] %d dokumentów: %s",
+                        len(docs),
+                        ", ".join(sources),
+                        extra={"request_id": request_id},
+                    )
+            except Exception as e:
+                logger.warning(
+                    "[RAG] Błąd retrieval: %s", str(e), extra={"request_id": request_id}
+                )
+
+    # Web Search (hybrydowy tryb - RAG + Web)
+    if request.web_search:
         try:
-            from haystack_integrations.components.retrievers.qdrant import QdrantEmbeddingRetriever
-            query_embedding = text_embedder.run(text=user_message)
-            retriever = QdrantEmbeddingRetriever(document_store=doc_store, top_k=request.top_k)
-            retrieval_result = retriever.run(query_embedding=query_embedding["embedding"])
-            docs = retrieval_result.get("documents", [])
-            if docs:
-                context_text = "\n\n---\n\n".join(doc.content for doc in docs if doc.content)
-                sources = [doc.meta.get("source", "unknown") for doc in docs]
-                logger.info("[RAG] %d dokumentów: %s", len(docs), ", ".join(sources),
-                            extra={"request_id": request_id})
+            with DDGS() as ddgs:
+                web_results = list(ddgs.text(user_message, max_results=3))
+            if web_results:
+                web_snippets = []
+                for res in web_results:
+                    snippet = res.get("body", "")
+                    url = res.get("href", "")
+                    title = res.get("title", "")
+                    if snippet:
+                        web_snippets.append(f"**{title}**\n{snippet}\nŹródło: {url}")
+
+                web_context = "\n\n---\n\n".join(web_snippets)
+
+                # Dodaj web context do istniejącego kontekstu
+                if context_text:
+                    context_text = f"{context_text}\n\n=== WYNIKI Z INTERNETU ===\n{web_context}\n=== KONIEC WYNIKÓW ==="
+                else:
+                    context_text = f"=== WYNIKI Z INTERNETU ===\n{web_context}\n=== KONIEC WYNIKÓW ==="
+
+                sources.extend([res.get("title", "Web") for res in web_results])
+                logger.info(
+                    "[Web Search] %d wyników dla: %s",
+                    len(web_results),
+                    user_message,
+                    extra={"request_id": request_id},
+                )
         except Exception as e:
-            logger.warning("[RAG] Błąd retrieval: %s", str(e), extra={"request_id": request_id})
+            logger.warning(
+                "[Web Search] Błąd: %s", str(e), extra={"request_id": request_id}
+            )
 
     if context_text:
         full_prompt = (
@@ -271,7 +364,11 @@ async def openai_chat_completions(
 
         return ChatCompletionResponse(
             model=request.model,
-            choices=[ChatCompletionChoice(message=ChatMessage(role="assistant", content=answer))],
+            choices=[
+                ChatCompletionChoice(
+                    message=ChatMessage(role="assistant", content=answer)
+                )
+            ],
             usage=ChatCompletionUsage(
                 prompt_tokens=len(full_prompt.split()),
                 completion_tokens=len(answer.split()),
@@ -279,13 +376,16 @@ async def openai_chat_completions(
             ),
         )
     except Exception as e:
-        logger.exception("Error in /v1/chat/completions: %s", e, extra={"request_id": request_id})
+        logger.exception(
+            "Error in /v1/chat/completions: %s", e, extra={"request_id": request_id}
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
 # POST /code_query
 # ---------------------------------------------------------------------------
+
 
 @router.post("/code_query")
 async def query_code_agent(
@@ -298,7 +398,10 @@ async def query_code_agent(
 
     try:
         rag_result = rag_pipeline.run(
-            {"embedder": {"text": request.query}, "prompt_builder": {"query": request.query}},
+            {
+                "embedder": {"text": request.query},
+                "prompt_builder": {"query": request.query},
+            },
             include_outputs_from={"retriever"},
         )
         local_docs = rag_result["retriever"]["documents"]
@@ -332,7 +435,9 @@ async def query_code_agent(
         return {"answer": answer}
 
     except Exception as e:
-        logger.exception("Error in /code_query: %s", e, extra={"request_id": request_id})
+        logger.exception(
+            "Error in /code_query: %s", e, extra={"request_id": request_id}
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -340,10 +445,13 @@ async def query_code_agent(
 # GET /rag/debug — diagnostyka pipeline RAG
 # ---------------------------------------------------------------------------
 
+
 @router.get("/rag/debug")
 async def rag_debug(query: str = "test"):
     import requests as _requests
-    from haystack_integrations.components.retrievers.qdrant import QdrantEmbeddingRetriever
+    from haystack_integrations.components.retrievers.qdrant import (
+        QdrantEmbeddingRetriever,
+    )
 
     result: dict = {}
 
@@ -353,7 +461,9 @@ async def rag_debug(query: str = "test"):
             f"{settings.qdrant_url}/collections/{settings.qdrant_collection}", timeout=5
         ).json()
         result["qdrant_points"] = qdrant_info.get("result", {}).get("points_count", 0)
-        result["qdrant_indexed"] = qdrant_info.get("result", {}).get("indexed_vectors_count", 0)
+        result["qdrant_indexed"] = qdrant_info.get("result", {}).get(
+            "indexed_vectors_count", 0
+        )
         result["qdrant_ok"] = result["qdrant_points"] > 0
     except Exception as e:
         result["qdrant_error"] = str(e)
@@ -366,7 +476,9 @@ async def rag_debug(query: str = "test"):
         docs = retrieval_result.get("documents", [])
         result["retrieved_docs"] = len(docs)
         result["sample"] = docs[0].content[:200] if docs else None
-        result["sources"] = [doc.meta.get("source", "unknown") for doc in docs] if docs else []
+        result["sources"] = (
+            [doc.meta.get("source", "unknown") for doc in docs] if docs else []
+        )
     except Exception as e:
         result["retrieval_error"] = str(e)
 

@@ -28,7 +28,7 @@ def kill_by_pid_file(pid_file: str, name: str) -> bool:
         os.remove(pid_file)
         print(f"   ✅ {name} zabity (PID: {pid})")
         return True
-    except (ProcessLookupError, ProcessError := Exception) as e:
+    except ProcessLookupError:
         # Proces już nie istnieje — usuń stary PID file
         try:
             os.remove(pid_file)
@@ -37,6 +37,10 @@ def kill_by_pid_file(pid_file: str, name: str) -> bool:
         return False
     except Exception as e:
         print(f"   ⚠️  {name} PID file błąd: {e}")
+        try:
+            os.remove(pid_file)
+        except Exception:
+            pass
         return False
 
 
@@ -76,11 +80,70 @@ def kill_backend() -> None:
 def kill_llama() -> None:
     print("⚡ LLM Server (llama.cpp)...")
     pkill("llama-server", "llama-server")
+    # Zwolnij port 8082
+    try:
+        subprocess.run(["fuser", "-k", "8082/tcp"], capture_output=True, timeout=5)
+    except Exception:
+        pass
 
 
 def kill_venv_python() -> None:
     print("⚡ Pozostałe procesy venv...")
-    pkill("klimtech_venv/bin/python", "venv python")
+    pkill("python", "python procesy")
+    pkill("uvicorn", "uvicorn server")
+
+
+def kill_all_remaining() -> None:
+    """Zabija wszystkie pozostałe procesy związane z projektem."""
+    print("⚡ Dodatkowe procesy...")
+    # Zabij byśmy pewny: uvicorn, fastapi, itp
+    patterns = [
+        ("uvicorn", "Uvicorn"),
+        ("fastapi", "FastAPI"),
+        ("qdrant", "Qdrant native"),
+        ("nextcloud", "Nextcloud native"),
+        ("n8n", "n8n native"),
+    ]
+    for pattern, name in patterns:
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", pattern],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.stdout.strip():
+                subprocess.run(
+                    ["pkill", "-9", "-f", pattern],
+                    capture_output=True, timeout=5
+                )
+                print(f"   ✅ {name} zatrzymany")
+        except Exception:
+            pass
+
+
+def kill_remaining_ports() -> None:
+    """Zwolnij wszystkie porty używane przez projekt."""
+    print("⚡ Zwalnianie portów...")
+    ports = [
+        ("8000", "Backend"),
+        ("8082", "LLM"),
+        ("6333", "Qdrant"),
+        ("3000", "Open WebUI"),
+        ("8080", "Nextcloud (alternate)"),
+        ("8443", "Nextcloud (HTTPS)"),
+        ("5678", "n8n"),
+        ("5432", "PostgreSQL"),
+    ]
+    for port, name in ports:
+        try:
+            subprocess.run(
+                ["fuser", "-k", f"{port}/tcp"],
+                capture_output=True, timeout=5
+            )
+            print(f"   ✅ Port {port} ({name}) zwolniony")
+        except subprocess.TimeoutExpired:
+            print(f"   ⏱️  Port {port}: timeout")
+        except Exception:
+            pass
 
 
 def stop_containers() -> None:
@@ -137,6 +200,7 @@ def main():
     print("   🛑 KLIMTECHRAG STOP 🛑")
     print("=" * 50 + "\n")
 
+    print("📍 Faza 1: Procesy aplikacji...")
     kill_watchdog()
     kill_backend()
     kill_llama()
@@ -144,18 +208,35 @@ def main():
 
     time.sleep(1)
 
+    print("\n📍 Faza 2: Dodatkowe procesy...")
+    kill_all_remaining()
+
+    time.sleep(1)
+
+    print("\n📍 Faza 3: Kontenery Podman...")
     stop_containers()
+
+    time.sleep(1)
+
+    print("\n📍 Faza 4: Zwolnienie portów...")
+    kill_remaining_ports()
+
+    time.sleep(1)
+
     cleanup_pid_files()
     check_ports()
 
     # Usuń LLM command file
     llm_cmd_file = os.path.join(LOG_DIR, "llm_command.txt")
     if os.path.exists(llm_cmd_file):
-        os.remove(llm_cmd_file)
-        print(f"\n🧹 Usunięto: {llm_cmd_file}")
+        try:
+            os.remove(llm_cmd_file)
+            print(f"🧹 Usunięto: {llm_cmd_file}")
+        except Exception:
+            pass
 
     print("\n" + "=" * 50)
-    print("✅ System zatrzymany.")
+    print("✅ System zatrzymany — wszystkie procesy zabite.")
     print("=" * 50 + "\n")
 
 

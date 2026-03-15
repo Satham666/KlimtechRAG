@@ -15,6 +15,7 @@ Zmienne środowiskowe (opcjonalne):
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from typing import List, Tuple
@@ -42,6 +43,12 @@ logger = logging.getLogger(__name__)
 COLPALI_COLLECTION = "klimtech_colpali"
 DEFAULT_MODEL      = os.getenv("COLPALI_MODEL", "vidore/colpali-v1.3-hf")
 QDRANT_URL         = os.getenv("KLIMTECH_QDRANT_URL", "http://localhost:6333")
+
+
+def is_colpali_model(model_name: str) -> bool:
+    """Zwraca True dla każdego modelu vidore/colpali-*."""
+    return model_name.lower().startswith("vidore/colpali")
+
 
 # ---------------------------------------------------------------------------
 # Singleton — model ładowany raz
@@ -215,8 +222,8 @@ def index_pdf(
 
     images = pdf_to_images(pdf_path)
     total_pages = len(images)
-    # deterministyczny ID bazowy z nazwy pliku
-    point_id_base = abs(hash(doc_id)) % (10 ** 9)
+    # Deterministyczny ID bazowy z nazwy pliku (hashlib zamiast hash() aby uniknąć randomizacji)
+    point_id_base = int(hashlib.md5(doc_id.encode()).hexdigest(), 16) % (10 ** 9)
     points: List[PointStruct] = []
 
     for batch_start in range(0, total_pages, batch_size):
@@ -280,3 +287,38 @@ def search(
     ).points
 
     return results
+
+
+def scored_points_to_context(points: List[ScoredPoint], extract_text: bool = True) -> str:
+    """
+    Konwertuje ScoredPoint z kolekcji ColPali na tekst kontekstu dla LLM.
+    Opcjonalnie wyciąga tekst OCR z pasujących stron PDF przez PyMuPDF.
+
+    Args:
+        points:        Lista ScoredPoint z Qdrant (wynik search())
+        extract_text:  Jeśli True, ekstrahuje tekst ze znalezionego PDF
+
+    Returns:
+        String z sformatowanym kontekstem dla LLM
+    """
+    parts = []
+    for sp in points:
+        p = sp.payload or {}
+        doc_id = p.get("doc_id", "unknown")
+        page = p.get("page", 0)
+        file_path = p.get("file_path", "")
+        score = round(sp.score, 3)
+
+        text_content = ""
+        if extract_text and file_path and os.path.exists(file_path):
+            try:
+                doc = fitz.open(file_path)
+                text_content = doc[page].get_text().strip()
+                doc.close()
+            except Exception:
+                text_content = ""
+
+        header = f"[{doc_id}, strona {page + 1}, ColPali score {score}]"
+        parts.append(f"{header}\n{text_content}" if text_content else header)
+
+    return "\n\n".join(parts)
