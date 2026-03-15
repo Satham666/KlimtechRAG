@@ -69,6 +69,17 @@ powiedz o tym szczerze. Odpowiadaj po polsku, chyba że użytkownik pyta w innym
 
 
 # ---------------------------------------------------------------------------
+# GET /models — wymagane przez Nextcloud integration_openai
+# ---------------------------------------------------------------------------
+
+
+@router.get("/models")
+async def list_models_no_v1():
+    """Zwraca dostępne modele — wymagane przez Nextcloud."""
+    return await list_models()
+
+
+# ---------------------------------------------------------------------------
 # GET /v1/models — wymagane przez Open WebUI
 # ---------------------------------------------------------------------------
 

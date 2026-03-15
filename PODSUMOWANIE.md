@@ -1,6 +1,6 @@
 # KlimtechRAG — Podsumowanie Projektu
 
-**Data aktualizacji:** 2026-03-15  
+**Data aktualizacji:** 2026-03-16  
 **Wersja systemu:** v7.2 (Web Search + Dual Model + Nextcloud AI)  
 **Repozytorium:** https://github.com/Satham666/KlimtechRAG  
 **Katalog serwera:** `/media/lobo/BACKUP/KlimtechRAG/`  
@@ -38,7 +38,7 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         UŻYTKOWNICY                                      │
 │         ↓                    ↓                    ↓                       │
-│  http://..:8000              http://..:8443        http://..:5678         │
+│  http://..:8000              http://..:8081        http://..:5678         │
 │  (KlimtechRAG UI)           (Nextcloud + AI)     (n8n workflows)         │
 └──────────┬──────────────────────────┬───────────────────────┬────────────┘
            │                          │                       │
@@ -58,7 +58,7 @@
            │                     │                  │
            ↓                     ↓                  ↓
 ┌──────────────────┐  ┌─────────────────┐  ┌──────────────────────────────────┐
-│ llama.cpp-server │  │ Qdrant (6333)   │  │ Nextcloud (8443)                 │
+│ llama.cpp-server │  │ Qdrant (6333)   │  │ Nextcloud (8081)                 │
 │ (port 8082)      │  │ klimtech_docs   │  │ + integration_openai (app)       │
 │ Bielik-11B Q8_0  │  │ 5114+ punktów   │  │ + assistant (app)                │
 │ ~14GB VRAM       │  │ klimtech_colpali│  │ → Service URL: http://..:8000    │
@@ -68,7 +68,7 @@
 ### Data Flow — Nextcloud AI Assistant (NOWE v7.2)
 
 ```
-Nextcloud Assistant (przeglądarka na :8443)
+Nextcloud Assistant (przeglądarka na :8081)
        │
        │  POST /v1/chat/completions (OpenAI-compatible)
        │  Authorization: Bearer sk-local
@@ -111,7 +111,7 @@ Pytanie ──► Embedding ──► Retrieval (top_k=10) ──► Prompt Buil
 | **Wektorowa baza** | Qdrant (Podman) | Port 6333 |
 | **Kontenery** | Podman | qdrant, nextcloud, postgres_nextcloud, n8n |
 | **UI** | HTML/JS + Bootstrap | `backend_app/static/index.html` |
-| **Nextcloud AI** | integration_openai + assistant | Port 8443 → backend :8000 (NOWE) |
+| **Nextcloud AI** | integration_openai + assistant | Port 8081 → backend :8000 (NOWE) |
 | **Automatyzacja** | n8n | Port 5678 (NOWE) |
 | **Sync** | Git → GitHub | laptop → push, serwer → pull |
 
@@ -322,7 +322,7 @@ curl -X POST http://192.168.31.70:8000/v1/chat/completions \
 
 ### 12.1 Credentials Nextcloud w n8n
 
-- WebDAV URL: `http://192.168.31.70:8443/remote.php/webdav`
+- WebDAV URL: `http://192.168.31.70:8081/remote.php/webdav`
 - User + **hasło aplikacji** (nie główne hasło!)
 
 ### 12.2 Workflow: Auto-indeksowanie
@@ -399,10 +399,25 @@ python3 -m backend_app.scripts.ingest_colpali --dir data/uploads/pdf_RAG
 |--------|-------|
 | 🔧 API Backend | http://192.168.31.70:8000 |
 | 📦 Qdrant | http://192.168.31.70:6333 |
-| ☁️ Nextcloud + AI | http://192.168.31.70:8443 |
+| ☁️ Nextcloud + AI | http://192.168.31.70:8081 |
 | 🔗 n8n | http://192.168.31.70:5678 |
 | 🤖 LLM/VLM | http://192.168.31.70:8082 |
 
 ---
 
-*Ostatnia aktualizacja: 2026-03-15 — v7.2: Integracja Nextcloud AI Assistant, workflow n8n, dostosowanie endpointów*
+## Znane problemy (2026-03-16)
+
+### 1. Nextcloud AI Assistant nie odpowiada
+- **Status:** ❌ NIEROZWIĄZANY
+- **Objawy:** Ciągłe zapytania POST /check_generation z kodem 417
+- **Diagnoza:** Backend działa, curl działa, ale Asystent NC nie odbiera odpowiedzi
+- **Do wypróbowania:** Wyczyścić cache przeglądarki, tryb incognito
+
+### 2. VRAM - Bielik-11B
+- **Status:** ⚠️ OBEJŚCIE
+- **Problem:** ~4.7GB VRAM zajęte, Bielik-11B nie mieści się
+- **Rozwiązanie:** Używamy Bielik-4.5B (~5GB VRAM)
+
+---
+
+*Ostatnia aktualizacja: 2026-03-16 — v7.2: Integracja Nextcloud AI, porty zaktualizowane (8443→8081), problemy z Assistant*

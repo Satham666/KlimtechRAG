@@ -15,7 +15,17 @@ import time
 import glob
 from typing import Optional, Dict, Any
 
-from ..config import settings
+try:
+    from ..config import settings
+except ImportError:
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    try:
+        from config import settings
+    except ImportError:
+        settings = None
 
 # ---------------------------------------------------------------------------
 # KONFIGURACJA
@@ -163,8 +173,28 @@ def start_llm_server(model_path: str, model_type: str = "llm") -> Dict[str, Any]
         result["message"] = f"Nie znaleziono llama-server"
         return result
 
+    # Oblicz optymalne parametry używając model_parametr.py
+    try:
+        import sys
+
+        sys.path.insert(0, BASE_DIR)
+        from backend_app.scripts.model_parametr import calculate_params
+
+        params = calculate_params(model_path)
+    except Exception as e:
+        # Fallback do domyślnych parametrów
+        params = "-ngl -1 -c 8192"
+
     # Parametry modelu
-    model_alias = settings.llm_model_name or "klimtech-bielik"
+    model_alias = (
+        getattr(settings, "llm_model_name", None) or "klimtech-bielik"
+        if settings
+        else "klimtech-bielik"
+    )
+
+    # Parsuj params string na listę argumentów
+    param_list = params.split() if params else ["-ngl", "-1", "-c", "8192"]
+
     llama_cmd = [
         llama_binary,
         "-m",
@@ -175,11 +205,7 @@ def start_llm_server(model_path: str, model_type: str = "llm") -> Dict[str, Any]
         LLAMA_PORT,
         "--alias",
         model_alias,
-        "-ngl",
-        "99",
-        "-c",
-        "8192",
-    ]
+    ] + param_list
 
     # Dla VLM dodaj mmproj
     if model_type == "vlm":
@@ -497,7 +523,11 @@ def start_model_with_progress(
             _log(f"❌ Nie znaleziono llama-server!")
             return
 
-        model_alias = settings.llm_model_name or "klimtech-bielik"
+        model_alias = (
+            getattr(settings, "llm_model_name", None) or "klimtech-bielik"
+            if settings
+            else "klimtech-bielik"
+        )
         cmd = [
             llama_bin,
             "-m",

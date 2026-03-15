@@ -1,0 +1,127 @@
+{
+  "name": "KlimtechRAG — Czat Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-chat",
+      "name": "Webhook POST /chat",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "klimtech-chat"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Przygotuj request do KlimtechRAG w formacie OpenAI\nconst body = $input.first().json.body || $input.first().json;\n\nlet userMessage = '';\nlet model = 'klimtech-bielik';\nlet useRag = true;\nlet webSearch = false;\n\n// Obsługa różnych formatów wejściowych\nif (body.messages) {\n  // Format OpenAI — przekaż bezpośrednio\n  return [{ json: {\n    model: body.model || model,\n    messages: body.messages,\n    max_tokens: body.max_tokens || 4096,\n    use_rag: body.use_rag !== undefined ? body.use_rag : useRag,\n    web_search: body.web_search !== undefined ? body.web_search : webSearch\n  }}];\n} else if (body.question || body.message || body.text) {\n  // Format prosty — zamień na OpenAI\n  userMessage = body.question || body.message || body.text;\n  return [{ json: {\n    model: model,\n    messages: [\n      { role: 'system', content: 'Jesteś pomocnym asystentem AI z dostępem do bazy wiedzy RAG. Odpowiadaj po polsku.' },\n      { role: 'user', content: userMessage }\n    ],\n    max_tokens: body.max_tokens || 4096,\n    use_rag: useRag,\n    web_search: webSearch\n  }}];\n}\n\nthrow new Error('Brak pola messages, question, message lub text w body');"
+      },
+      "id": "prepare-request",
+      "name": "Przygotuj request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-local"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "chat-api",
+      "name": "KlimtechRAG Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Wyciągnij odpowiedź z formatu OpenAI\nconst response = $input.first().json;\nconst answer = response.choices?.[0]?.message?.content || 'Brak odpowiedzi';\nconst model = response.model || 'unknown';\nconst usage = response.usage || {};\n\nreturn [{ json: {\n  answer: answer,\n  model: model,\n  usage: usage,\n  timestamp: new Date().toISOString()\n}}];"
+      },
+      "id": "format-response",
+      "name": "Formatuj odpowiedz",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [880, 0]
+    }
+  ],
+  "connections": {
+    "Webhook POST /chat": {
+      "main": [
+        [{ "node": "Przygotuj request", "type": "main", "index": 0 }]
+      ]
+    },
+    "Przygotuj request": {
+      "main": [
+        [{ "node": "KlimtechRAG Chat", "type": "main", "index": 0 }]
+      ]
+    },
+    "KlimtechRAG Chat": {
+      "main": [
+        [{ "node": "Formatuj odpowiedz", "type": "main", "index": 0 }]
+      ]
+    },
+    "Formatuj odpowiedz": {
+      "main": [
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "KlimtechRAG",
+      "createdAt": "2026-03-15T00:00:00.000Z",
+      "updatedAt": "2026-03-15T00:00:00.000Z"
+    }
+  ],
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "klimtechrag-local"
+  }
+}

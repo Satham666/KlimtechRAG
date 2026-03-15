@@ -6,27 +6,44 @@
 
 ---
 
-## Stan wyjściowy — co już istnieje
+## WAŻNE: Porty systemowe
+
+| Usługa | Port | Uwagi |
+|--------|-----|-------|
+| **Nextcloud** | **8081** | Zmieniony z 8443! |
+| Backend FastAPI | 8000 | - |
+| llama-server | 8082 | - |
+| n8n | 5678 | - |
+| Qdrant | 6333 | - |
+
+---
+
+## Stan wdrożenia — aktualny status
 
 | Komponent | Status | Szczegóły |
 |-----------|--------|-----------|
-| Kontener Nextcloud (Podman) | ISTNIEJE | start/stop w skryptach, dane w `data/nextcloud/` |
-| Kontener PostgreSQL | ISTNIEJE | `postgres_nextcloud`, baza Nextcloud |
-| Kontener n8n | ISTNIEJE | dane w `data/n8n/`, port 5678 |
-| Backend `/v1/chat/completions` | ISTNIEJE | OpenAI-compatible, RAG domyślnie włączony |
-| Backend `/v1/models` | ISTNIEJE | Zwraca `klimtech-bielik`, format OpenAI |
-| Backend `/v1/embeddings` | ISTNIEJE | e5-large (1024 dim), format OpenAI |
-| Watchdog (watch_nextcloud.py) | ISTNIEJE | v3.0, monitoruje RAG_Dane/*, auto-ingest |
-| ColPali embedder | ISTNIEJE | `klimtech_colpali`, multi-vector, on-demand |
-| Model switch endpoints | ISTNIEJE | `/model/start`, `/model/stop`, `/model/switch` |
-| **CORS middleware** | **BRAK** | Krytyczne dla Nextcloud (przeglądarka) |
-| **integration_openai app** | **BRAK** | Nie zainstalowana w Nextcloud |
-| **assistant app** | **BRAK** | Nie zainstalowana w Nextcloud |
-| **config.php: allow_local** | **BRAK** | Blokuje połączenia do prywatnych IP |
-| **n8n workflow JSON** | **BRAK** | Tylko opis w PODSUMOWANIE.md |
-| **VRAM management API** | **BRAK** | Brak dedykowanego mechanizmu dla n8n |
-| **Mini LLM serwis** | **BRAK** | Brak drugiego llama-server |
-| **Whisper STT** | **BRAK** | Brak Speech-to-Text (endpoint + model) |
+| Kontener Nextcloud (Podman) | ✅ GOTOWE | port 8081, dane w `data/nextcloud/` |
+| Kontener PostgreSQL | ✅ GOTOWE | `postgres_nextcloud`, baza Nextcloud |
+| Kontener n8n | ✅ GOTOWE | dane w `data/n8n/`, port 5678 |
+| Backend `/v1/chat/completions` | ✅ GOTOWE | OpenAI-compatible, RAG domyślnie włączony |
+| Backend `/v1/models` | ✅ GOTOWE | Zwraca `klimtech-bielik` |
+| Backend `/models` | ✅ GOTOWE | Dodane dla Nextcloud (bez /v1/) |
+| Backend `/v1/embeddings` | ✅ GOTOWE | e5-large (1024 dim) |
+| Watchdog (watch_nextcloud.py) | ✅ GOTOWE | v3.0, monitoruje RAG_Dane/*, auto-ingest |
+| ColPali embedder | ✅ GOTOWE | `klimtech_colpali`, multi-vector, on-demand |
+| Model switch endpoints | ✅ GOTOWE | `/model/start`, `/model/stop`, `/model/switch` |
+| CORS middleware | ✅ GOTOWE | Port 8081 dla Nextcloud |
+| integration_openai app | ✅ GOTOWE | Zainstalowana v3.10.1 |
+| assistant app | ✅ GOTOWE | Zainstalowana v2.13.0 |
+| config.php: allow_local | ✅ GOTOWE | Ustawione na true |
+| trusted_domains | ✅ GOTOWE | localhost, 127.0.0.1, 192.168.31.70 |
+| n8n workflow JSON | ✅ GOTOWE | 3 workflow w `n8n_workflows/` |
+| Endpoint /models | ✅ GOTOWE | Dodane dla kompatybilności z NC |
+| --alias llama-server | ✅ GOTOWE | klimtech-bielik |
+| Model parametr calculation | ✅ GOTOWE | Obliczanie parametrów przez model_parametr.py |
+| **Nextcloud AI Assistant** | ⚠️ PROBLEM | Nie odpowiada - wymaga debugowania |
+| Whisper STT | ⏳ DO ZROBIENIA | Brak endpoint + model |
+| VRAM management | ⏳ DO ZROBIENIA | Brak dedykowanego API |
 
 ---
 
@@ -125,7 +142,7 @@ podman exec -u www-data nextcloud php occ config:system:get allow_local_remote_s
 
 **Cel:** Podłączyć Nextcloud do backendu KlimtechRAG jako OpenAI-compatible provider.
 
-**Konfiguracja w panelu admina Nextcloud (`http://192.168.31.70:8443/settings/admin/ai`):**
+**Konfiguracja w panelu admina Nextcloud (`http://192.168.31.70:8081/settings/admin/ai`):**
 
 | Pole | Wartość | UWAGA |
 |------|---------|-------|
@@ -174,9 +191,9 @@ from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://192.168.31.70:8443",   # Nextcloud
+        "http://192.168.31.70:8081",   # Nextcloud
         "http://192.168.31.70:8000",   # Backend UI
-        "http://localhost:8443",
+        "http://localhost:8081",
         "http://localhost:8000",
     ],
     allow_credentials=True,
@@ -206,7 +223,7 @@ curl -X POST http://192.168.31.70:8000/v1/chat/completions \
   }'
 
 # 3. Test z poziomu Nextcloud Assistant
-# Otwórz http://192.168.31.70:8443 -> ikona AI Assistant -> wpisz pytanie
+# Otwórz http://192.168.31.70:8081 -> ikona AI Assistant -> wpisz pytanie
 ```
 
 ### 11.7 Skrypt automatyzujący (opcjonalny)
@@ -232,7 +249,7 @@ Zawartość:
 | Pole | Wartość |
 |------|---------|
 | Type | HTTP Request (lub WebDAV) |
-| URL | `http://192.168.31.70:8443/remote.php/webdav` |
+| URL | `http://192.168.31.70:8081/remote.php/webdav` |
 | Authentication | Basic Auth |
 | Username | `admin` |
 | Password | **Hasło aplikacji** (wygenerowane w Nextcloud: Settings -> Security -> App passwords) |
@@ -733,7 +750,7 @@ W `modele_LLM/model_audio/` istnieje już `LFM2.5-Audio-1.5B` (~2.2 GB) — mode
 | 1 | Backend health | `curl http://192.168.31.70:8000/health` | `{"status": "ok"}` |
 | 2 | Lista modeli | `curl http://192.168.31.70:8000/v1/models` | JSON z `klimtech-bielik` |
 | 3 | Chat completion | `curl -X POST .../v1/chat/completions -d '...'` | Odpowiedź LLM |
-| 4 | CORS preflight | `curl -X OPTIONS ... -H "Origin: http://...:8443"` | Headers CORS |
+| 4 | CORS preflight | `curl -X OPTIONS ... -H "Origin: http://...:8081"` | Headers CORS |
 | 5 | Bearer auth | `curl -H "Authorization: Bearer sk-local" .../v1/models` | 200 OK |
 | 6 | Nextcloud AI | Przeglądarka -> NC Assistant | Odpowiedź od Bielik |
 | 7 | n8n auto-index | Upload pliku do NC -> czekaj 5 min | Plik w Qdrant |
@@ -744,5 +761,49 @@ W `modele_LLM/model_audio/` istnieje już `LFM2.5-Audio-1.5B` (~2.2 GB) — mode
 
 ---
 
-*Plan utworzony: 2026-03-15 — gotowy do implementacji faza po fazie*
-*Zaktualizowany: 2026-03-15 — dodano sekcję Whisper STT (wisienka na torcie)*
+## Problemy i uwagi
+
+### Problem 1: Nextcloud AI Assistant nie odpowiada
+- **Status:** ❌ NIEROZWIĄZANY
+- **Objawy:** Po wysłaniu pytania w Asystent - ciągłe zapytania POST /check_generation z kodem 417 (Expectation Failed)
+- **Diagnoza:**
+  - Backend działa poprawnie i odpowiada na curl
+  - API key (sk-local) ustawiony poprawnie
+  - URL http://192.168.31.70:8000 działa z wnętrza kontenera Nextcloud
+  - Endpoint /models zwraca poprawną odpowiedź
+- **Możliwe przyczyny:**
+  - Sesja przeglądarki trzyma starą konfigurację
+  - Provider "Rozmowa" nie jest ustawiony na integration_openai
+  - Problem z CORS po stronie przeglądarki
+- **Rozwiązania do wypróbowania:**
+  1. Wyczyścić cache przeglądarki / tryb incognito
+  2. Sprawdzić ustawienia providerów w panelu AI
+  3. Sprawdzić logi Nextcloud (taskId w pętli)
+
+### Problem 2: VRAM - Bielik-11B nie mieści się
+- **Status:** ⚠️ OBEJŚCIE
+- **Problem:** ~4.7GB VRAM zajęte przez inne procesy, Bielik-11B (~14GB) nie mieści się
+- **Obecne rozwiązanie:** Używamy Bielik-4.5B (~5GB VRAM)
+- **Parametry obliczane dynamicznie przez model_parametr.py:**
+  - Kontekst: 98304 tokenów
+  - Kompresja cache: Q8_0
+  - Warstwy GPU: wszystkie (-ngl -1)
+
+### Zmiany w trakcie wdrażania:
+1. Port Nextcloud zmieniony z 8443 na 8081
+2. Dodano endpoint /models (bez /v1/) dla kompatybilności z Nextcloud
+3. Dodano obliczanie parametrów LLM przez model_parametr.py przy starcie
+4. Zaktualizowano pliki startowe (start_klimtech_v3.py, stop_klimtech.py)
+5. Dodano weryfikację /health po starcie backendu
+
+### Dane dostępowe:
+- **URL Nextcloud:** http://192.168.31.70:8081
+- **URL Backend:** http://192.168.31.70:8000
+- **Login:** admin
+- **Hasło:** admin123
+- **Model:** klimtech-bielik (Bielik-4.5B)
+
+---
+
+*Plan utworzony: 2026-03-15*
+*Zaktualizowany: 2026-03-16 — dodano problemy i uwagi z wdrażania*

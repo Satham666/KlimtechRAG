@@ -3,6 +3,7 @@
 KlimtechRAG — Stop Script
 Zatrzymuje wszystkie procesy i kontenery.
 """
+
 import os
 import subprocess
 import sys
@@ -14,7 +15,7 @@ LOG_DIR = os.path.join(BASE_DIR, "logs")
 # MUSI być zgodne z watch_nextcloud.py (logs/klimtech_watchdog.pid)
 WATCHDOG_PID_FILE = os.path.join(LOG_DIR, "klimtech_watchdog.pid")
 
-CONTAINERS = ["open-webui", "n8n", "nextcloud", "postgres_nextcloud", "qdrant"]
+CONTAINERS = ["qdrant", "nextcloud", "postgres_nextcloud", "n8n"]
 
 
 def kill_by_pid_file(pid_file: str, name: str) -> bool:
@@ -49,7 +50,8 @@ def pkill(pattern: str, name: str) -> None:
     try:
         result = subprocess.run(
             ["pkill", "-9", "-f", pattern],
-            capture_output=True, timeout=10,
+            capture_output=True,
+            timeout=10,
         )
         if result.returncode == 0:
             print(f"   ✅ {name} zatrzymany (pkill)")
@@ -107,13 +109,11 @@ def kill_all_remaining() -> None:
     for pattern, name in patterns:
         try:
             result = subprocess.run(
-                ["pgrep", "-f", pattern],
-                capture_output=True, text=True, timeout=5
+                ["pgrep", "-f", pattern], capture_output=True, text=True, timeout=5
             )
             if result.stdout.strip():
                 subprocess.run(
-                    ["pkill", "-9", "-f", pattern],
-                    capture_output=True, timeout=5
+                    ["pkill", "-9", "-f", pattern], capture_output=True, timeout=5
                 )
                 print(f"   ✅ {name} zatrzymany")
         except Exception:
@@ -127,17 +127,14 @@ def kill_remaining_ports() -> None:
         ("8000", "Backend"),
         ("8082", "LLM"),
         ("6333", "Qdrant"),
-        ("3000", "Open WebUI"),
-        ("8080", "Nextcloud (alternate)"),
-        ("8443", "Nextcloud (HTTPS)"),
+        ("8081", "Nextcloud"),
         ("5678", "n8n"),
         ("5432", "PostgreSQL"),
     ]
     for port, name in ports:
         try:
             subprocess.run(
-                ["fuser", "-k", f"{port}/tcp"],
-                capture_output=True, timeout=5
+                ["fuser", "-k", f"{port}/tcp"], capture_output=True, timeout=5
             )
             print(f"   ✅ Port {port} ({name}) zwolniony")
         except subprocess.TimeoutExpired:
@@ -152,7 +149,9 @@ def stop_containers() -> None:
         try:
             result = subprocess.run(
                 ["podman", "stop", "-t", "5", container],
-                capture_output=True, text=True, timeout=15,
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
             if result.returncode == 0:
                 print(f"   ✅ {container}")
@@ -185,7 +184,9 @@ def check_ports() -> None:
         "3000": "Open WebUI",
     }
     try:
-        result = subprocess.run(["ss", "-tlnp"], capture_output=True, text=True, timeout=5)
+        result = subprocess.run(
+            ["ss", "-tlnp"], capture_output=True, text=True, timeout=5
+        )
         for port, name in ports_to_check.items():
             if f":{port}" in result.stdout:
                 print(f"   ⚠️  Port {port} ({name}) nadal zajęty!")

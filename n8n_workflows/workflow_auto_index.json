@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "PROPFIND",
-        "url": "http://192.168.31.70:8443/remote.php/webdav/RAG_Dane/",
+        "url": "http://192.168.31.70:8081/remote.php/webdav/RAG_Dane/",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpBasicAuth",
         "sendHeaders": true,

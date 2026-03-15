@@ -1,0 +1,428 @@
+{
+  "name": "KlimtechRAG — VRAM Manager",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vram-task",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-vram",
+      "name": "Webhook /vram-task",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "klimtech-vram"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Obsługiwane task_type:\n//   rag_chat       — Bielik-11B (domyślny LLM)\n//   rag_chat_mini  — Bielik-4.5B (proste zadania Nextcloud)\n//   index_text     — Stop LLM, ingest e5-large (CPU), Start LLM\n//   index_pdf      — Stop LLM, ingest ColPali (GPU), Start LLM\n//   vlm_ingest     — Stop LLM, Start VLM, ingest, Stop VLM, Start LLM\n//   whisper_stt    — Stop LLM, transkrypcja Whisper, Start LLM\n//   stop           — Stop LLM (zwolnij VRAM)\n\nconst body = $input.first().json.body || $input.first().json;\nconst taskType = body.task_type || 'rag_chat';\nconst filePath = body.file_path || null;\n\nconst MODELS = {\n  'bielik_11b': '/media/lobo/BACKUP/KlimtechRAG/modele_LLM/model_thinking/speakleash_Bielik-11B-v3.0-Instruct-GGUF_Bielik-11B-v3.0-Instruct.Q8_0.gguf',\n  'bielik_4_5b': '/media/lobo/BACKUP/KlimtechRAG/modele_LLM/model_thinking/speakleash_Bielik-4.5B-v3.0-Instruct-GGUF_Bielik-4.5B-v3.0-Instruct.Q8_0.gguf',\n  'qwen_vlm': '/media/lobo/BACKUP/KlimtechRAG/modele_LLM/model_video/unsloth_Qwen2.5-VL-7B-Instruct-GGUF_Qwen2.5-VL-7B-Instruct-UD-Q4_K_XL.gguf',\n  'lfm_vlm': '/media/lobo/BACKUP/KlimtechRAG/modele_LLM/model_video/LiquidAI_LFM2.5-VL-1.6B-GGUF_LFM2.5-VL-1.6B-BF16.gguf'\n};\n\nreturn [{ json: { taskType, filePath, models: MODELS } }];"
+      },
+      "id": "parse-task",
+      "name": "Parsuj zadanie",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "output": 0,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.taskType }}",
+                    "rightValue": "rag_chat",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "output": 1,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.taskType }}",
+                    "rightValue": "rag_chat_mini",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "output": 2,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.taskType }}",
+                    "rightValue": "index_text",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "output": 3,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.taskType }}",
+                    "rightValue": "index_pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "output": 4,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.taskType }}",
+                    "rightValue": "stop",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "fallbackOutput": 0
+        }
+      },
+      "id": "switch-task",
+      "name": "Switch task_type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/model/start",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model_path: $json.models.bielik_11b, model_type: 'llm' }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "start-bielik-11b",
+      "name": "Start Bielik-11B",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, -200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/model/stop",
+        "options": { "timeout": 30000 }
+      },
+      "id": "stop-for-mini",
+      "name": "Stop LLM (mini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, -60]
+    },
+    {
+      "parameters": {
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "id": "wait-mini",
+      "name": "Czekaj VRAM (mini)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [940, -60]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/model/start",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model_path: $('Parsuj zadanie').first().json.models.bielik_4_5b, model_type: 'llm' }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "start-bielik-4-5b",
+      "name": "Start Bielik-4.5B",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, -60]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/model/stop",
+        "options": { "timeout": 30000 }
+      },
+      "id": "stop-for-index-text",
+      "name": "Stop LLM (index text)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/ingest_path",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ path: $('Parsuj zadanie').first().json.filePath }) }}",
+        "options": { "timeout": 600000 }
+      },
+      "id": "ingest-text",
+      "name": "Ingest (e5-large CPU)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [940, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/model/start",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model_path: $('Parsuj zadanie').first().json.models.bielik_11b, model_type: 'llm' }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "restart-llm-text",
+      "name": "Restart LLM (po tekst)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/model/stop",
+        "options": { "timeout": 30000 }
+      },
+      "id": "stop-for-index-pdf",
+      "name": "Stop LLM (index PDF)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/ingest_path",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Embedding-Model", "value": "vidore/colpali-v1.3-hf" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ path: $('Parsuj zadanie').first().json.filePath }) }}",
+        "options": { "timeout": 600000 }
+      },
+      "id": "ingest-pdf-colpali",
+      "name": "Ingest PDF (ColPali GPU)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [940, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/model/start",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model_path: $('Parsuj zadanie').first().json.models.bielik_11b, model_type: 'llm' }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "restart-llm-pdf",
+      "name": "Restart LLM (po ColPali)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/model/stop",
+        "options": { "timeout": 30000 }
+      },
+      "id": "stop-only",
+      "name": "Stop LLM (final)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Podsumowanie operacji\nconst taskType = $('Parsuj zadanie').first().json.taskType;\nreturn [{ json: {\n  status: 'ok',\n  task_type: taskType,\n  message: `Zadanie '${taskType}' wykonane pomyslnie`,\n  timestamp: new Date().toISOString()\n}}];"
+      },
+      "id": "summary",
+      "name": "Podsumowanie",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1620, 100]
+    }
+  ],
+  "connections": {
+    "Webhook /vram-task": {
+      "main": [
+        [{ "node": "Parsuj zadanie", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parsuj zadanie": {
+      "main": [
+        [{ "node": "Switch task_type", "type": "main", "index": 0 }]
+      ]
+    },
+    "Switch task_type": {
+      "main": [
+        [{ "node": "Start Bielik-11B", "type": "main", "index": 0 }],
+        [{ "node": "Stop LLM (mini)", "type": "main", "index": 0 }],
+        [{ "node": "Stop LLM (index text)", "type": "main", "index": 0 }],
+        [{ "node": "Stop LLM (index PDF)", "type": "main", "index": 0 }],
+        [{ "node": "Stop LLM (final)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Start Bielik-11B": {
+      "main": [
+        [{ "node": "Podsumowanie", "type": "main", "index": 0 }]
+      ]
+    },
+    "Stop LLM (mini)": {
+      "main": [
+        [{ "node": "Czekaj VRAM (mini)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Czekaj VRAM (mini)": {
+      "main": [
+        [{ "node": "Start Bielik-4.5B", "type": "main", "index": 0 }]
+      ]
+    },
+    "Start Bielik-4.5B": {
+      "main": [
+        [{ "node": "Podsumowanie", "type": "main", "index": 0 }]
+      ]
+    },
+    "Stop LLM (index text)": {
+      "main": [
+        [{ "node": "Ingest (e5-large CPU)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ingest (e5-large CPU)": {
+      "main": [
+        [{ "node": "Restart LLM (po tekst)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Restart LLM (po tekst)": {
+      "main": [
+        [{ "node": "Podsumowanie", "type": "main", "index": 0 }]
+      ]
+    },
+    "Stop LLM (index PDF)": {
+      "main": [
+        [{ "node": "Ingest PDF (ColPali GPU)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ingest PDF (ColPali GPU)": {
+      "main": [
+        [{ "node": "Restart LLM (po ColPali)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Restart LLM (po ColPali)": {
+      "main": [
+        [{ "node": "Podsumowanie", "type": "main", "index": 0 }]
+      ]
+    },
+    "Stop LLM (final)": {
+      "main": [
+        [{ "node": "Podsumowanie", "type": "main", "index": 0 }]
+      ]
+    },
+    "Podsumowanie": {
+      "main": [
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "KlimtechRAG",
+      "createdAt": "2026-03-15T00:00:00.000Z",
+      "updatedAt": "2026-03-15T00:00:00.000Z"
+    }
+  ],
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "klimtechrag-local"
+  }
+}
