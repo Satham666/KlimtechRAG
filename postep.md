@@ -1,475 +1,347 @@
-# Postep wdrozenia KlimtechRAG — Naprawa bledow i optymalizacja
-
-**Rozpoczecie:** 2026-03-15
-**Ostatnia aktualizacja:** 2026-03-18 (v7.3: New UI + Lazy Loading + GPU Dashboard + SEKCJA 16: VLM Prompts)
-
----
-
-## AKTUALNY STAN — sesja naprawcza (12 punktow) + HTTPS (13)
-
-### PLAN NAPRAW — WSZYSTKIE WYKONANE
-
-| # | Priorytet | Opis | Status | Plik |
-|---|-----------|------|--------|------|
-| 1 | KRYTYCZNY | Dodano `_hash_bytes()` + import `find_duplicate_by_hash` | ✅ DONE | `backend_app/routes/ingest.py` |
-| 2 | KRYTYCZNY | Usunieto zduplikowany blok dedup w `/upload` | ✅ DONE | `backend_app/routes/ingest.py` |
-| 3 | POWAZNY | `stop_klimtech.py` — porty 3000->8081/5678 | ✅ DONE | `stop_klimtech.py` |
-| 4 | POWAZNY | `main.py` — lifespan zamiast deprecated on_event | ✅ DONE | `backend_app/main.py` |
-| 5 | SREDNI | Utworzono plik `.env` z domyslnymi wartosciami | ✅ DONE | `.env` |
-| 6 | SREDNI | `model_switch.py` — relative import zamiast kruchego fallbacku | ✅ DONE | `backend_app/routes/model_switch.py` |
-| 7 | SREDNI | `main.py` — ujednolicony import routerow (model_switch_router) | ✅ DONE | `backend_app/main.py` |
-| 8 | NISKI | `rag.py` — fallback model name `klimtech-bielik` | ✅ DONE | `backend_app/services/rag.py` |
-| 9 | NISKI | Endpoint `/v1/audio/transcriptions` (Whisper STT) | ✅ DONE | `backend_app/routes/whisper_stt.py` |
-| 10 | NISKI | Nextcloud AI Assistant nie odpowiada (417) | ⏳ POZNIEJ | — |
-| 11 | SREDNI | Usunieto referencje Open WebUI (nie uzywane) | ✅ DONE | `config.py`, `stop_klimtech.py` |
-| 12 | SREDNI | Dopisano linki n8n + Nextcloud w komunikacie startowym | ✅ DONE | `start_klimtech_v3.py` |
-
-**Wynik: 10/12 punktow wykonanych. Pkt 9 i 10 odlozone na pozniej (nie krytyczne).**
-
----
-
-## SEKCJA 13: HTTPS — nginx reverse proxy (ZAKONCZONE)
-
-### Finalne adresy HTTPS
-
-| Usluga | HTTP | HTTPS (nginx) | Status |
-|--------|------|---------------|--------|
-| Backend + UI | :8000 | :8443 | ✅ OK (200) |
-| Nextcloud | :8081 | :8444 | ✅ OK (302 redirect) |
-| n8n | :5678 | :5679 | ✅ OK (200) |
-| Qdrant | :6333 | :6334 | ✅ OK (200) |
-
-### Testy HTTPS (2026-03-16)
-
-```
-curl -k https://192.168.31.70:8443/health   -> 200 OK
-curl -k https://192.168.31.70:8444/         -> 302 redirect to login
-curl -k https://192.168.31.70:5679/         -> 200 OK
-curl -k https://192.168.31.70:6334/         -> 200 OK
-```
-
-### Naprawione problemy
-
-1. sudo pkill timeout -> dodano sprawdzenie czy nginx juz dziala (start_nginx())
-2. Nextcloud 404 -> Nextcloud redirectowal na http://IP/login (port 80) zamiast https://IP:8444/login
-   - Naprawiono: dodano overwriteprotocol=https, overwritehost=192.168.31.70:8444, trusted_proxies
-   - Komenda: `podman exec nextcloud php occ config:system:set overwriteprotocol --value="https"`
-3. Firefox HTTP cache -> wyczyszczono cache przegladarki
-4. KRYTYCZNY: sudo w signal_handler wycieka haslo -> usunieto sudo z CTRL+C handlera
-   - nginx zostaje uruchomiony po CTRL+C (zatrzymaj recznie: sudo nginx -s stop)
-
-### Uruchomienie
-
-```bash
-# Start
-cd /media/lobo/BACKUP/KlimtechRAG
-source venv/bin/activate
-python3 start_klimtech_v3.py
-
-# Stop
-python3 stop_klimtech.py
-```
-
-### Wykonane kroki
-
-| # | Opis | Status |
-|---|------|--------|
-| 13a | Zainstalowano nginx | ✅ DONE |
-| 13b | Wygenerowano certyfikat SSL self-signed | ✅ DONE |
-| 13c-f | Utworzono konfiguracje nginx | ✅ DONE |
-| 13g-1 | start_klimtech_v3.py — funkcja start_nginx() + komunikat HTTPS | ✅ DONE |
-| 13g-2 | main.py CORS — dodano originy HTTPS | ✅ DONE |
-| 13g-3 | stop_klimtech.py — kill_nginx() + porty HTTPS | ✅ DONE |
-| 13g-4 | Testy HTTPS — nginx dziala, backend 502 (wymaga uruchomienia start_klimtech_v3.py) | ✅ DONE |
-
-### Szczegoly
-
-**Plik nginx:** `/etc/nginx/sites-available/klimtech`
-**Certyfikat:** `/media/lobo/BACKUP/KlimtechRAG/data/ssl/klimtech.crt`
-
-**Testy HTTPS (przed uruchomieniem backend):**
-- Backend HTTPS :8443 -> 502 (brak backend :8000)
-- Nextcloud HTTPS :8444 -> 302 OK
-- n8n HTTPS :5679 -> 200 OK
-- Qdrant HTTPS :6334 -> 200 OK
-
-**Po uruchomieniu `start_klimtech_v3.py`:**
-- Wszystkie HTTPS -> 200 OK
-3. Nginx nie moze wystartowac przez bledy bind() - W TRYBIE ROZWIAZYWANIA
-
-### Do zrobienia (po uruchomieniu nginx)
-
-1. Uruchomic nginx: `sudo nginx`
-2. Zaktualizowac CORS w `backend_app/main.py` - dodac https://192.168.31.70:8443
-3. Zaktualizowac trusted_domains w Nextcloud (jesli potrzebne)
-4. Przetestowac HTTPS na kazdym porcie: `curl -k https://192.168.31.70:8443/health`
-5. Zaktualizowac komunikat startowy w `start_klimtech_v3.py` o HTTPS
-
----
-
-## SEKCJA 14: Whisper STT (ZAKONCZONE)
-
-### Problem z venv
-- Stary venv `klimtech_venv` znajdowal sie w `/home/lobo/klimtech_venv/`
-- Przeniesiony do `/media/lobo/BACKUP/KlimtechRAG/venv/` przez rsync
-- Naprawiono sciezki w plikach binarnych venv (sed -i ...)
-
-### Instalacja openai-whisper
-```bash
-/media/lobo/BACKUP/KlimtechRAG/venv/bin/pip install openai-whisper
-```
-
-### Nowy endpoint
-- **Plik:** `backend_app/routes/whisper_stt.py` — NOWY
-- **Endpoint:** `POST /v1/audio/transcriptions`
-- **Rejestracja:** dodano `whisper_router` w `main.py`
-
-### Dostepne modele whisper
-- tiny, base, small, medium, large-v3, turbo
-- Domyslny: `small` (~2 GB VRAM)
-- Urzadzenie: CUDA GPU
-
-### Testowanie
-```bash
-curl -X POST http://192.168.31.70:8000/v1/audio/transcriptions \
-  -F "file=@audio.mp3" \
-  -F "model=whisper-1"
-```
-
-### Status
-| # | Opis | Status |
-|---|------|--------|
-| 14a | Przeniesienie venv | ✅ DONE |
-| 14b | Instalacja openai-whisper | ✅ DONE |
-| 14c | Utworzenie endpointu whisper_stt.py | ✅ DONE |
-| 14d | Rejestracja routera w main.py | ✅ DONE |
-| 14e | Aktualizacja dokumentacji | ✅ DONE |
-
----
-
-## SEKCJA 15: Nowy UI Backend (code.html) + GPU Status — W TRAKCIE
-
-### Cel
-Zamiana index.html na nowy layout (code.html) z podlaczeniem wszystkich funkcji JS.
-Dodanie endpointu `/gpu/status` do monitorowania GPU w czasie rzeczywistym.
-
-### Zmiany w plikach
-| Plik | Zmiana |
-|------|--------|
-| `backend_app/routes/gpu_status.py` | NOWY — endpoint GET /gpu/status (rocm-smi) |
-| `backend_app/main.py` | Import + rejestracja gpu_router |
-| `backend_app/static/index.html` | ZASTAPIONY zawartoscia code.html + IDs + JS |
-| `start_klimtech_v3.py` | Usuniecie auto-start embeddingu |
-
-### Nowy UI — funkcje
-- Wszystkie przyciski podlaczone do API backendu
-- Model Selection: lista LLM/VLM, Uruchom/Zatrzymaj
-- Upload: drag & drop z progress barem
-- Indeksowanie RAG: wybor modelu embeddingu, przycisk indeksuj
-- Czat: pelna funkcjonalnosc (sesje, historia, export/import)
-- Web Search: wyszukiwanie + podglad + podsumowanie
-- Panel informacyjny: GPU dashboard (temp, VRAM, use) co 2 sekundy
-- Header: real-time health check serwisow (qdrant, nextcloud, postgres, n8n)
-- Terminal POSTEP: logi z postepem operacji
-- Menu operacji: przelaczanie LLM/VLM, status systemu, zatrzymaj model
-
-### Status
-| # | Opis | Status |
-|---|------|--------|
-| 15a | Endpoint /gpu/status | ✅ DONE |
-| 15b | Rejestracja gpu_router w main.py | ✅ DONE |
-| 15c | Zamiana index.html (code.html + IDs + JS) | ✅ DONE |
-| 15d | Usuniecie auto-start embeddingu | ✅ DONE |
-| 15e | Test UI | ✅ DONE (backend + GPU endpoint dziala) |
-| 15f | Fix: _detect_base() zwracal /home/lobo zamiast /media/lobo/BACKUP | ✅ DONE |
-| 15g | Fix: Lazy loading embeddings (VRAM 4.5GB -> 14MB na starcie) | ✅ DONE |
-| 15h | Fix: llm.py import rag_pipeline -> get_rag_pipeline | ✅ DONE |
-| 15i | Fix: chat.py, ingest.py — lazy imports embedder/pipeline | ✅ DONE |
-| 15j | Fix: use_rag domyslnie False (byl True) - czat nie dlawi sie RAG | ✅ DONE |
-| 15k | UI: use_rag:true gdy wlaczony tryb Web/RAG w UI | ✅ DONE |
-
-### Dodatkowe naprawy (15f-15k)
-- **model_manager.py**: `_detect_base()` preferowal `/home/lobo/KlimtechRAG` (stary repo bez GGUF) zamiast `/media/lobo/BACKUP/KlimtechRAG` — naprawiony priorytet
-- **embeddings.py**: Calkowity refactor na lazy loading — `get_text_embedder()` / `get_doc_embedder()` zamiast module-level warm_up()
-- **qdrant.py**: `get_embedding_dimension()` uzywa cache znanych wymiarow zamiast ladowac SentenceTransformer na GPU
-- **rag.py**: Refactor na `get_indexing_pipeline()` / `get_rag_pipeline()` — pipeline tworzony dopiero przy uzyciu
-- **llm.py**: Zwraca standalone OpenAIGenerator zamiast ladowac caly RAG pipeline
-- **chat.py**, **ingest.py**, **services/__init__.py**: Wszystkie importy zaktualizowane do lazy API
-- **schemas.py**: `use_rag: False` domyslnie — czat idzie prosto do llama-server
-- **index.html**: Gdy wlaczony tryb Web (globe), wysyla `use_rag: true`
-- **Wynik**: VRAM na starcie spadl z 4.5 GB do 14 MB!
-
----
-
-## Szczegolowy log zmian — sesja naprawcza
-
-### Pkt 1+2: ingest.py — _hash_bytes + dedup (KRYTYCZNY)
-- **Status:** ✅ DONE
-- **Data:** 2026-03-16
-- **Co zrobiono:**
-  - Dodano `import hashlib` na poczatku pliku
-  - Dodano funkcje `_hash_bytes(data: bytes) -> str` (SHA-256)
-  - Dodano import `find_duplicate_by_hash` i `get_connection` z `file_registry`
-  - Usunieto ZDUPLIKOWANY blok dedup (linie 338-347 — identyczna kopia 328-337)
-  - Usunieto ZDUPLIKOWANY blok UPDATE hash (linie 358-364 — identyczna kopia 351-357)
-  - Uzyto `_get_registry_connection` zamiast lokalnego re-importu
-
-### Pkt 3: stop_klimtech.py — porty
-- **Status:** ✅ DONE
-- **Data:** 2026-03-16
-- **Co zrobiono:**
-  - `check_ports()`: zamieniono `"3000": "Open WebUI"` na `"8081": "Nextcloud"` + `"5678": "n8n"`
-  - `kill_all_remaining()`: usunieto wzorce `qdrant`, `nextcloud`, `n8n` (te procesy to kontenery Podman, nie natywne)
-
-### Pkt 4+7: main.py — lifespan + import
-- **Status:** ✅ DONE
-- **Data:** 2026-03-16
-- **Co zrobiono:**
-  - Zamieniono `@app.on_event("startup")` na `@asynccontextmanager async def lifespan(app)`
-  - Dodano shutdown log w lifespan
-  - Usunieto duplikat importu `from .routes import model_switch` (linia 4)
-  - Ujednolicono na `model_switch_router` z `routes/__init__.py` (jak inne routery)
-  - `app = FastAPI(lifespan=lifespan)` zamiast `app = FastAPI()`
-
-### Pkt 5: Plik .env
-- **Status:** ✅ DONE
-- **Data:** 2026-03-16
-- **Co zrobiono:**
-  - Utworzono `.env` z domyslnymi wartosciami (KLIMTECH_BASE_PATH, LLM, embedding, Qdrant, porty)
-  - Dodano `.env` do `.gitignore` (bezpieczenstwo)
-  - Dodano `modele_LLM/` i `.ruff_cache/` do `.gitignore`
-
-### Pkt 6: model_switch.py — importy
-- **Status:** ✅ DONE
-- **Data:** 2026-03-16
-- **Co zrobiono:**
-  - Usunieto kruchy blok `try: from services... except: importlib.util.spec_from_file_location`
-  - Zamieniono na czysty relative import: `from ..services.model_manager import ...`
-  - Wszystkie potrzebne funkcje importowane raz na gorze pliku
-  - Usunieto lokalne try/except importy w endpointach `/start`, `/progress-log`, `/stop`
-
-### Pkt 8: rag.py — model name
-- **Status:** ✅ DONE
-- **Data:** 2026-03-16
-- **Co zrobiono:**
-  - `OpenAIGenerator(model=settings.llm_model_name or "klimtech-bielik")` — fallback dla pustego stringa
-
-### Pkt 11: Usuniecie Open WebUI
-- **Status:** ✅ DONE
-- **Data:** 2026-03-16
-- **Co zrobiono:**
-  - Usunieto z `config.py`: `owui_port`, `owui_data_dir`, `owui_container` (3 zmienne)
-  - Usunieto z `stop_klimtech.py`: wzorce kill dla qdrant/nextcloud/n8n natywnych (to kontenery Podman)
-  - Projekt uzywa: Nextcloud (czat + pliki), Backend UI (:8000), n8n (automatyzacja)
-
-### Pkt 12: Komunikat startowy
-- **Status:** ✅ DONE
-- **Data:** 2026-03-16
-- **Co zrobiono:**
-  - Dopisano do komunikatu startowego w `start_klimtech_v3.py`:
-    - `Nextcloud: http://<IP>:8081`
-    - `n8n: http://<IP>:5678`
-
----
-
-## Poprzednia sesja — zrealizowane cele (2026-03-15/16)
-
-1. ✅ Dodano sekcje Whisper STT do NextcloudAI.md
-2. ✅ Zaimplementowano integracje CORS + Bearer auth
-3. ✅ Utworzono 3 workflow JSON dla n8n
-4. ✅ Skonfigurowano Nextcloud (apps, trusted_domains, AI provider)
-5. ✅ Naprawiono start LLM z obliczaniem parametrow
-6. ✅ Dodano endpoint `/models` (bez /v1/) dla Nextcloud
-7. ✅ Naprawiono import settings w model_manager.py
-8. ✅ Zaktualizowano start_klimtech_v3.py (weryfikacja /health)
-9. ✅ Zaktualizowano stop_klimtech.py (kontenery, porty)
-10. ✅ Zaktualizowano PODSUMOWANIE.md (sekcja source venv + uruchamianie .py)
-
----
-
-## Zmiany w plikach — pelna lista
-
-| Plik | Zmiany (sesja naprawcza) |
-|------|--------------------------|
-| `backend_app/routes/ingest.py` | Pkt 1+2: _hash_bytes, dedup fix, import find_duplicate_by_hash |
-| `backend_app/main.py` | Pkt 4+7: lifespan, ujednolicony import routerow |
-| `backend_app/routes/model_switch.py` | Pkt 6: relative import, czyszczenie try/except |
-| `backend_app/services/rag.py` | Pkt 8: fallback model name |
-| `backend_app/config.py` | Pkt 11: usunieto owui_* |
-| `stop_klimtech.py` | Pkt 3+11: porty 8081/5678, usunieto kill natywnych kontenerow |
-| `start_klimtech_v3.py` | Pkt 12: linki Nextcloud + n8n |
-| `.env` | Pkt 5: NOWY — domyslna konfiguracja |
-| `.gitignore` | Pkt 5: dodano .env, modele_LLM/, .ruff_cache/ |
-| `PODSUMOWANIE.md` | Sekcja 14 rozszerzona o source venv + uruchamianie .py |
-| `postep.md` | Pelny log napraw |
-
----
-
-## Porty systemowe (OFICJALNE)
-
-| Usluga | Port | Uwagi |
-|--------|------|-------|
-| Nextcloud | **8081** | Czat AI + pliki |
-| Backend FastAPI | 8000 | Glowny backend + UI |
-| llama-server | 8082 | LLM/VLM (llama.cpp, AMD Instinct) |
-| n8n | 5678 | Automatyzacja workflow |
-| Qdrant | 6333 | Baza wektorowa |
-
----
-
-## SEKCJA 16: Refaktoryzacja VLM Prompts — Z AKCEPTACJI
-
-**Status:** DO WYKONANIA  
-**Data akceptacji:** 2026-03-18  
-**Dotyczy:** `backend_app/ingest/image_handler.py`
-
-### Plan (z akceptacja.md)
-
-| # | Co | Gdzie | Efekt |
-|---|-----|-------|-------|
-| 1 | Prompty → plik konfiguracyjny | Nowy `backend_app/prompts/vlm_prompts.py` | Zmiana promptu bez zmiany kodu |
-| 2 | Rozbudowa DEFAULT prompt | `vlm_prompts.py` → `DEFAULT` | Lepsze opisy, format, ekstrakcja tekstu |
-| 3 | 8 promptów per typ obrazu | `vlm_prompts.py` → 8 wariantów | Auto-dobór promptu do typu obrazu |
-| 4 | Dynamiczne parametry llama-cli | `image_handler.py` + `config.py` | Spójność z resztą systemu |
-
-### Szczegóły
-
-**Punkt 1: Wyciągnięcie promptów z kodu do pliku konfiguracyjnego**
-- Nowy: `backend_app/prompts/__init__.py`
-- Nowy: `backend_app/prompts/vlm_prompts.py`
-- Zmiana: `backend_app/ingest/image_handler.py` — import promptów z nowego modułu
-
-**Punkt 2: Rozbudowa promptu domyślnego**
-- Obecny prompt obsługuje tylko 3 typy (medyczne, diagramy, wykresy)
-- Brak instrukcji o formacie wyjścia, brak wyciągania tekstu/numerów, brak kontekstu dokumentu
-- NOWY prompt `DEFAULT` — uniwersalny, szczegółowy, z instrukcjami formatu wyjścia
-
-**Punkt 3: Zestaw promptów per typ obrazu**
-- 8 wariantów w `vlm_prompts.py`:
-
-```
-vlm_prompts.py:
-├── DEFAULT          — uniwersalny, szczegółowy, z formatem wyjścia
-├── DIAGRAM          — dla schematów, flowchartów, algorytmów
-├── CHART            — dla wykresów (dane, osie, trendy, wartości)
-├── TABLE            — dla tabel (zachowaj strukturę, kolumny, wiersze)
-├── PHOTO            — dla zdjęć (co widać, kontekst, detale)
-├── SCREENSHOT       — dla screenów UI (elementy interfejsu, tekst)
-├── TECHNICAL        — dla schematów technicznych (wymiary, części)
-└── MEDICAL          — dla obrazów medycznych (anatomia, procedury)
-```
-
-Każdy prompt zawiera:
-- Jasną instrukcję CO opisać
-- Format wyjścia (structured, max ~200 słów)
-- Instrukcję wyciągania tekstu/numerów z obrazu
-- Język odpowiedzi (polski)
-
-Dobór promptu automatyczny na podstawie `image_type` z `ExtractedImage`.
-
-**Punkt 4: Dynamiczne parametry llama-cli**
-
-Problem: W `image_handler.py` linie 128-145 mają hardcoded parametry:
-```python
-cmd = [
-    LLAMA_CLI_BIN,
-    "-m", VLM_MODEL,
-    "--image", image_path,
-    "-p", prompt,
-    "-n", "512",        # ← hardcoded
-    "--temp", "0.1",    # ← hardcoded
-    "-ngl", "99",       # ← hardcoded
-    "-c", "4096",       # ← hardcoded
-    "--no-display",
-]
-```
-
-Niespójne z `start_klimtech_v3.py`, gdzie parametry są obliczane dynamicznie przez `model_parametr.calculate_params()`.
-
-Rozwiązanie:
-1. Wywołać `model_parametr.calculate_params(VLM_MODEL)` przy starcie VLM
-2. Parametry specyficzne dla VLM (`-n`, `--temp`) przenieść do konfiguracji:
-   - `config.py` → nowe pola: `vlm_max_tokens`, `vlm_temperature`, `vlm_context`
-   - Lub `vlm_prompts.py` → sekcja `VLM_PARAMS`
-3. Zachować sensowne domyślne wartości jako fallback
-
-### Status
-
-| # | Opis | Status |
-|---|------|--------|
-| 16a | Utworzyć katalog `backend_app/prompts/` | ⏳ DO ZROBIENIA |
-| 16b | Utworzyć `prompts/__init__.py` | ⏳ DO ZROBIENIA |
-| 16c | Utworzyć `prompts/vlm_prompts.py` z 8 wariantami | ⏳ DO ZROBIENIA |
-| 16d | Refaktoryzować `image_handler.py` — import promptów | ⏳ DO ZROBIENIA |
-| 16e | Refaktoryzować `image_handler.py` — dynamiczne params | ⏳ DO ZROBIENIA |
-
-### Pliki do zmiany
-
-- `backend_app/ingest/image_handler.py` — refactor (import promptów, dynamiczne params)
-- Nowy: `backend_app/prompts/__init__.py`
-- Nowy: `backend_app/prompts/vlm_prompts.py`
-- `backend_app/config.py` — dodanie VLM params (opcjonalne)
-
-### Pliki BEZ zmian
-
-- `start_klimtech_v3.py`
-- `model_manager.py`
-- `routes/chat.py`
-- `routes/ingest.py`
-- `static/index.html` (już zamieniony na code.html)
-
----
-
-## Pozostale do zrobienia (POZNIEJ)
-
-| # | Opis | Priorytet |
-|---|------|-----------|
-| 9 | Endpoint `/v1/audio/transcriptions` (Whisper STT) | NISKI — Faza 4 |
-| 10 | Diagnostyka Nextcloud AI Assistant (417) | NISKI — wymaga testow na serwerze |
-
----
-
-## Znane problemy
-
-### 1. Nextcloud AI Assistant nie odpowiada
-- **Status:** ❌ NIEROZWIAZANY
-- **Objawy:** Ciagle zapytania POST /check_generation z kodem 417
-- **Diagnoza:** Backend dziala i odpowiada na curl. API key ustawiony. URL poprawny.
-- **Mozliwe przyczyny:** sesja przegladarki, CORS, provider nie ustawiony
-
-### 2. VRAM — Bielik-11B
-- **Status:** ⚠️ OBEJSCIE
-- **Problem:** ~4.7GB VRAM zajete, Bielik-11B (~14GB) nie miesci sie
-- **Rozwiazanie:** Uzywamy Bielik-4.5B (~5GB VRAM)
-
----
-
-## Dane dostepowe
-
-### HTTP (oryginalne porty)
-- **URL Backend:** http://192.168.31.70:8000
-- **URL Nextcloud:** http://192.168.31.70:8081
-- **URL n8n:** http://192.168.31.70:5678
-- **URL Qdrant:** http://192.168.31.70:6333
-- **Login:** admin
-- **Haslo:** admin123
-
-### HTTPS (nginx reverse proxy - do uruchomienia)
-- **URL Backend:** https://192.168.31.70:8443
-- **URL Nextcloud:** https://192.168.31.70:8444
-- **URL n8n:** https://192.168.31.70:5679
-- **URL Qdrant:** https://192.168.31.70:6334
-
-**Uwaga:** Certyfikat self-signed, wymaga akceptacji w przegladarce lub `curl -k`.
-
----
-
-## Wazne zasady
-
-- **Przed uruchomieniem JAKIEGOKOLWIEK pliku .py:**
-  ```bash
-  cd /media/lobo/BACKUP/KlimtechRAG
-  source venv/bin/activate
-  ```
-- **llama.cpp** — skompilowany pod AMD Instinct 16GB, NIE instalowac z pip
-- **Brakujace biblioteki** — instalowac na biezaco: `pip install <nazwa>`
+KlimtechRAG — STATUS SESJI (plik wznowienia)
+
+    Cel tego pliku: Po wczytaniu tego pliku model AI natychmiast wie co zostało zrobione, co jest do zrobienia i jakie są plany. Aktualizuj ten plik po każdej sesji.
+
+Ostatnia aktualizacja: 2026-03-18
+Wersja systemu: v7.3
+Serwer: 192.168.31.70 | Katalog: /media/lobo/BACKUP/KlimtechRAG/
+GitHub: https://github.com/Satham666/KlimtechRAG
+⚡ SZYBKI KONTEKST (przeczytaj najpierw)
+
+Co to jest: Lokalny system RAG (Retrieval-Augmented Generation) dla dokumentacji technicznej po polsku. Działa w 100% offline na serwerze z GPU AMD Instinct 16 GB (ROCm). Backend FastAPI, LLM przez llama.cpp, wektorowa baza Qdrant, Nextcloud jako storage + AI frontend, n8n do automatyzacji.
+
+Kluczowe adresy:
+
+    Backend UI: https://192.168.31.70:8443 (self-signed cert, używaj -k w curl)
+    Nextcloud: http://192.168.31.70:8081 (login: admin / klimtech123)
+    n8n: http://192.168.31.70:5678
+    Backend API: http://192.168.31.70:8000
+
+ZAWSZE przed uruchomieniem .py:
+
+cd /media/lobo/BACKUP/KlimtechRAGsource venv/bin/activate.fish
+
+ 
+✅ CO ZOSTAŁO ZROBIONE (historia sesji) 
+Sesje 1–8: Fundament systemu 
+
+     Architektura FastAPI + Haystack 2.x + Qdrant + llama.cpp (ROCm)
+     3 pipeline'y embeddingu: e5-large (tekst), ColPali (PDF/dokumenty), VLM (obrazy w PDF)
+     UI (HTML/JS/Tailwind), model switch, rate limiting, API key auth
+     ColPali multi-vector embedding (vidore/colpali-v1.3-hf)
+     
+
+Sesja 9: Web Search (v7.1) 
+
+     Panel Web Search jako druga zakładka w sidebarze (obok RAG)
+     Tryb hybrydowy RAG+Web, podgląd stron, podsumowanie przez LLM
+     Endpoint /web/search, /web/fetch, /web/summarize
+     
+
+Sesja 10: Nextcloud AI Integration (v7.2) 
+
+     Zainstalowane w NC: integration_openai v3.10.1 + assistant v2.13.0
+     Skonfigurowane: allow_local_remote_servers, trusted_domains, AI Provider (URL + model)
+     Backend: CORS middleware (port 8081), Authorization: Bearer fallback w dependencies.py
+     Endpoint /models (bez /v1/) dla kompatybilności z Nextcloud
+     3 workflow JSON dla n8n: auto-indeksowanie, czat webhook, VRAM management
+     Endpoint /v1/audio/transcriptions — Whisper STT (openai-whisper zainstalowany)
+     Start llama-server z obliczaniem parametrów przez model_parametr.py
+     Routing PDF→ColPali, tekst→e5-large w n8n workflow
+     
+
+Sesja 11a: Naprawy krytyczne 
+
+     ingest.py: _hash_bytes() + naprawa zduplikowanego bloku dedup
+     main.py: lifespan zamiast deprecated @app.on_event("startup")
+     model_switch.py: relative imports (usunięto kruchy fallback importlib)
+     stop_klimtech.py: porty 8081/5678 zamiast 3000 (Open WebUI — nieużywane)
+     Usunięto referencje Open WebUI z config.py
+     Plik .env utworzony z domyślnymi wartościami
+     
+
+Sesja 11b: HTTPS — nginx reverse proxy 
+
+     nginx zainstalowany, certyfikat self-signed
+     Konfiguracja: /etc/nginx/sites-available/klimtech
+     Certyfikat: /media/lobo/BACKUP/KlimtechRAG/data/ssl/klimtech.crt
+     Nextcloud: overwriteprotocol=https, overwritehost=192.168.31.70:8444
+     CORS rozszerzony o originy HTTPS
+     Wyniki: wszystkie 4 usługi dostępne przez HTTPS
+     
+
+Sesja 11c: Whisper STT 
+
+     Przeniesienie venv: /home/lobo/klimtech_venv/ → /media/lobo/BACKUP/KlimtechRAG/venv/
+     openai-whisper zainstalowany w venv
+     backend_app/routes/whisper_stt.py — nowy endpoint /v1/audio/transcriptions
+     Router zarejestrowany w main.py
+     
+
+Sesja 11d: New UI v7.3 + Lazy Loading + GPU Dashboard 
+
+     backend_app/routes/gpu_status.py — nowy endpoint /gpu/status (rocm-smi)
+     index.html zastąpiony zawartością code.html z podłączonymi funkcjami JS
+     Lazy loading embeddingu — VRAM na starcie: 4.5 GB → 14 MB!
+         embeddings.py: refactor na get_text_embedder() / get_doc_embedder()
+         qdrant.py: get_embedding_dimension() używa cache (bez ładowania modelu)
+         rag.py: refactor na get_indexing_pipeline() / get_rag_pipeline()
+         llm.py: standalone generator (nie ładuje całego RAG pipeline)
+         
+     schemas.py: use_rag: False domyślnie (czat nie dławi się RAG)
+     index.html: use_rag: true tylko gdy włączony globe 🌐
+     Fix model_manager.py: _detect_base() zwracał /home/lobo zamiast /media/lobo/BACKUP
+     Dropdown modeli: 4 LLM, 5 VLM, 2 Audio, 3 Embedding
+     GPU Dashboard: temp, VRAM, use — co 2 sekundy
+     
+
+❌ NIEROZWIĄZANE PROBLEMY (blokujące lub do naprawy) 
+Problem 1: Nextcloud AI Assistant nie odpowiada — PRIORYTET 🔴 
+
+Status: NIEROZWIĄZANY
+Objawy: Po wysłaniu pytania w Asystencie NC — ciągłe zapytania POST /check_generation z kodem HTTP 417 (Expectation Failed). Pętla bez końca.
+Diagnoza do tej pory: 
+
+     Backend działa — curl do /v1/chat/completions zwraca poprawną odpowiedź
+     API key sk-local ustawiony w NC admin
+     URL http://192.168.31.70:8000 dostępny z wnętrza kontenera
+     Endpoint /models (bez /v1/) działa
+     CORS dodany dla portu 8081
+     
+
+Możliwe przyczyny (NIE zbadane): 
+
+    Sesja/cache przeglądarki trzyma starą konfigurację 
+    Provider w NC admin dla konkretnego zadania nie jest ustawiony na "OpenAI and LocalAI integration" 
+    Problem specyficzny dla /check_generation — NC używa background task queue, backend może nie zwracać odpowiedzi w oczekiwanym formacie 
+    Header Expect: 100-continue wysyłany przez NC — FastAPI domyślnie go nie obsługuje → 417 
+
+Do wypróbowania w następnej sesji: 
+fish
+ 
+  
+ 
+# Sprawdź logi NC podczas próby użycia Asystenta
+podman logs nextcloud 2>&1 | tail -100
+
+# Sprawdź czy NC wysyła Expect: 100-continue
+# Dodaj logowanie headerów do backendu tymczasowo
+
+# Wyczyść cache przeglądarki / spróbuj incognito
+# Sprawdź w NC Admin → AI czy wszystkie taski mają provider
+ 
+ 
+ 
+Problem 2: Bielik-11B nie mieści się w VRAM — PRIORYTET 🟡 
+
+Status: OBEJŚCIE
+Problem: ~4.7 GB VRAM zajęte przez inne procesy (ROCm runtime?), Bielik-11B (~14 GB) nie mieści się.
+Obecne rozwiązanie: Używamy Bielik-4.5B (~5 GB VRAM).
+Uwaga: model_parametr.py oblicza parametry dynamicznie — warstwy GPU, kontekst (98304 tokenów), kompresja cache Q8_0. 
+Problem 3: VLM opis obrazów — brak mmproj w llama-cli — PRIORYTET 🔴 
+
+Status: NIEROZWIĄZANE
+Problem: VLM opis obrazów nie działa z powodu braku mmproj w llama-cli.
+Wpływ: Automatyczne opisywanie obrazów/z wykresów z dokumentów PDF nie jest możliwe. 
+Problem 4: ingest_gpu.py zabija start_klimtech.py — PRIORYTET 🔴 
+
+Status: NIEROZWIĄZANE
+Problem: Uruchomienie ingest_gpu.py powoduje konflikt i zabicie procesu start_klimtech.py.
+Obejście: Używaj dedykowanego start_backend_gpu.py. 
+Problem 5: monitoring.py GPU utilization: 0% dla AMD — PRIORYTET 🟡 
+
+Status: KOSMETYCZNY
+Problem: monitoring.py zgłasza 0% wykorzystania GPU dla kart AMD.
+Szczegóły: Wymaga użycia rocm-smi w gpu_status.py zamiast standardowych metryk. 
+⏳ DO ZROBIENIA — lista zadań 
+Priorytet WYSOKI 
+#
+ 
+  
+Zadanie
+ 
+  
+Gdzie
+ 
+  
+Notatki
+ 
+ 
+A Debugować 417 z NC Asystentem NC admin, nginx logi, backend logi  Patrz Problem 1 wyżej 
+B Przetestować Whisper STT end-to-end curl -F file=@audio.mp3 .../v1/audio/transcriptions Router dodany, nie testowany 
+C Zmapować Speech-to-text w NC Admin → AI Przeglądarka → NC admin Po teście B 
+   
+Priorytet ŚREDNI — Sekcja 16: Refaktoryzacja VLM Prompts 
+
+Zaakceptowany plan (z akceptacja.md), NIE zaczęty: 
+#
+ 
+  
+Zadanie
+ 
+  
+Plik
+ 
+  
+Status
+ 
+ 
+16a Utwórz backend_app/prompts/ nowy katalog  ⏳ 
+16b Utwórz prompts/__init__.py  nowy plik ⏳ 
+16c Utwórz prompts/vlm_prompts.py z 8 wariantami (DEFAULT, DIAGRAM, CHART, TABLE, PHOTO, SCREENSHOT, TECHNICAL, MEDICAL)  nowy plik ⏳ 
+16d Refaktoryzuj image_handler.py — import z vlm_prompts  ingest/image_handler.py ⏳ 
+16e Refaktoryzuj image_handler.py — dynamiczne params llama-cli (przez model_parametr.py) ingest/image_handler.py ⏳ 
+   
+
+Szczegóły 16e: Aktualnie hardcoded: -n 512, --temp 0.1, -ngl 99, -c 4096. Przenieść do config.py jako vlm_max_tokens, vlm_temperature, vlm_context. 
+Priorytet NISKI — późniejsze plany 
+#
+ 
+  
+Zadanie
+ 
+  
+Notatki
+ 
+ 
+L1  Skrypt scripts/setup_nextcloud_ai.sh  Jednorazowa konfiguracja NC 
+L2  Heurystyka RAG off dla NC summarize Jeśli msg > 2000 znaków → use_rag=False 
+L3  Chunked summarization dla długich dokumentów  Bielik ma 8192 ctx 
+L4  NC webhook_listeners — event-driven zamiast pollingu  NC30+, app:install webhook_listeners 
+L5  Auto-transkrypcja audio w n8n Upload do Audio_RAG/ → Whisper → e5-large → Qdrant 
+L6  Naprawić stop_klimtech.py — nie zabija wszystkich procesów  Priorytet 🟡 
+   
+📁 KLUCZOWE PLIKI (mapa dla modelu AI) 
+Plik
+ 
+  
+Rola
+ 
+ 
+backend_app/main.py Entry point: FastAPI app, lifespan, CORS, rejestracja routerów 
+backend_app/config.py Wszystkie ustawienia (czyta z .env) 
+backend_app/routes/chat.py  /v1/chat/completions, /v1/models, /v1/embeddings 
+backend_app/routes/ingest.py  Upload i indeksowanie plików 
+backend_app/routes/model_switch.py  Start/stop/switch llama-server 
+backend_app/routes/gpu_status.py  GPU metrics (rocm-smi) 
+backend_app/routes/whisper_stt.py Whisper STT endpoint 
+backend_app/services/model_manager.py Lifecycle llama-server, _detect_base() 
+backend_app/services/embeddings.py  Lazy loading e5-large 
+backend_app/services/rag.py Lazy loading pipeline RAG 
+backend_app/services/colpali_embedder.py  ColPali multi-vector 
+backend_app/utils/dependencies.py API key auth (X-API-Key + Bearer) 
+backend_app/models/schemas.py Pydantic: use_rag=False domyślnie 
+backend_app/ingest/image_handler.py VLM opisy obrazów z PDF (prompty hardcoded — do refaktoru Sek.16) 
+backend_app/static/index.html UI (code.html v7.3) 
+start_klimtech_v3.py  Start systemu (nginx + kontenery + backend) 
+stop_klimtech.py  Stop systemu 
+model_parametr.py Obliczanie optymalnych parametrów llama-server 
+n8n_workflows/*.json  Workflow JSON dla n8n 
+   
+🔧 WAŻNE SZCZEGÓŁY TECHNICZNE 
+Uruchamianie llama-server 
+
+Model manager (model_manager.py) uruchamia llama-server z parametrami obliczonymi przez model_parametr.py: 
+
+     --alias klimtech-bielik — czysta nazwa w /v1/models
+     -ngl -1 — wszystkie warstwy na GPU
+     Kontekst: 98304 tokenów
+     Cache kompresja: Q8_0
+     Port: 8082
+     
+
+Format requestu Nextcloud → Backend 
+json
+ 
+  
+ 
+{
+  "model": "klimtech-bielik",
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "Treść pytania"}
+  ],
+  "max_tokens": 4096
+}
+ 
+ 
+ 
+
+     Header: Authorization: Bearer sk-local
+     Brak pól use_rag, web_search — Pydantic defaults włączą się (use_rag=False)
+     Każde zapytanie przechodzi przez RAG jeśli use_rag=True
+     
+
+Kontenery Podman 
+fish
+ 
+  
+ 
+podman ps                          # lista działających kontenerów
+podman start qdrant                # start Qdrant
+podman start nextcloud             # start Nextcloud
+podman start postgres_nextcloud    # start PostgreSQL
+podman start n8n                   # start n8n
+ 
+ 
+ 
+nginx 
+fish
+ 
+  
+ 
+sudo nginx                         # start
+sudo nginx -s stop                 # stop
+sudo nginx -s reload               # reload konfiguracji
+# Konfiguracja: /etc/nginx/sites-available/klimtech
+ 
+ 
+ 
+📋 STAN TESTÓW WERYFIKACYJNYCH 
+Test
+ 
+  
+Polecenie
+ 
+  
+Status
+ 
+ 
+Backend health  curl http://192.168.31.70:8000/health ✅ OK 
+Lista modeli  curl http://192.168.31.70:8000/v1/models  ✅ OK 
+Chat completion curl -X POST .../v1/chat/completions -d '...' ✅ OK 
+CORS preflight  curl -X OPTIONS ... -H "Origin: http://...:8081"  ✅ OK 
+Bearer auth curl -H "Authorization: Bearer sk-local" .../v1/models  ✅ OK 
+HTTPS backend curl -k https://192.168.31.70:8443/health ✅ OK 
+HTTPS Nextcloud curl -k https://192.168.31.70:8444/ ✅ OK (302) 
+HTTPS n8n curl -k https://192.168.31.70:5679/ ✅ OK 
+GPU status  curl http://192.168.31.70:8000/gpu/status ✅ OK 
+NC AI Assistant Przeglądarka → NC Asystent  ❌ 417 
+Whisper STT curl -F file=@audio.mp3 .../v1/audio/transcriptions ⏳ NIE TESTOWANY 
+n8n auto-index  Upload pliku → czekaj 5 min ⏳ NIE TESTOWANY 
+ColPali PDF Upload PDF skanu → n8n → ColPali  ⏳ NIE TESTOWANY 
+NC Speech-to-text NC Talk → transkrybuj ⏳ NIE TESTOWANY 
+   
+🗒️ NOTATKI DLA NASTĘPNEJ SESJI 
+
+    Pierwsze co zrobić: Uruchom system i sprawdź aktualny stan: 
+    fish
+     
+      
+     
+    cd /media/lobo/BACKUP/KlimtechRAG && source venv/bin/activate.fish
+    python3 start_klimtech_v3.py
+    curl http://192.168.31.70:8000/health
+     
+     
+      
+
+    Rekomendowana kolejność pracy: 
+         Debugowanie NC Asystenta (Problem 1 — 417) — najważniejszy nierozwiązany problem
+         Test Whisper STT
+         Sekcja 16 (refaktoryzacja VLM Prompts) — zaakceptowany plan, gotowy do implementacji
+          
+
+    Przy pracy na plikach Python: Zawsze sprawdź aktualny stan pliku przed edycją. Lazy loading embeddingu jest kluczową zmianą v7.3 — nie cofać do eager loading.  
+
+    Przy debugowaniu NC Asystenta: Sprawdź czy problem to Expect: 100-continue header — to częsta przyczyna 417 w FastAPI. Rozwiązanie: middleware w main.py usuwający ten header lub obsługa go.  
