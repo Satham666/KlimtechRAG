@@ -1,0 +1,1 @@
+# KlimtechRAG - Prompts module
