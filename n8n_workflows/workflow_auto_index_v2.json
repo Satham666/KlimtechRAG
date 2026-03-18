@@ -1,0 +1,457 @@
+{
+  "name": "KlimtechRAG — Auto-indeksowanie z Nextcloud (v2 - hash check)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Co 5 minut",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "PROPFIND",
+        "url": "http://192.168.31.70:8081/remote.php/webdav/RAG_Dane/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Depth",
+              "value": "infinity"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "list-nextcloud",
+      "name": "Nextcloud List RAG_Dane",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "NEXTCLOUD_WEBDAV_CRED_ID",
+          "name": "Nextcloud WebDAV"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsuj odpowiedź WebDAV PROPFIND (XML) i wyciągnij wszystkie pliki\nconst responseText = typeof $input.first().json.data === 'string'\n  ? $input.first().json.data\n  : JSON.stringify($input.first().json);\n\n// Wyciągnij pełne ścieżki plików\nconst filePattern = /RAG_Dane\\/[^<\"\\s]+\\.[a-zA-Z0-9]+/g;\nconst matches = responseText.match(filePattern) || [];\n\n// Deduplikacja\nconst allFiles = [...new Set(matches)];\n\n// Mapowanie ścieżek -> ścieżki lokalne\nconst UPLOAD_BASE = '/media/lobo/BACKUP/KlimtechRAG/data/uploads';\nconst files = allFiles.map(f => {\n  const localPath = UPLOAD_BASE + '/' + f;\n  const ext = f.split('.').pop().toLowerCase();\n  const isPdf = ext === 'pdf';\n  return {\n    remotePath: f,\n    localPath: localPath,\n    extension: ext,\n    isPdf: isPdf\n  };\n});\n\nreturn [{ json: { files: files, totalFiles: files.length } }];"
+      },
+      "id": "parse-files",
+      "name": "Parsuj liste plikow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Przygotuj listę plików do sprawdzenia\nconst data = $input.first().json;\nreturn data.files.map(f => ({ json: f }));"
+      },
+      "id": "prepare-check",
+      "name": "Przygotuj do sprawdzenia",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://192.168.31.70:8000/files/check?path={{ $json.localPath }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "check-file-status",
+      "name": "Sprawdz status pliku",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "should-index-check",
+              "leftValue": "={{ $json.should_index }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-needs-indexing",
+      "name": "Czy indeksowac?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filtruj tylko pliki do indeksowania\nconst data = $input.first().json;\nreturn [{\n  json: {\n    localPath: data.localPath,\n    remotePath: data.remotePath,\n    extension: data.extension,\n    isPdf: data.isPdf,\n    status: data.status\n  }\n}];"
+      },
+      "id": "filter-to-index",
+      "name": "Filtruj do indeksowania",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, -120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Policz ile plików do indeksowania\nconst data = $('Filtruj do indeksowania').all();\nconst count = data.length;\nreturn [{\n  json: {\n    filesToIndex: count,\n    files: data.map(d => d.json)\n  }\n}];"
+      },
+      "id": "count-files",
+      "name": "Policz pliki",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, -120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-files",
+              "leftValue": "={{ $json.filesToIndex }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-has-files",
+      "name": "Sa pliki do indeksowania?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1760, -120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/model/stop",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "stop-llm",
+      "name": "Stop LLM (zwolnij VRAM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, -120]
+    },
+    {
+      "parameters": {
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "id": "wait-vram",
+      "name": "Czekaj 10s (VRAM)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2200, -120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Przygotuj listę plików do iteracji\nconst data = $('Policz pliki').first().json;\nreturn data.files.map(f => ({ json: f }));"
+      },
+      "id": "prepare-loop",
+      "name": "Przygotuj liste plikow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2420, -120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "pdf-check",
+              "leftValue": "={{ $json.isPdf }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "route-filetype",
+      "name": "PDF czy tekst?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2640, -120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/ingest_path",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Embedding-Model",
+              "value": "vidore/colpali-v1.3-hf"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ path: $json.localPath }) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "ingest-pdf-colpali",
+      "name": "Ingest PDF (ColPali)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, -240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/ingest_path",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ path: $json.localPath }) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "ingest-text-e5",
+      "name": "Ingest tekst (e5-large)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.31.70:8000/model/start",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"model_path\":\"/media/lobo/BACKUP/KlimtechRAG/modele_LLM/model_thinking/speakleash_Bielik-11B-v3.0-Instruct-GGUF_Bielik-11B-v3.0-Instruct.Q8_0.gguf\",\"model_type\":\"llm\"}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "start-llm",
+      "name": "Start LLM (Bielik-11B)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3080, -120]
+    },
+    {
+      "parameters": {
+        "amount": 25,
+        "unit": "seconds"
+      },
+      "id": "wait-llm-start",
+      "name": "Czekaj 25s (LLM start)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3300, -120]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://192.168.31.70:8000/health",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "health-check",
+      "name": "Health Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3520, -120]
+    },
+    {
+      "parameters": {},
+      "id": "no-new-files",
+      "name": "Brak plikow do indeksowania",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1980, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Raport - pliki pominiete (nie wymagaja indeksowania)\nconst checkedFiles = $('Sprawdz status pliku').all();\nconst skipped = checkedFiles.filter(d => !d.json.should_index).length;\nconst toIndex = checkedFiles.filter(d => d.json.should_index).length;\n\nreturn [{\n  json: {\n    message: 'Sprawdzono ' + checkedFiles.length + ' plikow',\n    skippedAlreadyIndexed: skipped,\n    willIndex: toIndex\n  }\n}];"
+      },
+      "id": "report-skipped",
+      "name": "Raport pominiete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 120]
+    }
+  ],
+  "connections": {
+    "Co 5 minut": {
+      "main": [
+        [{ "node": "Nextcloud List RAG_Dane", "type": "main", "index": 0 }]
+      ]
+    },
+    "Nextcloud List RAG_Dane": {
+      "main": [
+        [{ "node": "Parsuj liste plikow", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parsuj liste plikow": {
+      "main": [
+        [{ "node": "Przygotuj do sprawdzenia", "type": "main", "index": 0 }]
+      ]
+    },
+    "Przygotuj do sprawdzenia": {
+      "main": [
+        [{ "node": "Sprawdz status pliku", "type": "main", "index": 0 }]
+      ]
+    },
+    "Sprawdz status pliku": {
+      "main": [
+        [{ "node": "Czy indeksowac?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Czy indeksowac?": {
+      "main": [
+        [{ "node": "Filtruj do indeksowania", "type": "main", "index": 0 }],
+        [{ "node": "Raport pominiete", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filtruj do indeksowania": {
+      "main": [
+        [{ "node": "Policz pliki", "type": "main", "index": 0 }]
+      ]
+    },
+    "Policz pliki": {
+      "main": [
+        [{ "node": "Sa pliki do indeksowania?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Sa pliki do indeksowania?": {
+      "main": [
+        [{ "node": "Stop LLM (zwolnij VRAM)", "type": "main", "index": 0 }],
+        [{ "node": "Brak plikow do indeksowania", "type": "main", "index": 0 }]
+      ]
+    },
+    "Stop LLM (zwolnij VRAM)": {
+      "main": [
+        [{ "node": "Czekaj 10s (VRAM)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Czekaj 10s (VRAM)": {
+      "main": [
+        [{ "node": "Przygotuj liste plikow", "type": "main", "index": 0 }]
+      ]
+    },
+    "Przygotuj liste plikow": {
+      "main": [
+        [{ "node": "PDF czy tekst?", "type": "main", "index": 0 }]
+      ]
+    },
+    "PDF czy tekst?": {
+      "main": [
+        [{ "node": "Ingest PDF (ColPali)", "type": "main", "index": 0 }],
+        [{ "node": "Ingest tekst (e5-large)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ingest PDF (ColPali)": {
+      "main": [
+        [{ "node": "Start LLM (Bielik-11B)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ingest tekst (e5-large)": {
+      "main": [
+        [{ "node": "Start LLM (Bielik-11B)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Start LLM (Bielik-11B)": {
+      "main": [
+        [{ "node": "Czekaj 25s (LLM start)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Czekaj 25s (LLM start)": {
+      "main": [
+        [{ "node": "Health Check", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "KlimtechRAG",
+      "createdAt": "2026-03-15T00:00:00.000Z",
+      "updatedAt": "2026-03-18T00:00:00.000Z"
+    }
+  ],
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "klimtechrag-local"
+  }
+}

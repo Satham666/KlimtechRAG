@@ -119,11 +119,6 @@
     .p-err { color: #f87171 }
     .p-warn { color: #f6c90e }
     .p-head { color: #3b82f6; font-weight: 700 }
-
-    /* Custom RAG green color */
-    .bg-rag-green { background-color: #4ade80 !important; }
-    .text-rag-green { color: #4ade80 !important; }
-    .border-rag-green { border-color: #4ade80 !important; }
   </style>
 </head>
 <body class="h-full flex flex-col overflow-hidden">
@@ -361,13 +356,9 @@
 <div class="flex-1 relative">
 <textarea id="ibox" class="w-full bg-rag-bg border border-gray-700 rounded-xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:border-rag-accent focus:ring-1 focus:ring-rag-accent transition-all text-white shadow-lg resize-none" placeholder="Zadaj pytanie..." rows="1" style="min-height:44px;max-height:140px"></textarea>
 </div>
-<!-- RAG Only Toggle Button -->
-<button id="ragToggle" onclick="toggleRagMode()" class="bg-rag-bg border border-gray-700 text-rag-text-muted p-3 rounded-xl hover:text-white transition-all" title="Tryb RAG (tylko baza lokalna)">
-<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-</button>
 <!-- Web Search Toggle Button -->
 <button id="webToggle" onclick="toggleWebMode()" class="bg-rag-bg border border-gray-700 text-rag-text-muted p-3 rounded-xl hover:text-white transition-all" title="Tryb RAG + Web Search">
-<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 019-9" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
 </button>
 <!-- Send Button -->
 <button id="sendBtn" onclick="send()" class="bg-rag-accent text-rag-bg p-3 rounded-xl hover:bg-rag-accent/80 transition-all shadow-lg glow-green">
@@ -377,9 +368,6 @@
 <div class="mt-2 flex flex-col items-center gap-1">
 <div class="text-center text-[10px] text-rag-text-muted uppercase tracking-widest">
           Enter -- wyslij / Shift+Enter -- nowa linia
-        </div>
-<div id="ragModeIndicator" class="text-[9px] font-bold text-rag-green flex items-center gap-1 uppercase tracking-wider" style="display:none">
-<span>&#128206;</span> RAG
         </div>
 <div id="webModeIndicator" class="text-[9px] font-bold text-rag-blue flex items-center gap-1 uppercase tracking-wider" style="display:none">
 <span>&#127760;</span> RAG + Web
@@ -457,7 +445,6 @@ let currentModelType = 'llm';
 let progressOffset = 0;
 let progressTimer  = null;
 let webMode = false;
-let ragMode = false;
 let webContext = null;
 let gpuTimer = null;
 
@@ -1012,7 +999,6 @@ async function send(){
 
   const requestBody = {messages:[{role:'user',content:text}],stream:false};
   if(webMode){ requestBody.web_search = true; requestBody.use_rag = true; }
-  else if(ragMode){ requestBody.use_rag = true; }
 
   try{
     const r=await fetch(`${B}/v1/chat/completions`,{
@@ -1068,24 +1054,6 @@ function appendMsgEl(role,content,sources,ts,animate){
       <div class="text-[9px] text-rag-text-muted mt-1 ${isUser?'text-right':''}">${fmtTime(ts)}</div>
     </div>`;
   msgsEl.appendChild(d);
-}
-
-// ── RAG ONLY ────────────────────────────────────────────────
-function toggleRagMode(){
-  ragMode=!ragMode;
-  const btn=document.getElementById('ragToggle');
-  const indicator=document.getElementById('ragModeIndicator');
-  if(ragMode){
-    btn.classList.add('bg-rag-green','text-white');
-    btn.classList.remove('bg-rag-bg','text-rag-text-muted');
-    indicator.style.display='flex';
-    toast('Tryb RAG wlaczony (tylko baza lokalna)');
-  }else{
-    btn.classList.remove('bg-rag-green','text-white');
-    btn.classList.add('bg-rag-bg','text-rag-text-muted');
-    indicator.style.display='none';
-    toast('Tryb RAG wylaczony');
-  }
 }
 
 // ── WEB SEARCH ───────────────────────────────────────────────

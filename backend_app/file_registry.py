@@ -12,7 +12,6 @@ from .config import settings
 
 DB_PATH = settings.file_registry_db
 UPLOAD_BASE = settings.upload_base
-NEXTCLOUD_BASE = settings.nextcloud_base
 
 WATCH_DIRS = [
     f"{UPLOAD_BASE}/Audio_RAG",
@@ -22,13 +21,6 @@ WATCH_DIRS = [
     f"{UPLOAD_BASE}/pdf_RAG",
     f"{UPLOAD_BASE}/txt_RAG",
     f"{UPLOAD_BASE}/Video_RAG",
-    f"{NEXTCLOUD_BASE}/Audio_RAG",
-    f"{NEXTCLOUD_BASE}/Doc_RAG",
-    f"{NEXTCLOUD_BASE}/Images_RAG",
-    f"{NEXTCLOUD_BASE}/json_RAG",
-    f"{NEXTCLOUD_BASE}/pdf_RAG",
-    f"{NEXTCLOUD_BASE}/txt_RAG",
-    f"{NEXTCLOUD_BASE}/Video_RAG",
 ]
 
 

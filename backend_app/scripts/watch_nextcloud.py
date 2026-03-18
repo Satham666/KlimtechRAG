@@ -73,22 +73,13 @@ check_already_running()
 atexit.register(cleanup_pid)
 
 # ---------------------------------------------------------------------------
-# Katalogi do obserwowania — NEXTCLOUD jest głównym źródłem
+# Katalogi do obserwowania — JEDYNE źródło plików RAG
 # ---------------------------------------------------------------------------
 
-NEXTCLOUD_RAG = settings.nextcloud_base    # /media/lobo/BACKUP/.../RAG_Dane
-UPLOADS_RAG = settings.upload_base         # /media/lobo/BACKUP/.../data/uploads (backup)
+UPLOADS_RAG = settings.upload_base    # /media/lobo/BACKUP/.../data/uploads
 
 WATCH_DIRS = [
-    # Nextcloud — GŁÓWNE źródło (pliki wrzucone przez przeglądarkę lub OWUI Function)
-    f"{NEXTCLOUD_RAG}/Doc_RAG",
-    f"{NEXTCLOUD_RAG}/Audio_RAG",
-    f"{NEXTCLOUD_RAG}/Video_RAG",
-    f"{NEXTCLOUD_RAG}/Images_RAG",
-    f"{NEXTCLOUD_RAG}/json_RAG",
-    f"{NEXTCLOUD_RAG}/pdf_RAG",
-    f"{NEXTCLOUD_RAG}/txt_RAG",
-    # uploads — backup (gdy ktoś wrzuci bezpośrednio przez /ingest)
+    # Główne źródło plików
     f"{UPLOADS_RAG}/Doc_RAG",
     f"{UPLOADS_RAG}/Audio_RAG",
     f"{UPLOADS_RAG}/Video_RAG",

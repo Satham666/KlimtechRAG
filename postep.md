@@ -2,20 +2,53 @@ KlimtechRAG — STATUS SESJI (plik wznowienia)
 
     Cel tego pliku: Po wczytaniu tego pliku model AI natychmiast wie co zostało zrobione, co jest do zrobienia i jakie są plany. Aktualizuj ten plik po każdej sesji.
 
-Ostatnia aktualizacja: 2026-03-18
-Wersja systemu: v7.3
+Ostatnia aktualizacja: 2026-03-19 (noc)
+Wersja systemu: v7.5
 Serwer: 192.168.31.70 | Katalog: /media/lobo/BACKUP/KlimtechRAG/
 GitHub: https://github.com/Satham666/KlimtechRAG
 ⚡ SZYBKI KONTEKST (przeczytaj najpierw)
 
 Co to jest: Lokalny system RAG (Retrieval-Augmented Generation) dla dokumentacji technicznej po polsku. Działa w 100% offline na serwerze z GPU AMD Instinct 16 GB (ROCm). Backend FastAPI, LLM przez llama.cpp, wektorowa baza Qdrant, Nextcloud jako storage + AI frontend, n8n do automatyzacji.
 
+⚠️ WAŻNE - NIGDY NIE PRZERABIAJ Z GPU NA CPU!
+    System jest zaprojektowany do pracy na GPU AMD (ROCm).
+    Embeddingi, LLM, VLM - WSZYSTKO musi działać na GPU.
+    Jeśli brakuje VRAM - zwolnij pamięć (stop modelu) zamiast przerabiać na CPU.
+    To jest HARDWARE REQUIREMENT nie opcja.
+
+⚠️ COMANDY Z SUDO - TYLKO DO WYKONANIA PRZEZ UŻYTKOWNIKA!
+    Komendy z sudo są ZAWSZE wyświetlane dla użytkownika do ręcznego wykonania w osobnym terminalu.
+    Model AI nie może wykonywać komend z sudo (brak hasła).
+
+⚠️ JEDYNA ŚCIEŻKA DLA PLIKÓW RAG + DANYCH NEXTLOUD:
+    /media/lobo/BACKUP/KlimtechRAG/data/uploads/
+    │
+    ├── pdf_RAG/     → .pdf
+    ├── txt_RAG/     → .txt, .md, .py, .js, .ts, .json, .yml, .yaml
+    ├── Audio_RAG/   → .mp3, .wav, .ogg, .flac (przyszłość)
+    ├── Doc_RAG/     → .doc, .docx, .odt, .rtf
+    ├── Images_RAG/  → .jpg, .jpeg, .png, .gif, .bmp, .webp (przyszłość)
+    ├── Video_RAG/   → .mp4, .avi, .mkv, .mov (przyszłość)
+    └── json_RAG/    → .json
+
+    ALBO:
+    Usunąć Nextcloud RAG_Dane - niepotrzebny (pliki i tak niewidoczne w terminalu).
+    Używać TYLKO /media/lobo/BACKUP/KlimtechRAG/data/uploads/
+
+    FLOW:
+    1. Użytkownik wrzuca plik do "WGRAJ PLIKI"
+    2. Backend sprawdza rozszerzenie pliku
+    3. Plik jest wrzucany do odpowiedniego podkatalogu (pdf_RAG, txt_RAG, itd.)
+    4. Plik jest poddawany embeddingowi przez wybrany model (ColPali, e5-large, lub przyszłe audio/video)
+    5. Dane z embeddingu trafiają do Qdrant RAG
+
 Kluczowe adresy:
 
     Backend UI: https://192.168.31.70:8443 (self-signed cert, używaj -k w curl)
-    Nextcloud: http://192.168.31.70:8081 (login: admin / klimtech123)
+    Nextcloud: http://192.168.31.70:8081 (login: maciek / klimtech123)
     n8n: http://192.168.31.70:5678
     Backend API: http://192.168.31.70:8000
+    Qdrant: http://192.168.31.70:6333
 
 ZAWSZE przed uruchomieniem .py:
 
@@ -95,40 +128,149 @@ Sesja 11d: New UI v7.3 + Lazy Loading + GPU Dashboard
      GPU Dashboard: temp, VRAM, use — co 2 sekundy
      
 
-❌ NIEROZWIĄZANE PROBLEMY (blokujące lub do naprawy) 
-Problem 1: Nextcloud AI Assistant nie odpowiada — PRIORYTET 🔴 
+Sesja 11e: Refaktoryzacja VLM Prompts (Sekcja 16) 
 
-Status: NIEROZWIĄZANY
-Objawy: Po wysłaniu pytania w Asystencie NC — ciągłe zapytania POST /check_generation z kodem HTTP 417 (Expectation Failed). Pętla bez końca.
-Diagnoza do tej pory: 
-
-     Backend działa — curl do /v1/chat/completions zwraca poprawną odpowiedź
-     API key sk-local ustawiony w NC admin
-     URL http://192.168.31.70:8000 dostępny z wnętrza kontenera
-     Endpoint /models (bez /v1/) działa
-     CORS dodany dla portu 8081
+     Utworzono katalog backend_app/prompts/
+     Utworzono prompts/__init__.py
+     Utworzono prompts/vlm_prompts.py z 8 wariantami promptów:
+         DEFAULT, DIAGRAM, CHART, TABLE, PHOTO, SCREENSHOT, TECHNICAL, MEDICAL
+     VLM_PARAMS: max_tokens=512, temperature=0.1, context_length=4096, gpu_layers=99
+     Refaktoryzacja image_handler.py:
+         describe_image_with_vlm() — dynamiczne prompty + params
+         describe_image_with_vlm_server() — dynamiczne prompty + params
+         process_pdf_with_images() — przekazuje image_type do funkcji VLM
+     Naprawiono _find_vlm_model() — sprawdza wiele sciezek (KLIMTECH_BASE_PATH, /media/lobo/BACKUP, ~/KlimtechRAG)
      
 
-Możliwe przyczyny (NIE zbadane): 
+Sesja 11f: Sprawdzanie hashy plikow przed indeksowaniem 
 
-    Sesja/cache przeglądarki trzyma starą konfigurację 
-    Provider w NC admin dla konkretnego zadania nie jest ustawiony na "OpenAI and LocalAI integration" 
-    Problem specyficzny dla /check_generation — NC używa background task queue, backend może nie zwracać odpowiedzi w oczekiwanym formacie 
-    Header Expect: 100-continue wysyłany przez NC — FastAPI domyślnie go nie obsługuje → 417 
+     Backend:
+         Dodano funkcje _hash_file() w ingest.py
+         /ingest_path — sprawdza content_hash przed indeksowaniem
+         Dodano endpoint /files/check — sprawdza status pliku w file_registry.db
+         Jesli plik o takim hash'u istnieje i jest zaindeksowany — pomija indeksowanie
+     
+     n8n workflow:
+         Utworzono workflow_auto_index_v2.json
+         Sprawdza status kazdego pliku przez /files/check przed indeksowaniem
+         Jesli should_index=false — pomija plik
+         Raportowanie ile plikow pominieto vs zaindeksowano
 
-Do wypróbowania w następnej sesji: 
-fish
- 
-  
- 
-# Sprawdź logi NC podczas próby użycia Asystenta
-podman logs nextcloud 2>&1 | tail -100
+Sesja 12: Hybrid Storage + Pod Architecture (v7.4) — 2026-03-18
 
-# Sprawdź czy NC wysyła Expect: 100-continue
-# Dodaj logowanie headerów do backendu tymczasowo
+     Problem: exFAT filesystem (/media/lobo/BACKUP) nie obsługuje uprawnień Unix (chown/chmod)
+     → PostgreSQL wywalał się z błędami uprawnień
+     → Nextcloud Assistant zwracał HTTP 417
 
-# Wyczyść cache przeglądarki / spróbuj incognito
-# Sprawdź w NC Admin → AI czy wszystkie taski mają provider
+     ROZWIĄZANIE v7.4: Hybrid Storage + Podman Pod (NIEDZIAŁAJĄCE!)
+     ⚠️ Próbowano: Baza na ext4, Nextcloud na exFAT - NIE DZIAŁAŁO!
+
+Sesja 13: Nextcloud Fix (v7.5) — 2026-03-19
+
+     Problem: Skrypt fix_nextcloud_hybrid.sh nie działał poprawnie.
+     Objawy:
+     - "Failed to open stream: version.php not found"
+     - "Cannot create or write into the data directory"
+     - exFAT ignoruje chmod 777
+
+     PRZYCZYNA ROOT CAUSE:
+     - exFAT ignoruje UID/GID - www-data (33) nie może pisać do "lobo" (1000)
+     - Mapowanie /var/www/html na exFAT powodowało brak plików Nextcloud
+     - Entrypoint NC nie instaluje plików gdy katalog nie jest pusty
+
+     ROZWIĄZANIE v7.5: Named Volume dla WSZYSTKIEGO (ext4)
+     ├── Pod `klimtech_pod`
+     ├── PostgreSQL: Named Volume `klimtech_postgres_data`
+     └── Nextcloud: Named Volume `klimtech_nextcloud_data`
+     └── Brak mapowania na exFAT dla kodu/config/danych NC
+
+     ARCHITEKTURA v7.5:
+     ┌─────────────────────────────────────────────────────────────┐
+     │  Pod 'klimtech_pod' (wspólna sieć localhost)             │
+     │  ├── nextcloud (port 8081)                                │
+     │  └── postgres_nextcloud (localhost:5432)                   │
+     └─────────────────────────────────────────────────────────────┘
+     ├── Named Volume: klimtech_postgres_data → ext4
+     ├── Named Volume: klimtech_nextcloud_data → ext4
+     ├── qdrant (6333) - standalone
+     └── n8n (5678) - standalone
+
+     COMANDY URUCHOMIENIA: Patrz sekcja Problem 1 wyżej
+
+     STATUS PO SESJI 13:
+     ✅ Nextcloud 32.0.6.1 zainstalowany i działa
+     ✅ PostgreSQL połączony
+     ✅ integration_openai + assistant zainstalowane
+     ✅ Wszystkie occ config wykonane
+     ⏳ NC AI Assistant - do przetestowania w przeglądarce
+
+❌ NIEROZWIĄZANE PROBLEMY (blokujące lub do naprawy)
+Problem 1: Nextcloud AI Assistant nie odpowiada — PRIORYTET 🔴 
+
+Status: ✅ ROZWIĄZANY (2026-03-19)
+Przyczyna root cause: PostgreSQL na exFAT = błędy uprawnień Unix (chown/chmod) + brak plików Nextcloud w /var/www/html
+→ niestabilna baza → HTTP 417 w NC Assistant
+
+Rozwiązanie v7.5: Named Volume dla WSZYSTKIEGO (ext4)
+├── Pod `klimtech_pod` (wspólna sieć localhost)
+│   ├── PostgreSQL: Named Volume `klimtech_postgres_data` → ext4
+│   └── Nextcloud: Named Volume `klimtech_nextcloud_data` → ext4
+└── Brak mapowania na exFAT dla kodu/config
+
+PROBLEM Z exFAT (DLACZEGO NIE DZIAŁAŁO):
+- exFAT ignoruje uprawnienia Unix (UID/GID)
+- Kontener www-data (UID 33) nie może pisać do katalogu owned przez "lobo" (UID 1000)
+- chmod 777 NIE POMAGA na exFAT
+- Mapowanie całego /var/www/html na exFAT powodowało brak plików Nextcloud (version.php missing)
+- Entrypoint Nextcloud nie doinstalowuje plików gdy katalog nie jest pusty
+
+KOMENDY URUCHOMIENIA (2026-03-19):
+
+```bash
+# 1. Usuń starą konfigurację
+podman stop nextcloud postgres_nextcloud
+podman rm nextcloud postgres_nextcloud
+podman pod rm -f klimtech_pod
+rm -rf /media/lobo/BACKUP/KlimtechRAG/data/nextcloud
+
+# 2. Stwórz Pod
+podman pod create --name klimtech_pod -p 8081:80
+
+# 3. PostgreSQL (Named Volume)
+podman run -d --name postgres_nextcloud --pod klimtech_pod --restart always \
+    -e POSTGRES_DB=nextcloud \
+    -e POSTGRES_USER=nextcloud \
+    -e POSTGRES_PASSWORD=klimtech123 \
+    -v klimtech_postgres_data:/var/lib/postgresql/data \
+    docker.io/library/postgres:16
+
+# 4. Nextcloud (Named Volume dla danych, NIE exFAT!)
+podman volume create klimtech_nextcloud_data
+
+podman run -d --name nextcloud --pod klimtech_pod --restart always \
+    -e POSTGRES_HOST="localhost" \
+    -e POSTGRES_DB=nextcloud \
+    -e POSTGRES_USER=nextcloud \
+    -e POSTGRES_PASSWORD=klimtech123 \
+    -e NEXTCLOUD_TRUSTED_DOMAINS="192.168.31.70 localhost" \
+    -e NEXTCLOUD_ADMIN_USER="admin" \
+    -e NEXTCLOUD_ADMIN_PASSWORD="klimtech123" \
+    -v klimtech_nextcloud_data:/var/www/html/data \
+    docker.io/library/nextcloud:32
+
+# 5. Czekaj ~45s na instalację
+
+# 6. Konfiguracja
+podman exec -u www-data nextcloud php occ app:install integration_openai
+podman exec -u www-data nextcloud php occ app:install assistant
+podman exec -u www-data nextcloud php occ config:system:set check_data_directory_permissions --value=false --type=boolean
+podman exec -u www-data nextcloud php occ config:system:set filelocking.enabled --value=false --type=boolean
+podman exec -u www-data nextcloud php occ config:system:set allow_local_remote_servers --value=true --type=boolean
+podman exec -u www-data nextcloud php occ config:system:set overwriteprotocol --value="https"
+podman exec -u www-data nextcloud php occ config:system:set overwritehost --value="192.168.31.70:8444"
+```
+
+Login: admin / klimtech123
  
  
  
@@ -153,6 +295,27 @@ Problem 5: monitoring.py GPU utilization: 0% dla AMD — PRIORYTET 🟡
 Status: KOSMETYCZNY
 Problem: monitoring.py zgłasza 0% wykorzystania GPU dla kart AMD.
 Szczegóły: Wymaga użycia rocm-smi w gpu_status.py zamiast standardowych metryk. 
+
+Problem 6: Podman Overlay Storage Leak — PRIORYTET 🔴 (2026-03-18)
+
+Status: DO NAPRAWY
+Problem: Podman tworzy nowe overlay layers przy każdym uruchomieniu/usunięciu kontenerów, ale NIE usuwa starych. Skutkuje to:
+- Zapychaniem dysku starymi warstwami (50+ katalogów w overlay/)
+- Setkami MB/GB zajętego miejsca
+- Powolnym startem kontenerów
+
+Przyczyna: Brak `podman system prune` w skryptach start/stop
+
+Rozwiązanie: 
+1. Dodać `podman system prune -a -f` przed uruchomieniem kontenerów
+2. Dodać `podman system prune -f` po zatrzymaniu kontenerów
+
+Pliki do naprawy:
+- start_klimtech_v3.py: dodać cleanup przed startem
+- stop_klimtech.py: dodać cleanup po zatrzymaniu
+
+UWAGA: Przed pełnym cleanup należy zatrzymać wszystkie kontenery!
+
 ⏳ DO ZROBIENIA — lista zadań 
 Priorytet WYSOKI 
 #
@@ -167,33 +330,108 @@ Gdzie
 Notatki
  
  
-A Debugować 417 z NC Asystentem NC admin, nginx logi, backend logi  Patrz Problem 1 wyżej 
+A Testować NC AI Assistant w przeglądarce  NC Admin → AI  ✅ DONE - NC zainstalowany, konfiguracja wykonana. Test: zaloguj się do NC, otwórz Asystent, zadaj pytanie. 
 B Przetestować Whisper STT end-to-end curl -F file=@audio.mp3 .../v1/audio/transcriptions Router dodany, nie testowany 
 C Zmapować Speech-to-text w NC Admin → AI Przeglądarka → NC admin Po teście B 
    
 Priorytet ŚREDNI — Sekcja 16: Refaktoryzacja VLM Prompts 
 
-Zaakceptowany plan (z akceptacja.md), NIE zaczęty: 
+**Status: ✅ WYKONANE (2026-03-18)**
 #
- 
-  
+   
 Zadanie
- 
-  
+   
+   
 Plik
- 
-  
+   
+   
 Status
- 
- 
-16a Utwórz backend_app/prompts/ nowy katalog  ⏳ 
-16b Utwórz prompts/__init__.py  nowy plik ⏳ 
-16c Utwórz prompts/vlm_prompts.py z 8 wariantami (DEFAULT, DIAGRAM, CHART, TABLE, PHOTO, SCREENSHOT, TECHNICAL, MEDICAL)  nowy plik ⏳ 
-16d Refaktoryzuj image_handler.py — import z vlm_prompts  ingest/image_handler.py ⏳ 
-16e Refaktoryzuj image_handler.py — dynamiczne params llama-cli (przez model_parametr.py) ingest/image_handler.py ⏳ 
+   
+  
+16a Utwórz backend_app/prompts/ nowy katalog  ✅ DONE 
+16b Utwórz prompts/__init__.py  nowy plik ✅ DONE 
+16c Utwórz prompts/vlm_prompts.py z 8 wariantami (DEFAULT, DIAGRAM, CHART, TABLE, PHOTO, SCREENSHOT, TECHNICAL, MEDICAL)  nowy plik ✅ DONE 
+16d Refaktoryzuj image_handler.py — import z vlm_prompts  ingest/image_handler.py ✅ DONE 
+16e Refaktoryzuj image_handler.py — dynamiczne params llama-cli (przez model_parametr.py) ingest/image_handler.py ✅ DONE 
    
 
-Szczegóły 16e: Aktualnie hardcoded: -n 512, --temp 0.1, -ngl 99, -c 4096. Przenieść do config.py jako vlm_max_tokens, vlm_temperature, vlm_context. 
+Szczegóły wykonanych zmian:
+- Utworzono katalog `backend_app/prompts/`
+- Utworzono `prompts/__init__.py` i `prompts/vlm_prompts.py`
+- 8 wariantów promptów: DEFAULT, DIAGRAM, CHART, TABLE, PHOTO, SCREENSHOT, TECHNICAL, MEDICAL
+- VLM_PARAMS: max_tokens=512, temperature=0.1, context_length=4096, gpu_layers=99
+- Funkcje `describe_image_with_vlm()` i `describe_image_with_vlm_server()` używają dynamicznych promptów i params
+- Parametr `image_type` przekazywany do funkcji VLM
+
+Priorytet ŚREDNI — Sprawdzanie hashy plików
+
+**Status: ✅ WYKONANE (2026-03-18)**
+
+| # | Zadanie | Plik | Status |
+|---|---------|------|--------|
+| H1 | Dodaj funkcję _hash_file() | ingest.py | ✅ DONE |
+| H2 | Modyfikuj /ingest_path — sprawdzanie hashy | ingest.py | ✅ DONE |
+| H3 | Dodaj endpoint /files/check | ingest.py | ✅ DONE |
+| H4 | Utwórz workflow_auto_index_v2.json | n8n_workflows/ | ✅ DONE |
+
+Szczegóły:
+- `_hash_file()` — oblicza SHA-256 z zawartości pliku
+- `/ingest_path` — sprawdza `find_duplicate_by_hash()`, pomija jeśli już zaindeksowane
+- `/files/check?path=X` — zwraca status pliku z file_registry.db
+- n8n workflow v2 — sprawdza `should_index` przed wysłaniem do /ingest_path
+
+---
+
+## ZADANIE: JEDYNA ŚCIEŻKA DLA PLIKÓW RAG
+
+**Status: ✅ ROZWIĄZANE**
+**Źródło: Polecenie użytkownika 2026-03-18**
+
+### DIAGNOZA PROBLEMU (dlaczego RAG nie działał):
+Modele LLM wypisywały bzdury, a RAG nie działał jak należy, ponieważ:
+- Embedding wrzucał pliki do RÓŻNYCH MIEJSC
+- `data/uploads/` ← backend widział te pliki
+- `data/nextcloud/.../RAG_Dane/` ← embedding indeksował do innego miejsca
+- Pliki były rozsiane po dwóch RÓŻNYCH dyskach (root SSD vs NVMe)
+
+### ROZWIĄZANIE:
+- Użytkownik USUNĄŁ `/home/lobo/KlimtechRAG/` (2026-03-18)
+- Teraz ISTNIEJE TYLKO: `/media/lobo/BACKUP/KlimtechRAG/`
+- Wszystkie pliki RAG w jednym miejscu
+
+### Cel
+JEDYNA ścieżka dla wszystkich plików RAG:
+```
+/media/lobo/BACKUP/KlimtechRAG/data/uploads/
+├── pdf_RAG/     → .pdf
+├── txt_RAG/     → .txt, .md, .py, .js, .ts, .json, .yml, .yaml
+├── Audio_RAG/   → .mp3, .wav, .ogg, .flac
+├── Doc_RAG/     → .doc, .docx, .odt, .rtf
+├── Images_RAG/  → .jpg, .jpeg, .png, .gif, .bmp, .webp
+├── Video_RAG/   → .mp4, .avi, .mkv, .mov
+└── json_RAG/    → .json
+```
+
+### FLOW (docelowy):
+1. Użytkownik wrzuca plik do "WGRAJ PLIKI"
+2. Backend sprawdza rozszerzenie pliku
+3. Plik jest wrzucany do odpowiedniego podkatalogu (pdf_RAG, txt_RAG, itd.)
+4. Plik jest poddawany embeddingowi przez wybrany model z listy (ColPali, e5-large, lub przyszłe audio/video)
+5. Dane z embeddingu trafiają do Qdrant RAG
+
+### Status podzadań:
+| # | Podzadanie | Status |
+|---|------------|--------|
+| S1 | Sprawdzić czy config.py ma tylko upload_base (bez nextcloud_base) | ✅ DONE |
+| S2 | Sprawdzić czy file_registry.py ma tylko WATCH_DIRS z uploads | ✅ DONE |
+| S3 | Sprawdzić czy ingest.py zapisuje do uploads (a nie nextcloud) | ✅ DONE |
+| S4 | Sprawdzić czy n8n workflow v2 używa upload_base | ✅ DONE |
+| S5 | Usunąć /home/lobo/KlimtechRAG/ | ✅ DONE (przez użytkownika) |
+| S6 | System działa na jednym dysku NVMe | ✅ DONE |
+| S7 | Przetestować RAG przez czat | ⏳ DO WYKONANIA |
+
+---
+
 Priorytet NISKI — późniejsze plany 
 #
  

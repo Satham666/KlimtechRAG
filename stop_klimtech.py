@@ -15,7 +15,10 @@ LOG_DIR = os.path.join(BASE_DIR, "logs")
 # MUSI być zgodne z watch_nextcloud.py (logs/klimtech_watchdog.pid)
 WATCHDOG_PID_FILE = os.path.join(LOG_DIR, "klimtech_watchdog.pid")
 
-CONTAINERS = ["qdrant", "nextcloud", "postgres_nextcloud", "n8n"]
+# Kontenery (poza Pod)
+CONTAINERS_STANDALONE = ["qdrant", "n8n"]
+# Pod z Nextcloud i PostgreSQL (wspólna sieć = localhost)
+POD_NAME = "klimtech"
 
 
 def kill_by_pid_file(pid_file: str, name: str) -> bool:
@@ -155,15 +158,43 @@ def kill_remaining_ports() -> None:
             pass
 
 
-def stop_containers() -> None:
+def stop_pod():
+    """Zatrzymuje i usuwa Pod z wszystkimi kontenerami."""
+    print("   Zatrzymywanie Pod klimtech...")
+    try:
+        result = subprocess.run(
+            ["podman", "pod", "stop", "-t", "10", POD_NAME],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            print(f"   ✅ {POD_NAME} zatrzymany")
+        else:
+            print(f"   ⚪ {POD_NAME}: nie działał")
+    except subprocess.TimeoutExpired:
+        print(f"   ⏱️  {POD_NAME}: timeout")
+    except Exception as e:
+        print(f"   ⚠️  {POD_NAME}: {e}")
+    
+    # Usuń pod po zatrzymaniu
+    try:
+        subprocess.run(["podman", "pod", "rm", "-f", POD_NAME], capture_output=True, timeout=10)
+        print(f"   ✅ {POD_NAME} usunięty")
+    except Exception:
+        pass
+
+
+def stop_containers():
     print("\n🐳 Zatrzymywanie kontenerów Podman...")
-    for container in CONTAINERS:
+    
+    # Najpierw Pod (to zatrzymuje nextcloud i postgres_nextcloud)
+    stop_pod()
+    
+    # Potem pozostałe kontenery standalone
+    for container in CONTAINERS_STANDALONE:
         try:
             result = subprocess.run(
                 ["podman", "stop", "-t", "5", container],
-                capture_output=True,
-                text=True,
-                timeout=15,
+                capture_output=True, text=True, timeout=15,
             )
             if result.returncode == 0:
                 print(f"   ✅ {container}")
@@ -214,6 +245,27 @@ def check_ports() -> None:
         pass
 
 
+def cleanup_podman():
+    """Czyści nieużywane obrazy i warstwy overlay."""
+    print("\n   Czyszczenie Podman storage...")
+    try:
+        result = subprocess.run(
+            ["podman", "system", "prune", "-f"],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0:
+            for line in result.stderr.splitlines():
+                if "Total reclaimed space" in line:
+                    print(f"   [OK] {line.strip()}")
+                    break
+            else:
+                print("   [OK] Storage oczyszczony")
+        else:
+            print(f"   [WARN] Cleanup: {result.stderr[:100]}")
+    except Exception as e:
+        print(f"   [WARN] Cleanup error: {e}")
+
+
 def main():
     print("\n" + "=" * 50)
     print("   KLIMTECHRAG STOP")
@@ -242,6 +294,9 @@ def main():
     kill_remaining_ports()
 
     time.sleep(1)
+
+    print("\nFaza 5: Czyszczenie Podman storage...")
+    cleanup_podman()
 
     cleanup_pid_files()
     check_ports()

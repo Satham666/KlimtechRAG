@@ -15,17 +15,31 @@ from typing import List, Optional
 
 import fitz
 
+from ..prompts.vlm_prompts import get_full_prompt, get_vlm_params
+
 logger = logging.getLogger("klimtechrag")
 
 def _find_vlm_model():
     import glob
-    base = os.environ.get("KLIMTECH_BASE_PATH","").strip() or "/media/lobo/BACKUP/KlimtechRAG"
     from pathlib import Path
-    h = Path.home() / "KlimtechRAG"
-    if h.exists(): base = str(h)
-    hits = glob.glob(os.path.join(base,"modele_LLM","model_video","*.gguf"))
-    hits = [f for f in hits if "mmproj" not in f]
-    return hits[0] if hits else ""
+    
+    paths_to_check = [
+        os.environ.get("KLIMTECH_BASE_PATH", "").strip(),
+        "/media/lobo/BACKUP/KlimtechRAG",
+        str(Path.home() / "KlimtechRAG"),
+    ]
+    
+    for base in paths_to_check:
+        if not base:
+            continue
+        if not os.path.exists(base):
+            continue
+        hits = glob.glob(os.path.join(base, "modele_LLM", "model_video", "*.gguf"))
+        hits = [f for f in hits if "mmproj" not in f]
+        if hits:
+            return hits[0]
+    
+    return ""
 VLM_MODEL = _find_vlm_model()
 LLAMA_SERVER_BIN = os.path.expanduser("~/KlimtechRAG/llama.cpp/build/bin/llama-server")
 LLAMA_CLI_BIN = os.path.expanduser("~/KlimtechRAG/llama.cpp/build/bin/llama-cli")
@@ -107,7 +121,7 @@ def extract_images_from_pdf(pdf_path: str, min_size: int = 100) -> List[Extracte
     return images
 
 
-def describe_image_with_vlm(image_path: str, prompt: str = None) -> str:
+def describe_image_with_vlm(image_path: str, prompt: str = None, image_type: str = "default") -> str:
     """Opisuje obraz używając VLM przez llama-cli."""
 
     if not os.path.exists(LLAMA_CLI_BIN):
@@ -119,11 +133,9 @@ def describe_image_with_vlm(image_path: str, prompt: str = None) -> str:
         return ""
 
     if prompt is None:
-        prompt = """Opisz szczegółowo ten obraz. 
-Jeśli to zdjęcie medyczne - opisz co widać, jakie procedury są wykonywane.
-Jeśli to diagram/algorytm - opisz kroki postępowania, decyzje do podjęcia.
-Jeśli to wykres - opisz dane i trendy.
-Odpowiadaj po polsku."""
+        prompt = get_full_prompt(image_type)
+
+    vlm_params = get_vlm_params()
 
     cmd = [
         LLAMA_CLI_BIN,
@@ -134,13 +146,13 @@ Odpowiadaj po polsku."""
         "-p",
         prompt,
         "-n",
-        "512",
+        str(vlm_params["max_tokens"]),
         "--temp",
-        "0.1",
+        str(vlm_params["temperature"]),
         "-ngl",
-        "99",
+        str(vlm_params["gpu_layers"]),
         "-c",
-        "4096",
+        str(vlm_params["context_length"]),
         "--no-display",
     ]
 
@@ -171,7 +183,7 @@ Odpowiadaj po polsku."""
 
 
 def describe_image_with_vlm_server(
-    image_data: bytes, prompt: str = None, vlm_url: str = None
+    image_data: bytes, prompt: str = None, vlm_url: str = None, image_type: str = "default"
 ) -> str:
     """Opisuje obraz używając VLM przez HTTP API (jeśli VLM server działa)."""
 
@@ -181,11 +193,9 @@ def describe_image_with_vlm_server(
         vlm_url = f"http://localhost:{VLM_PORT}/v1/chat/completions"
 
     if prompt is None:
-        prompt = """Opisz szczegółowo ten obraz. 
-Jeśli to zdjęcie medyczne - opisz co widać, jakie procedury są wykonywane.
-Jeśli to diagram/algorytm - opisz kroki postępowania, decyzje do podjęcia.
-Jeśli to wykres - opisz dane i trendy.
-Odpowiadaj po polsku."""
+        prompt = get_full_prompt(image_type)
+
+    vlm_params = get_vlm_params()
 
     image_base64 = base64.b64encode(image_data).decode("utf-8")
 
@@ -203,8 +213,8 @@ Odpowiadaj po polsku."""
                 ],
             }
         ],
-        "max_tokens": 512,
-        "temperature": 0.1,
+        "max_tokens": vlm_params["max_tokens"],
+        "temperature": vlm_params["temperature"],
     }
 
     try:
@@ -279,9 +289,9 @@ def process_pdf_with_images(
 
             try:
                 if use_vlm_server:
-                    desc = describe_image_with_vlm_server(img.image_data)
+                    desc = describe_image_with_vlm_server(img.image_data, image_type=img.image_type)
                 else:
-                    desc = describe_image_with_vlm(tmp_path)
+                    desc = describe_image_with_vlm(tmp_path, image_type=img.image_type)
 
                 img_info["description"] = desc
                 img.description = desc

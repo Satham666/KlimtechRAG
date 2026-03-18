@@ -28,7 +28,20 @@ HTTPS_NEXTCLOUD = "8444"
 HTTPS_N8N = "5679"
 HTTPS_QDRANT = "6334"
 
-CONTAINERS = ["qdrant", "nextcloud", "postgres_nextcloud", "n8n"]
+# Pod i kontenery
+POD_NAME = "klimtech"
+CONTAINERS_STANDALONE = ["qdrant", "n8n"]
+
+# Konfiguracja Podman
+BASE_PATH = BASE_DIR
+NEXTCLOUD_DATA_DIR = os.path.join(BASE_DIR, "data", "nextcloud")
+NEXTCLOUD_USER_DATA = os.path.join(BASE_DIR, "data", "nextcloud_data")
+
+# Dane dostępowe do bazy
+DB_NAME = "nextcloud"
+DB_USER = "nextcloud"
+DB_PASS = "klimtech123"
+
 PROCESSES = []
 
 
@@ -50,9 +63,111 @@ def get_ip(iface=INTERFACE):
 LOCAL_IP = get_ip()
 
 
-def start_containers(containers):
-    print("\n   Uruchamianie kontenerow Podman...")
-    for name in containers:
+def cleanup_podman():
+    """Czyści nieużywane obrazy i warstwy overlay."""
+    print("\n   Czyszczenie Podman storage...")
+    try:
+        result = subprocess.run(
+            ["podman", "system", "prune", "-a", "-f"],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0:
+            # Wyświetl ile zwolniono
+            for line in result.stderr.splitlines():
+                if "Total reclaimed space" in line:
+                    print(f"   [OK] {line.strip()}")
+                    break
+            else:
+                print("   [OK] Storage oczyszczony")
+        else:
+            print(f"   [WARN] Cleanup: {result.stderr[:100]}")
+    except Exception as e:
+        print(f"   [WARN] Cleanup error: {e}")
+
+
+def start_pod():
+    """Tworzy Pod i uruchamia w nim Nextcloud + PostgreSQL."""
+    print("\n   Tworzenie Pod 'klimtech'...")
+    
+    # Usuń stare kontenery (mogą istnieć z poprzednich sesji)
+    print("   Usuwanie starych kontenerów...")
+    subprocess.run(["podman", "rm", "-f", "postgres_nextcloud", "nextcloud"], capture_output=True)
+    
+    # Usuń stary pod jeśli istnieje
+    subprocess.run(["podman", "pod", "rm", "-f", POD_NAME], capture_output=True)
+    
+    # Utwórz nowy pod z mapowaniem portu 8081
+    result = subprocess.run(
+        ["podman", "pod", "create", "--name", POD_NAME, "-p", "8081:80"],
+        capture_output=True, text=True, timeout=30
+    )
+    if result.returncode == 0:
+        print(f"   [OK] Pod {POD_NAME} utworzony")
+    else:
+        print(f"   [FAIL] Pod: {result.stderr}")
+        return False
+    
+    # Utwórz katalogi dla Nextcloud
+    os.makedirs(NEXTCLOUD_DATA_DIR, exist_ok=True)
+    os.makedirs(NEXTCLOUD_USER_DATA, exist_ok=True)
+    
+    # Uruchom PostgreSQL w Pod
+    print("   Uruchamianie PostgreSQL w Pod...")
+    pg_result = subprocess.run([
+        "podman", "run", "-d",
+        "--name", "postgres_nextcloud",
+        "--pod", POD_NAME,
+        "-e", f"POSTGRES_DB={DB_NAME}",
+        "-e", f"POSTGRES_USER={DB_USER}",
+        "-e", f"POSTGRES_PASSWORD={DB_PASS}",
+        "-v", "klimtech_postgres_data:/var/lib/postgresql/data",
+        "docker.io/library/postgres:16"
+    ], capture_output=True, text=True, timeout=60)
+    
+    if pg_result.returncode == 0:
+        print("   [OK] PostgreSQL uruchomiony")
+    else:
+        print(f"   [FAIL] PostgreSQL: {pg_result.stderr[:100]}")
+        return False
+    
+    time.sleep(3)
+    
+    # Uruchom Nextcloud w Pod
+    print("   Uruchamianie Nextcloud w Pod...")
+    nc_result = subprocess.run([
+        "podman", "run", "-d",
+        "--name", "nextcloud",
+        "--pod", POD_NAME,
+        "-e", "POSTGRES_HOST=localhost",
+        "-e", f"POSTGRES_DB={DB_NAME}",
+        "-e", f"POSTGRES_USER={DB_USER}",
+        "-e", f"POSTGRES_PASSWORD={DB_PASS}",
+        "-e", "NEXTCLOUD_TRUSTED_DOMAINS=192.168.31.70 localhost 127.0.0.1",
+        "docker.io/library/nextcloud:32"
+    ], capture_output=True, text=True, timeout=60)
+    
+    if nc_result.returncode == 0:
+        print("   [OK] Nextcloud uruchomiony")
+    else:
+        print(f"   [FAIL] Nextcloud: {nc_result.stderr[:100]}")
+        return False
+    
+    print("   Czekam 15s na inicjalizację Nextcloud...")
+    time.sleep(15)
+    
+    return True
+
+
+def start_containers():
+    print("\n   Uruchamianie kontenerów Podman...")
+    
+    # Uruchom Pod z Nextcloud i PostgreSQL
+    pod_ok = start_pod()
+    if not pod_ok:
+        print("   [WARN] Pod nie został uruchomiony poprawnie")
+    
+    # Uruchom standalone kontenery
+    for name in CONTAINERS_STANDALONE:
         try:
             r = subprocess.run(
                 ["podman", "start", name], capture_output=True, text=True, timeout=30
@@ -239,11 +354,12 @@ def main():
     os.makedirs(os.path.join(BASE_DIR, "data", "uploads"), exist_ok=True)
 
     print("\n" + "=" * 65)
-    print("   KlimtechRAG v7.1 (HTTPS)")
+    print("   KlimtechRAG v7.4 (HTTPS)")
     print("=" * 65)
     print(f"   Baza: {BASE_DIR}   IP: {LOCAL_IP}")
 
-    start_containers(CONTAINERS)
+    cleanup_podman()  # Czyść stare overlay layers przed startem
+    start_containers()
     time.sleep(2)
 
     if not start_backend():

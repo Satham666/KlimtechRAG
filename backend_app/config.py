@@ -34,10 +34,7 @@ class Settings(BaseSettings):
     # --- Ścieżki bazowe ---
     base_path: str = BASE
     data_path: str = f"{BASE}/data"
-    upload_base: str = f"{BASE}/data/uploads"  # backup / lokalny upload
-    nextcloud_base: str = (  # ← GŁÓWNE MIEJSCE PLIKÓW
-        f"{BASE}/data/nextcloud/data/admin/files/RAG_Dane"
-    )
+    upload_base: str = f"{BASE}/data/uploads"  # JEDYNA ścieżka dla plików RAG
     file_registry_db: str = f"{BASE}/data/file_registry.db"
 
     # --- Nextcloud ---

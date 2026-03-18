@@ -41,6 +41,15 @@ def _hash_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _hash_file(file_path: str) -> str:
+    """Oblicza SHA-256 hash z zawartosci pliku."""
+    h = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 # ---------------------------------------------------------------------------
 # Mapowanie rozszerzeń → podfoldery Nextcloud / uploads
 # ---------------------------------------------------------------------------
@@ -172,17 +181,17 @@ def read_text_file(file_path: str, suffix: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Helpery Nextcloud
+# Helpery zapisu plików
 # ---------------------------------------------------------------------------
 
 
-def save_to_nextcloud(file_content: bytes, filename: str, ext: str) -> tuple[str, str]:
+def save_to_uploads(file_content: bytes, filename: str, ext: str) -> tuple[str, str]:
     """
-    Zapisuje plik do odpowiedniego podfolderu Nextcloud na podstawie rozszerzenia.
+    Zapisuje plik do odpowiedniego podfolderu na podstawie rozszerzenia.
     Zwraca (ścieżka_docelowa, nazwa_podfolderu).
     """
     subdir = EXT_TO_DIR.get(ext, "Doc_RAG")
-    target_dir = os.path.join(settings.nextcloud_base, subdir)
+    target_dir = os.path.join(settings.upload_base, subdir)
     os.makedirs(target_dir, exist_ok=True)
 
     target_path = os.path.join(target_dir, filename)
@@ -195,7 +204,7 @@ def save_to_nextcloud(file_content: bytes, filename: str, ext: str) -> tuple[str
     with open(target_path, "wb") as f:
         f.write(file_content)
 
-    logger.info("[NC] Zapisano: %s → %s", filename, target_path)
+    logger.info("[Upload] Zapisano: %s → %s", filename, target_path)
     return target_path, subdir
 
 
@@ -337,7 +346,7 @@ async def upload_file_to_rag(
             }
 
         # 1. Zapisz do Nextcloud
-        target_path, subdir = save_to_nextcloud(content, file.filename, ext)
+        target_path, subdir = save_to_uploads(content, file.filename, ext)
         register_file(target_path)
 
         # Zapisz hash do rejestru plikow
@@ -514,6 +523,41 @@ async def ingest_by_path(
             "filename": filename,
         }
 
+    # === SPRAWDZENIE HASHY - deduplikacja ===
+    content_hash = _hash_file(file_path)
+    existing_path = find_duplicate_by_hash(content_hash)
+    
+    if existing_path and existing_path != file_path:
+        return {
+            "message": "Plik o takim hash'u już istnieje w bazie",
+            "duplicate": True,
+            "existing_path": existing_path,
+            "filename": filename,
+            "chunks_processed": 0,
+        }
+    
+    if existing_path == file_path:
+        from ..file_registry import get_connection as _get_conn
+        with _get_conn() as _c:
+            row = _c.execute(
+                "SELECT status FROM files WHERE path = ?", (file_path,)
+            ).fetchone()
+            if row and row["status"] == "indexed":
+                return {
+                    "message": "Plik już zaindeksowany (taki sam hash)",
+                    "already_indexed": True,
+                    "filename": filename,
+                    "chunks_processed": 0,
+                }
+
+    # Zarejestruj plik jeśli nie istnieje
+    register_file(file_path, compute_hash=False)
+    with _get_registry_connection() as _c:
+        _c.execute(
+            "UPDATE files SET content_hash=? WHERE path=?", (content_hash, file_path)
+        )
+        _c.commit()
+
     # Sprawdzenie czy użytkownik wybrał ColPali
     embedding_model = _get_embedding_model(req)
     if embedding_model.lower().startswith("vidore/colpali"):
@@ -573,6 +617,47 @@ async def ingest_by_path(
         mark_failed(file_path, str(e)[:200])
         logger.exception("[ingest_path] Error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Endpoint /files/check — sprawdza status pliku w file_registry
+# ---------------------------------------------------------------------------
+
+
+@router.get("/files/check")
+async def check_file_status(path: str, req: Request):
+    """
+    Sprawdza status pliku w file_registry.
+    Używane przez n8n workflow do sprawdzania hashy przed indeksowaniem.
+    """
+    require_api_key(req)
+    
+    with _get_registry_connection() as conn:
+        row = conn.execute(
+            "SELECT path, filename, content_hash, status, indexed_at, chunks_count FROM files WHERE path = ?",
+            (path,)
+        ).fetchone()
+    
+    if not row:
+        return {
+            "exists": False,
+            "path": path,
+            "status": "not_registered",
+            "should_index": True,
+        }
+    
+    should_index = row["status"] not in ("indexed", "pending")
+    
+    return {
+        "exists": True,
+        "path": row["path"],
+        "filename": row["filename"],
+        "content_hash": row["content_hash"],
+        "status": row["status"],
+        "indexed_at": row["indexed_at"],
+        "chunks_count": row["chunks_count"],
+        "should_index": should_index,
+    }
 
 
 # ---------------------------------------------------------------------------

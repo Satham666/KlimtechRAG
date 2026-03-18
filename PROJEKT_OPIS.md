@@ -1,10 +1,14 @@
 # KlimtechRAG — Pełny opis projektu
 
-**Wersja:** v7.3  
-**Data:** 2026-03-18  
+⚠️ WAŻNE: Komendy z "sudo" są ZAWSZE wyświetlane dla użytkownika do ręcznego wykonania w osobnym terminalu. Model AI nie może wykonywać komend z sudo (brak hasła).
+
+**Wersja:** v7.5  
+**Data:** 2026-03-19 (noc)  
 **Repozytorium:** https://github.com/Satham666/KlimtechRAG  
 **Katalog serwera:** `/media/lobo/BACKUP/KlimtechRAG/`  
-**Katalog laptopa:** `~/KlimtechRAG`
+
+⚠️ UWAGA: Katalog `/home/lobo/KlimtechRAG/` został USUNIĘTY (2026-03-18)!
+Teraz istnieje TYLKO `/media/lobo/BACKUP/KlimtechRAG/`
 
 ---
 
@@ -225,12 +229,12 @@ Nextcloud Assistant (przeglądarka na :8081)
 │   │   └── ingest_colpali.py     # Batch ColPali ingest (Pipeline B)
 │   │
 │   ├── ingest/
-│   │   └── image_handler.py      # Ekstrakcja obrazów z PDF + VLM opisy (llama-cli)
+│   │   └── image_handler.py      # Ekstrakcja obrazów z PDF + VLM opisy
 │   │                             # UWAGA: hardcoded params — do refaktoryzacji (Sekcja 16)
 │   │
-│   ├── prompts/                  # PLANOWANE (Sekcja 16)
-│   │   ├── __init__.py           # ⏳ Do utworzenia
-│   │   └── vlm_prompts.py        # ⏳ Do utworzenia (8 wariantów promptów VLM)
+│   ├── prompts/                  # ✅ UTWORZONE (Sekcja 16 v7.3)
+│   │   ├── __init__.py           # ✅ DONE
+│   │   └── vlm_prompts.py        # ✅ DONE (8 wariantów promptów VLM)
 │   │
 │   └── static/
 │       └── index.html            # Główny UI (zawartość code.html + v7.3 GPU Dashboard)
@@ -553,19 +557,73 @@ podman exec -u www-data nextcloud php occ config:system:get allow_local_remote_s
 |---|-----------|---------|--------|----------|
 | 1 | 🔴 | VLM opis obrazów — brak mmproj w llama-cli | Nierozwiązane | — |
 | 2 | 🔴 | `ingest_gpu.py` zabija `start_klimtech.py` | Nierozwiązane | Używaj `start_backend_gpu.py` |
-| 3 | 🔴 | Nextcloud AI Assistant nie odpowiada (kod 417) | Nierozwiązane | Curl do backendu działa OK |
-| 4 | 🟡 | VRAM: Bielik-11B nie mieści się (inne procesy zajmują ~4.7 GB) | Obejście | Używamy Bielik-4.5B |
-| 5 | 🟡 | `monitoring.py` GPU utilization: 0% dla AMD | Kosmetyczny | rocm-smi w gpu_status.py |
-| 6 | 🟡 | `stop_klimtech.py` nie zabija wszystkich procesów | Do naprawy | Ręczny kill |
+| 3 | 🔴 | Nextcloud AI Assistant nie odpowiada (kod 417) | ✅ ROZWIĄZANE v7.5 | Named Volume (ext4) |
 
-### Problem 3: Nextcloud AI Assistant 417
+### Problem 3: Nextcloud AI Assistant 417 — ROZWIĄZANIE (v7.5)
 
-**Objawy:** Ciągłe zapytania `POST /check_generation` z kodem 417 (Expectation Failed).  
-**Diagnoza:** Backend działa poprawnie (curl OK), API key ustawiony, URL poprawny.  
-**Do wypróbowania:**
-1. Wyczyszczenie cache przeglądarki / tryb incognito
-2. Sprawdzenie providerów w panelu Admin → AI (czy "OpenAI and LocalAI integration" jest wybrany)
-3. Sprawdzenie logów Nextcloud: `podman logs nextcloud 2>&1 | tail -50`
+**Root cause (v7.4):** Próbowano mapować Nextcloud na exFAT - NIE DZIAŁAŁO!
+- exFAT ignoruje UID/GID Unix
+- www-data (UID 33) nie może pisać do katalogu owned przez "lobo" (UID 1000)
+- chmod 777 NIE POMAGA na exFAT
+- Mapowanie /var/www/html na exFAT powodowało brak plików Nextcloud (version.php missing)
+- Entrypoint NC nie instaluje plików gdy katalog nie jest pusty
+
+**Rozwiązanie v7.5: Named Volume dla WSZYSTKIEGO**
+
+| Component | Location | Filesystem |
+|-----------|---------|-----------|
+| Pod `klimtech_pod` | Wspólna sieć localhost | - |
+| PostgreSQL | W Pod, named volume `klimtech_postgres_data` | ext4 |
+| Nextcloud Data | W Pod, named volume `klimtech_nextcloud_data` | ext4 |
+| **Brak mapowania na exFAT** | - | - |
+
+**Architektura kontenerów v7.5:**
+```
+Pod 'klimtech_pod' (wspólna sieć localhost)
+├── nextcloud (port 8081)
+└── postgres_nextcloud (localhost:5432)
+
+Kontenery standalone:
+├── qdrant (6333)
+└── n8n (5678)
+```
+
+**KOMENDY URUCHOMIENIA (2026-03-19):**
+```bash
+# 1. Usuń starą konfigurację
+podman stop nextcloud postgres_nextcloud
+podman rm nextcloud postgres_nextcloud
+podman pod rm -f klimtech_pod
+rm -rf /media/lobo/BACKUP/KlimtechRAG/data/nextcloud
+
+# 2. Stwórz Pod
+podman pod create --name klimtech_pod -p 8081:80
+
+# 3. PostgreSQL
+podman run -d --name postgres_nextcloud --pod klimtech_pod --restart always \
+    -e POSTGRES_DB=nextcloud -e POSTGRES_USER=nextcloud -e POSTGRES_PASSWORD=klimtech123 \
+    -v klimtech_postgres_data:/var/lib/postgresql/data docker.io/library/postgres:16
+
+# 4. Nextcloud (Named Volume, NIE exFAT!)
+podman volume create klimtech_nextcloud_data
+podman run -d --name nextcloud --pod klimtech_pod --restart always \
+    -e POSTGRES_HOST="localhost" -e POSTGRES_DB=nextcloud \
+    -e POSTGRES_USER=nextcloud -e POSTGRES_PASSWORD=klimtech123 \
+    -e NEXTCLOUD_TRUSTED_DOMAINS="192.168.31.70 localhost" \
+    -e NEXTCLOUD_ADMIN_USER="admin" -e NEXTCLOUD_ADMIN_PASSWORD="klimtech123" \
+    -v klimtech_nextcloud_data:/var/www/html/data docker.io/library/nextcloud:32
+
+# 5. Konfiguracja (~45s po starcie)
+podman exec -u www-data nextcloud php occ app:install integration_openai
+podman exec -u www-data nextcloud php occ app:install assistant
+podman exec -u www-data nextcloud php occ config:system:set check_data_directory_permissions --value=false --type=boolean
+podman exec -u www-data nextcloud php occ config:system:set filelocking.enabled --value=false --type=boolean
+podman exec -u www-data nextcloud php occ config:system:set allow_local_remote_servers --value=true --type=boolean
+podman exec -u www-data nextcloud php occ config:system:set overwriteprotocol --value="https"
+podman exec -u www-data nextcloud php occ config:system:set overwritehost --value="192.168.31.70:8444"
+```
+
+**Login Nextcloud:** `admin` / `klimtech123`
 
 ---
 
@@ -577,20 +635,22 @@ podman exec -u www-data nextcloud php occ config:system:get allow_local_remote_s
 | v7.1 | 9 | Web Search panel (zakładka sidebar) |
 | v7.2 | 10 | Nextcloud AI Integration, n8n workflows |
 | v7.3 | 11 | New UI (code.html), GPU Dashboard, lazy loading (VRAM 14MB), RAG domyślnie OFF |
+| v7.4 | 12 | Hybrid Storage (PostgreSQL on ext4) + Podman Pod architecture (NIEDZIAŁAŁO!) |
+| v7.5 | 13 | Nextcloud Fix - Named Volume (ext4) zamiast exFAT |
 
 ---
 
-## 14. Planowane zmiany (Sekcja 16 — do wykonania)
+## 14. Planowane zmiany
 
-### Refaktoryzacja VLM Prompts (`backend_app/ingest/image_handler.py`)
+### Refaktoryzacja VLM Prompts (`backend_app/ingest/image_handler.py`) — ✅ WYKONANE v7.3
 
 | # | Co | Gdzie | Status |
 |---|-----|-------|--------|
-| 16a | Utwórz katalog `backend_app/prompts/` | — | ⏳ DO ZROBIENIA |
-| 16b | Utwórz `prompts/__init__.py` | — | ⏳ DO ZROBIENIA |
-| 16c | Utwórz `prompts/vlm_prompts.py` z 8 wariantami | — | ⏳ DO ZROBIENIA |
-| 16d | Refaktoryzuj `image_handler.py` — import promptów | `image_handler.py` | ⏳ DO ZROBIENIA |
-| 16e | Refaktoryzuj `image_handler.py` — dynamiczne params | `image_handler.py` | ⏳ DO ZROBIENIA |
+| 16a | Utwórz katalog `backend_app/prompts/` | — | ✅ DONE |
+| 16b | Utwórz `prompts/__init__.py` | — | ✅ DONE |
+| 16c | Utwórz `prompts/vlm_prompts.py` z 8 wariantami | — | ✅ DONE |
+| 16d | Refaktoryzuj `image_handler.py` — import promptów | `image_handler.py` | ✅ DONE |
+| 16e | Refaktoryzuj `image_handler.py` — dynamiczne params | `image_handler.py` | ✅ DONE |
 
 **8 wariantów promptów VLM:** DEFAULT, DIAGRAM, CHART, TABLE, PHOTO, SCREENSHOT, TECHNICAL, MEDICAL
 
@@ -604,4 +664,4 @@ podman exec -u www-data nextcloud php occ config:system:get allow_local_remote_s
 
 ---
 
-*Wygenerowano: 2026-03-18*
+*Wygenerowano: 2026-03-19*
