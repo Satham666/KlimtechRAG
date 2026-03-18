@@ -9,40 +9,25 @@ Endpoints:
 - POST /model/switch         - Przełącz na wybrany typ (?type=llm lub ?type=vlm)
 - GET  /model/list           - Lista dostępnych modeli
 """
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 
-# Import z services (przy założeniu że backend_app jest w PYTHONPATH)
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-try:
-    from services.model_manager import (
-        get_server_status,
-        switch_to_llm,
-        switch_to_vlm,
-        switch_model,
-        get_available_models,
-        get_models_config
-    )
-except ImportError:
-    # Fallback - bezpośredni import
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "model_manager", 
-        os.path.join(os.path.dirname(__file__), "..", "services", "model_manager.py")
-    )
-    model_manager = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(model_manager)
-    
-    get_server_status = model_manager.get_server_status
-    switch_to_llm = model_manager.switch_to_llm
-    switch_to_vlm = model_manager.switch_to_vlm
-    switch_model = model_manager.switch_model
-    get_available_models = model_manager.get_available_models
-    get_models_config = model_manager.get_models_config
+from ..services.model_manager import (
+    get_server_status,
+    switch_to_llm,
+    switch_to_vlm,
+    switch_model,
+    get_available_models,
+    get_models_config,
+    start_model_with_progress,
+    get_progress_lines,
+    stop_llm_server,
+    clear_progress_log,
+    _log,
+    LLAMA_PORT,
+)
 
 
 router = APIRouter(prefix="/model", tags=["Model Management"])
@@ -51,6 +36,7 @@ router = APIRouter(prefix="/model", tags=["Model Management"])
 # ---------------------------------------------------------------------------
 # MODELE PYDANTIC
 # ---------------------------------------------------------------------------
+
 
 class ModelStatus(BaseModel):
     running: bool
@@ -87,11 +73,12 @@ class ModelsList(BaseModel):
 # ENDPOINTS
 # ---------------------------------------------------------------------------
 
+
 @router.get("/status", response_model=ModelStatus)
 async def get_model_status():
     """
     Pobiera status aktualnego modelu.
-    
+
     Returns:
         - running: czy serwer działa
         - model_type: typ aktualnego modelu (llm/vlm/unknown)
@@ -101,11 +88,11 @@ async def get_model_status():
     """
     status = get_server_status()
     config = get_models_config()
-    
+
     if config:
         status["llm_model"] = config.get("llm_model")
         status["vlm_model"] = config.get("vlm_model")
-    
+
     return ModelStatus(**status)
 
 
@@ -113,7 +100,7 @@ async def get_model_status():
 async def api_switch_to_llm():
     """
     Przełącza na model LLM (do czatu).
-    
+
     Zabija obecny model, czeka na zwolnienie VRAM, uruchamia LLM.
     Czas operacji: ~20-25 sekund.
     """
@@ -125,7 +112,7 @@ async def api_switch_to_llm():
 async def api_switch_to_vlm():
     """
     Przełącza na model VLM (do obrazków).
-    
+
     Zabija obecny model, czeka na zwolnienie VRAM, uruchamia VLM.
     Czas operacji: ~20-25 sekund.
     """
@@ -134,14 +121,17 @@ async def api_switch_to_vlm():
 
 
 @router.post("/switch", response_model=SwitchResult)
-async def api_switch_model(model_type: str = Query(..., regex="^(llm|vlm)$", 
-                                                    description="Typ modelu: llm lub vlm")):
+async def api_switch_model(
+    model_type: str = Query(
+        ..., regex="^(llm|vlm)$", description="Typ modelu: llm lub vlm"
+    ),
+):
     """
     Przełącza na wybrany typ modelu.
-    
+
     Args:
         model_type: "llm" dla czatu, "vlm" dla obrazków
-    
+
     Czas operacji: ~20-25 sekund.
     """
     result = switch_model(model_type)
@@ -152,7 +142,7 @@ async def api_switch_model(model_type: str = Query(..., regex="^(llm|vlm)$",
 async def api_list_models():
     """
     Pobiera listę dostępnych modeli z katalogów.
-    
+
     Modele są kategoryzowane na podstawie katalogów:
     - model_thinking/ → LLM
     - model_video/ → VLM
@@ -178,6 +168,7 @@ async def api_get_config():
 # ENDPOINT HTML DLA UI
 # ---------------------------------------------------------------------------
 
+
 @router.get("/ui")
 async def model_switch_ui():
     """
@@ -185,7 +176,7 @@ async def model_switch_ui():
     """
     status = get_server_status()
     config = get_models_config() or {}
-    
+
     html = f"""
     <!DOCTYPE html>
     <html lang="pl">
@@ -332,15 +323,15 @@ async def model_switch_ui():
             <div class="card">
                 <div class="status">
                     <span class="status-label">Status serwera:</span>
-                    <span id="server-status" class="status-value {'llm' if status['model_type'] == 'llm' else 'vlm' if status['model_type'] == 'vlm' else 'stopped'}">
-                        {'LLM (Czat)' if status['model_type'] == 'llm' else 'VLM (Vision)' if status['model_type'] == 'vlm' else 'Zatrzymany'}
+                    <span id="server-status" class="status-value {"llm" if status["model_type"] == "llm" else "vlm" if status["model_type"] == "vlm" else "stopped"}">
+                        {"LLM (Czat)" if status["model_type"] == "llm" else "VLM (Vision)" if status["model_type"] == "vlm" else "Zatrzymany"}
                     </span>
                 </div>
                 
                 <div class="status">
                     <span class="status-label">Aktualny model:</span>
                     <span id="current-model" class="status-value">
-                        {status.get('model_type', 'brak').upper()}
+                        {status.get("model_type", "brak").upper()}
                     </span>
                 </div>
                 
@@ -368,11 +359,11 @@ async def model_switch_ui():
                 <h3>📚 Skonfigurowane modele</h3>
                 <div class="model-item">
                     <span class="model-name">💬 LLM:</span>
-                    <span class="model-size">{config.get('llm_model', 'brak').split('/')[-1] if config.get('llm_model') else 'brak'}</span>
+                    <span class="model-size">{config.get("llm_model", "brak").split("/")[-1] if config.get("llm_model") else "brak"}</span>
                 </div>
                 <div class="model-item">
                     <span class="model-name">📷 VLM:</span>
-                    <span class="model-size">{config.get('vlm_model', 'brak').split('/')[-1] if config.get('vlm_model') else 'brak'}</span>
+                    <span class="model-size">{config.get("vlm_model", "brak").split("/")[-1] if config.get("vlm_model") else "brak"}</span>
                 </div>
             </div>
         </div>
@@ -451,8 +442,9 @@ async def model_switch_ui():
     </body>
     </html>
     """
-    
+
     from fastapi.responses import HTMLResponse
+
     return HTMLResponse(content=html)
 
 
@@ -460,47 +452,39 @@ async def model_switch_ui():
 
 from pydantic import BaseModel as _BM
 
+
 class StartModelRequest(_BM):
     model_path: str
-    model_type: str = "llm"   # "llm" | "vlm"
+    model_type: str = "llm"  # "llm" | "vlm"
+
 
 @router.post("/start")
 async def start_model(req: StartModelRequest):
     """
     Uruchamia llama-server dla podanego modelu w tle.
-    Postęp logowany do llm_progress.log — pobieraj przez /model/progress-log
+    Postep logowany do llm_progress.log — pobieraj przez /model/progress-log
     """
-    try:
-        from services.model_manager import start_model_with_progress, LLAMA_PORT
-    except ImportError:
-        from ..services.model_manager import start_model_with_progress, LLAMA_PORT
     result = start_model_with_progress(req.model_path, req.model_type, LLAMA_PORT)
     return result
+
 
 @router.get("/progress-log")
 async def progress_log(since: int = 0):
     """
     Zwraca linie progress logu od indeksu `since`.
-    Użyj do pollingu z UI (co 500ms).
+    Uzyj do pollingu z UI (co 500ms).
     """
-    try:
-        from services.model_manager import get_progress_lines, get_server_status
-    except ImportError:
-        from ..services.model_manager import get_progress_lines, get_server_status
     data = get_progress_lines(since)
     status = get_server_status()
     data["server_running"] = status.get("running", False)
     return data
 
+
 @router.post("/stop")
 async def stop_model():
-    """Zatrzymuje aktualnie działający serwer LLM/VLM."""
-    try:
-        from services.model_manager import stop_llm_server, clear_progress_log, _log
-    except ImportError:
-        from ..services.model_manager import stop_llm_server, clear_progress_log, _log
+    """Zatrzymuje aktualnie dzialajacy serwer LLM/VLM."""
     clear_progress_log()
-    _log("🛑 Zatrzymywanie serwera LLM/VLM...")
+    _log("Zatrzymywanie serwera LLM/VLM...")
     result = stop_llm_server()
-    _log("✅ VRAM zwolniony")
+    _log("VRAM zwolniony")
     return result

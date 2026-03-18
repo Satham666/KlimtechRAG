@@ -16,7 +16,7 @@ class ChatCompletionRequest(BaseModel):
     temperature: float = 0.7
     max_tokens: int = 2048
     stream: bool = False
-    use_rag: bool = True
+    use_rag: bool = False
     top_k: int = 5
     web_search: bool = False
 

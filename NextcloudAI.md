@@ -42,8 +42,9 @@
 | --alias llama-server | ✅ GOTOWE | klimtech-bielik |
 | Model parametr calculation | ✅ GOTOWE | Obliczanie parametrów przez model_parametr.py |
 | **Nextcloud AI Assistant** | ⚠️ PROBLEM | Nie odpowiada - wymaga debugowania |
-| Whisper STT | ⏳ DO ZROBIENIA | Brak endpoint + model |
-| VRAM management | ⏳ DO ZROBIENIA | Brak dedykowanego API |
+| Whisper STT | ✅ GOTOWE | Endpoint `/v1/audio/transcriptions` + openai-whisper |
+| VRAM management | ✅ GOTOWE | Lazy loading - VRAM 14MB na starcie |
+| **New UI (code.html)** | ✅ GOTOWE v7.3 | GPU Dashboard, Model Selection, RAG toggle |
 
 ---
 
@@ -63,20 +64,27 @@ Trzy pipeline'y do przetwarzania różnych typów dokumentów:
 
 ---
 
-## Architektura VRAM (16 GB GPU)
+## Architektura VRAM (16 GB GPU) — v7.3 LAZY LOADING
 
 Kluczowe ograniczenie: na GPU zmieści się tylko **jeden duży model** naraz.
 
+**v7.3 ZMIANA:** Lazy loading embedding - VRAM na starcie backendu to tylko **14 MB**! Embedding ładuje się dopiero gdy użytkownik kliknie "Indeksuj pliki w RAG".
+
 | Model | VRAM | Rola |
 |-------|------|------|
-| Bielik-11B Q8_0 | ~14 GB | Główny LLM (RAG, czat) |
-| Bielik-4.5B Q8_0 | ~4.8 GB | Mini LLM (proste zadania Nextcloud) |
-| e5-large (embedding tekstu) | ~2.5 GB GPU / CPU | Embedding tekstu (domyślnie CPU) |
+| Na starcie (v7.3) | **14 MB** | Tylko backend + Qdrant client |
+| Bielik-11B Q8_0 | ~14 GB | Główny LLM (RAG, czat) - do uruchomienia ręcznie |
+| Bielik-4.5B Q8_0 | ~4.8 GB | Mini LLM (proste zadania) - do uruchomienia ręcznie |
+| e5-large (embedding tekstu) | ~2.5 GB | Embedding tekstu (tylko przy użyciu RAG!) |
 | ColPali v1.3 (embedding dokumentów) | ~6-8 GB | Embedding wizualny PDF — dokumenty mieszane |
 | Qwen2.5-VL-7B Q4 | ~4.7 GB | VLM opisy obrazów ze skanów PDF |
 | LFM2.5-VL-1.6B | ~3.2 GB | Lekki VLM do obrazów |
 
-**Strategia:** Przełączanie VRAM przez n8n — jeden model na GPU naraz. n8n workflow decyduje który model załadować w zależności od zadania (RAG chat vs indeksowanie tekstu vs ColPali dokumenty vs VLM).
+**Strategia v7.3:** 
+- Nic nie startuje automatycznie - **użytkownik wybiera model z dropdown w UI**
+- Czat bez RAG: idzie prosto do llama-server (14 MB VRAM)
+- Czat z RAG: najpierw ładuje embedding (~2.5 GB), potem retrieval
+- Przełączanie modeli: "Uruchom model" / "Zatrzymaj model" w UI
 
 **Ścieżki modeli (do użycia w n8n i skryptach):**
 
@@ -547,10 +555,11 @@ def require_api_key(request: Request):
 
 ```bash
 # Aktywacja venv projektu
-source /media/lobo/BACKUP/KlimtechRAG/venv/bin/activate
+cd /media/lobo/BACKUP/KlimtechRAG
+source venv/bin/activate.fish
 
-# Instalacja Whisper
-pip install -U openai-whisper
+# Zainstalowany openai-whisper - sprawdzamy
+python3 -c "import whisper; print(whisper.available_models())"
 
 # Wymagane: ffmpeg (prawdopodobnie już zainstalowany)
 sudo apt install ffmpeg
@@ -558,11 +567,15 @@ sudo apt install ffmpeg
 
 **Weryfikacja:**
 ```bash
+cd /media/lobo/BACKUP/KlimtechRAG
+source venv/bin/activate.fish
 python3 -c "import whisper; print(whisper.available_models())"
 # Oczekiwany wynik: ['tiny.en', 'tiny', 'base.en', 'base', 'small.en', 'small', 'medium.en', 'medium', 'large-v1', 'large-v2', 'large-v3', 'large', 'turbo']
 ```
 
 ### B.4 Nowy endpoint: `/v1/audio/transcriptions`
+
+**Status:** ✅ GOTOWE (plik: `backend_app/routes/whisper_stt.py`)
 
 **Cel:** Endpoint OpenAI-compatible do transkrypcji audio. Nextcloud `integration_openai` używa tego endpointu dla Speech-to-text task.
 
@@ -712,12 +725,29 @@ W `modele_LLM/model_audio/` istnieje już `LFM2.5-Audio-1.5B` (~2.2 GB) — mode
 14. [ ] Przetestować pełny cykl: upload pliku -> auto-index -> czat
 
 ### Faza 4: Whisper Speech-to-Text
-15. [ ] Zainstalować openai-whisper + ffmpeg w venv
-16. [ ] Utworzyć endpoint `/v1/audio/transcriptions` (whisper_stt.py)
-17. [ ] Zarejestrować router w main.py
+15. [x] Zainstalować openai-whisper + ffmpeg w venv
+16. [x] Utworzyć endpoint `/v1/audio/transcriptions` (whisper_stt.py)
+17. [x] Zarejestrować router w main.py
 18. [ ] Przetestować transkrypcję curlem
 19. [ ] Zmapować Speech-to-text w Nextcloud Assistant
 20. [ ] Rozszerzyć watchdog/n8n o auto-transkrypcję audio
+
+### Faza 6: New UI v7.3 (code.html) — GPU Dashboard + Lazy Loading ✅ DONE
+| # | Opis | Status |
+|---|------|--------|
+| 1 | Nowy plik `backend_app/routes/gpu_status.py` — endpoint `/gpu/status` | ✅ DONE |
+| 2 | Rejestracja `gpu_router` w `main.py` | ✅ DONE |
+| 3 | Zamiana `index.html` na `code.html` + podłączenie wszystkich funkcji JS | ✅ DONE |
+| 4 | Lazy loading embedding — VRAM spada z 4.5 GB do 14 MB na starcie | ✅ DONE |
+| 5 | Fix: `_detect_base()` — zwracał zły path (`/home/lobo` zamiast `/media/lobo/BACKUP`) | ✅ DONE |
+| 6 | Fix: `use_rag` domyślnie `False` — czat nie dławi się RAG | ✅ DONE |
+| 7 | UI: dodano `use_rag: true` gdy włączony tryb Web (globe) | ✅ DONE |
+
+**Wyniki v7.3:**
+- VRAM na starcie: **14 MB** (było 4.5 GB!)
+- Modele w dropdown: **4 LLM, 5 VLM, 2 Audio, 3 Embedding** (było puste)
+- Czat: działa bez RAG, RAG włączany ręcznie przyciskiem globe
+- GPU Dashboard: temp, VRAM, use — aktualizacja co 2 sekundy
 
 ### Faza 5: Opcjonalne ulepszenia
 21. [ ] Skrypt `scripts/setup_nextcloud_ai.sh`
@@ -797,13 +827,22 @@ W `modele_LLM/model_audio/` istnieje już `LFM2.5-Audio-1.5B` (~2.2 GB) — mode
 5. Dodano weryfikację /health po starcie backendu
 
 ### Dane dostępowe:
-- **URL Nextcloud:** http://192.168.31.70:8081
+- **URL Nextcloud:** http://192.168.31.70:8081 / https://192.168.31.70:8444
+- **URL Backend + UI:** https://192.168.31.70:8443 (nginx HTTPS!)
 - **URL Backend:** http://192.168.31.70:8000
 - **Login:** admin
-- **Hasło:** admin123
-- **Model:** klimtech-bielik (Bielik-4.5B)
+- **Hasło:** klimtech123
+- **Model domyślny:** klimtech-bielik (Bielik-4.5B)
+
+### v7.3 WAŻNE ZMIANY:
+1. **UI dostępne na HTTPS** — https://192.168.31.70:8443
+2. **VRAM na starcie: 14 MB** — lazy loading embedding (było 4.5 GB!)
+3. **Czat NIE używa RAG domyślnie** — idzie prosto do llama-server
+4. **RAG włączany ręcznie** — kliknij globe (🌐) w input bar
+5. **Wybór modelu z dropdown** — LLM, VLM, Audio, Embedding
+6. **GPU Dashboard** — temp, VRAM, use — aktualizacja co 2 sekundy
 
 ---
 
 *Plan utworzony: 2026-03-15*
-*Zaktualizowany: 2026-03-16 — dodano problemy i uwagi z wdrażania*
+*Zaktualizowany: 2026-03-18 — v7.3: New UI + Lazy Loading + GPU Dashboard*

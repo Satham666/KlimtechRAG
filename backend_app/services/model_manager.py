@@ -11,6 +11,7 @@ Funkcje:
 import subprocess
 import os
 import json
+import sys
 import time
 import glob
 from typing import Optional, Dict, Any
@@ -18,7 +19,6 @@ from typing import Optional, Dict, Any
 try:
     from ..config import settings
 except ImportError:
-    import sys
     from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -38,6 +38,10 @@ def _detect_base():
     env = os.environ.get("KLIMTECH_BASE_PATH", "").strip()
     if env and Path(env).exists():
         return env
+    # Preferuj /media/lobo/BACKUP/KlimtechRAG (tam sa modele GGUF)
+    backup = Path("/media/lobo/BACKUP/KlimtechRAG")
+    if backup.exists():
+        return str(backup)
     h = Path.home() / "KlimtechRAG"
     if h.exists():
         return str(h)

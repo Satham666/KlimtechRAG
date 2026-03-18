@@ -1,13 +1,14 @@
 # KlimtechRAG — Podsumowanie Projektu
 
-**Data aktualizacji:** 2026-03-16  
-**Wersja systemu:** v7.2 (Web Search + Dual Model + Nextcloud AI)  
+**Data aktualizacji:** 2026-03-18  
+**Wersja systemu:** v7.3 (New UI + Lazy Loading + GPU Dashboard)  
 **Repozytorium:** https://github.com/Satham666/KlimtechRAG  
 **Katalog serwera:** `/media/lobo/BACKUP/KlimtechRAG/`  
 **Katalog laptopa:** `~/KlimtechRAG`
 
 ---
 
+> **Nowe w v7.3:** Nowy UI (code.html) z GPU dashboard, lazy loading embedding - VRAM 14MB na starcie (było 4.5GB), RAG domyślnie wyłączony - czat działa bez dławienia.
 > **Nowe w v7.2:** Integracja Nextcloud AI Assistant (integration_openai → KlimtechRAG backend), workflow n8n (auto-indeksowanie + zarządzanie VRAM), dostosowanie `/v1/chat/completions` pod Nextcloud.  
 > **Nowe w v7.1:** Panel Web Search jako druga zakładka w sidebarzie (obok RAG), tryb hybrydowy RAG+Web, podgląd stron, podsumowanie przez LLM.
 
@@ -32,14 +33,15 @@
 
 ## 2. Architektura systemu
 
-### Diagram architektury (v7.2 — z Nextcloud AI)
+### Diagram architektury (v7.3 — New UI + Lazy Loading)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         UŻYTKOWNICY                                      │
 │         ↓                    ↓                    ↓                       │
-│  http://..:8000              http://..:8081        http://..:5678         │
-│  (KlimtechRAG UI)           (Nextcloud + AI)     (n8n workflows)         │
+│  https://..:8443          http://..:8081        http://..:5678         │
+│  (KlimtechRAG UI)         (Nextcloud + AI)     (n8n workflows)         │
+│  New UI + GPU Dashboard   + Assistant          + VRAM Management       │
 └──────────┬──────────────────────────┬───────────────────────┬────────────┘
            │                          │                       │
            │ Chat / Upload            │ Chat / Summarize      │ Trigger
@@ -49,6 +51,7 @@
 │  FastAPI                                                                    │
 │  ├── /v1/chat/completions  ← OWUI + Nextcloud Assistant + n8n              │
 │  ├── /v1/models            ← OWUI + Nextcloud (lista modeli)               │
+│  ├── /gpu/status           ← GPU Dashboard (v7.3 NEW!)                    │
 │  ├── /v1/embeddings        ← OWUI RAG (Wariant C)                         │
 │  ├── /upload, /ingest_path ← upload plików                                 │
 │  ├── /web/search,fetch,summarize ← Web Search panel                        │
@@ -60,10 +63,13 @@
 ┌──────────────────┐  ┌─────────────────┐  ┌──────────────────────────────────┐
 │ llama.cpp-server │  │ Qdrant (6333)   │  │ Nextcloud (8081)                 │
 │ (port 8082)      │  │ klimtech_docs   │  │ + integration_openai (app)       │
-│ Bielik-11B Q8_0  │  │ 5114+ punktów   │  │ + assistant (app)                │
-│ ~14GB VRAM       │  │ klimtech_colpali│  │ → Service URL: http://..:8000    │
+│ Bielik-4.5B/11B  │  │ 10k+ punktów   │  │ + assistant (app)                │
+│ VRAM: 4-14 GB    │  │ klimtech_colpali│  │ → Service URL: http://..:8000    │
 └──────────────────┘  └─────────────────┘  └──────────────────────────────────┘
 ```
+
+**v7.3 ZMIANA:** VRAM na starcie: **14 MB** (było 4.5 GB) — lazy loading embedding!
+**v7.3 ZMIANA:** RAG domyślnie OFF — czat idzie prosto do llama-server
 
 ### Data Flow — Nextcloud AI Assistant (NOWE v7.2)
 
@@ -110,7 +116,7 @@ Pytanie ──► Embedding ──► Retrieval (top_k=10) ──► Prompt Buil
 | **LLM/VLM** | llama.cpp-server | Port 8082 |
 | **Wektorowa baza** | Qdrant (Podman) | Port 6333 |
 | **Kontenery** | Podman | qdrant, nextcloud, postgres_nextcloud, n8n |
-| **UI** | HTML/JS + Bootstrap | `backend_app/static/index.html` |
+| **UI** | HTML/JS + Tailwind | `backend_app/static/index.html` (v7.3 NEW - code.html) |
 | **Nextcloud AI** | integration_openai + assistant | Port 8081 → backend :8000 (NOWE) |
 | **Automatyzacja** | n8n | Port 5678 (NOWE) |
 | **Sync** | Git → GitHub | laptop → push, serwer → pull |
@@ -173,6 +179,7 @@ backend_app/
 | Grupa | Endpointy | Opis |
 |-------|-----------|------|
 | Chat & RAG (8) | `/v1/models`, `/v1/embeddings`, `/v1/chat/completions`, `/query`, `/code_query`, `/rag/debug`, `/` | Główne AI |
+| GPU (1) | `/gpu/status` | GPU Dashboard (temp, VRAM, use) - v7.3 NEW |
 | Ingest (6) | `/upload`, `/ingest`, `/ingest_path`, `/ingest_all`, `/ingest_pdf_vlm`, `/vlm/status` | Indeksowanie |
 | Model (10) | `/model/status`, `/model/switch/*`, `/model/list`, `/model/start`, `/model/stop` itd. | Zarządzanie LLM |
 | Admin (8) | `/health`, `/metrics`, `/documents`, `/ws/health`, `/files/*` | Monitoring |
@@ -221,17 +228,6 @@ LLAMA_API_PORT=8082
 
 ---
 
-## 8. Wydajność
-
-| Operacja | CPU | GPU | Przysp. |
-|----------|-----|-----|---------|
-| Embedding batch | ~18s | ~1.4s | 13× |
-| PDF 20MB | ~15 min | ~13s | ~70× |
-
-VRAM: Bielik-11B ~14GB, e5-large ~2.5GB, ColPali ~6-8GB — tylko jeden naraz na 16GB.
-
----
-
 ## 9. Historia sesji
 
 - Sesja 1–3: Diagnoza, refaktoryzacja, GPU embedding
@@ -239,6 +235,7 @@ VRAM: Bielik-11B ~14GB, e5-large ~2.5GB, ColPali ~6-8GB — tylko jeden naraz na
 - Sesja 7–8: ColPali, ROCm, v7.0
 - Sesja 9: Web Search (v7.1)
 - **Sesja 10: Nextcloud AI Integration (v7.2)** ⭐
+- **Sesja 11: New UI + Lazy Loading + GPU Dashboard (v7.3)** ⭐
 
 ---
 
@@ -372,11 +369,59 @@ Flaga `--alias "Bielik-11b"` → czysta nazwa w `/v1/models` (zamiast ścieżki 
 
 ## 14. Komendy operacyjne
 
-```bash
-# Aktywacja venv
-source /media/lobo/BACKUP/KlimtechRAG/venv/bin/activate
+### KRYTYCZNE: Aktywacja venv i katalog roboczy
 
-# Sync: laptop → GitHub → serwer
+**Przed uruchomieniem JAKIEGOKOLWIEK pliku `.py` z projektu, ZAWSZE wykonaj:**
+
+```bash
+cd /media/lobo/BACKUP/KlimtechRAG
+source venv/bin/activate.fish
+```
+
+**Dlaczego to jest wymagane:**
+- Wszystkie zależności Python (FastAPI, Haystack, sentence-transformers, qdrant-client, docling, watchdog, openai-whisper, itp.) zainstalowane sa TYLKO w venv
+- Skrypty backendu korzystaja z relatywnych importow (`from backend_app.config import settings`) -- wymagaja uruchomienia z katalogu `/media/lobo/BACKUP/KlimtechRAG/`
+- `llama.cpp` jest skompilowany specjalnie pod karte AMD Instinct 16 GB (ROCm/HIP) -- nie instalowac z pip, binarka jest w `llama.cpp/build/bin/llama-server`
+- Brakujace biblioteki Python3 instalujemy na biezaco: `pip install <nazwa>` (wewnatrz aktywnego venv)
+
+**Przykladowe uruchomienia:**
+
+```bash
+# Start calego systemu
+cd /media/lobo/BACKUP/KlimtechRAG
+source venv/bin/activate.fish
+python3 start_klimtech_v3.py
+
+# Stop calego systemu
+cd /media/lobo/BACKUP/KlimtechRAG
+source venv/bin/activate.fish
+python3 stop_klimtech.py
+
+# Tryb GPU ingest (ladowanie plikow)
+cd /media/lobo/BACKUP/KlimtechRAG
+source venv/bin/activate.fish
+python3 start_backend_gpu.py
+
+# Watchdog (monitorowanie plikow Nextcloud)
+cd /media/lobo/BACKUP/KlimtechRAG
+source venv/bin/activate.fish
+python3 -m backend_app.scripts.watch_nextcloud
+
+# ColPali ingest
+cd /media/lobo/BACKUP/KlimtechRAG
+source venv/bin/activate.fish
+python3 -m backend_app.scripts.ingest_colpali --dir data/uploads/pdf_RAG
+
+# Obliczanie parametrow modelu
+cd /media/lobo/BACKUP/KlimtechRAG
+source venv/bin/activate.fish
+python3 -m backend_app.scripts.model_parametr <sciezka_do_modelu.gguf>
+```
+
+### Standardowe komendy
+
+```bash
+# Sync: laptop -> GitHub -> serwer
 git add -A && git commit -m "Sync" -a || true && git push --force  # laptop
 git pull                                                            # serwer
 
@@ -385,27 +430,32 @@ curl http://192.168.31.70:8000/health
 curl http://192.168.31.70:8000/v1/models
 curl http://192.168.31.70:8000/rag/debug
 curl http://192.168.31.70:8000/web/status
-
-# ColPali
-pkill -f llama-server
-python3 -m backend_app.scripts.ingest_colpali --dir data/uploads/pdf_RAG
 ```
 
 ---
 
 ## 15. Adresy sieciowe
 
-| Usługa | Adres |
-|--------|-------|
-| 🔧 API Backend | http://192.168.31.70:8000 |
-| 📦 Qdrant | http://192.168.31.70:6333 |
-| ☁️ Nextcloud + AI | http://192.168.31.70:8081 |
-| 🔗 n8n | http://192.168.31.70:5678 |
-| 🤖 LLM/VLM | http://192.168.31.70:8082 |
+### HTTP (oryginalne porty)
+
+| Usluga | HTTP | HTTPS (nginx) |
+|--------|------|---------------|
+| API Backend + UI | http://192.168.31.70:8000 | https://192.168.31.70:8443 |
+| Qdrant | http://192.168.31.70:6333 | https://192.168.31.70:6334 |
+| Nextcloud + AI | http://192.168.31.70:8081 | https://192.168.31.70:8444 |
+| n8n | http://192.168.31.70:5678 | https://192.168.31.70:5679 |
+| LLM/VLM | http://192.168.31.70:8082 | (brak) |
+
+**v7.3 NOWE:** UI dostępne na https://192.168.31.70:8443 (nginx reverse proxy)
+
+**Uwaga:** HTTPS wymaga akceptacji certyfikatu self-signed w przegladarce. W curl uzywaj `-k`:
+```bash
+curl -k https://192.168.31.70:8443/health
+```
 
 ---
 
-## Znane problemy (2026-03-16)
+## Znane problemy (2026-03-18)
 
 ### 1. Nextcloud AI Assistant nie odpowiada
 - **Status:** ❌ NIEROZWIĄZANY
@@ -413,11 +463,6 @@ python3 -m backend_app.scripts.ingest_colpali --dir data/uploads/pdf_RAG
 - **Diagnoza:** Backend działa, curl działa, ale Asystent NC nie odbiera odpowiedzi
 - **Do wypróbowania:** Wyczyścić cache przeglądarki, tryb incognito
 
-### 2. VRAM - Bielik-11B
-- **Status:** ⚠️ OBEJŚCIE
-- **Problem:** ~4.7GB VRAM zajęte, Bielik-11B nie mieści się
-- **Rozwiązanie:** Używamy Bielik-4.5B (~5GB VRAM)
-
 ---
 
-*Ostatnia aktualizacja: 2026-03-16 — v7.2: Integracja Nextcloud AI, porty zaktualizowane (8443→8081), problemy z Assistant*
+*Ostatnia aktualizacja: 2026-03-18 — v7.3: New UI (code.html), GPU Dashboard, lazy loading (VRAM 14MB), RAG domyślnie OFF*

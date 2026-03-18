@@ -2,7 +2,6 @@ import os
 import logging
 import time
 
-from sentence_transformers import SentenceTransformer
 from haystack_integrations.document_stores.qdrant import QdrantDocumentStore
 import requests
 
@@ -13,14 +12,30 @@ logger = logging.getLogger("klimtechrag")
 os.environ["OPENAI_BASE_URL"] = str(settings.llm_base_url)
 os.environ["OPENAI_API_KEY"] = settings.llm_api_key
 
+# Znane wymiary embeddingu dla popularnych modeli (bez ladowania na GPU)
+KNOWN_EMBEDDING_DIMS = {
+    "intfloat/multilingual-e5-large": 1024,
+    "intfloat/multilingual-e5-base": 768,
+    "sentence-transformers/paraphrase-multilingual-mpnet-base-v2": 768,
+    "BAAI/bge-m3": 1024,
+}
+
 
 def get_embedding_dimension(model_name: str) -> int:
+    """Zwraca wymiar embeddingu — najpierw z cache, potem z modelu."""
+    if model_name in KNOWN_EMBEDDING_DIMS:
+        dim = KNOWN_EMBEDDING_DIMS[model_name]
+        logger.info("Embedding dimension (cached): %s -> %d", model_name, dim)
+        return dim
+    # Fallback — zaladuj model (wolne, ale poprawne)
     try:
+        from sentence_transformers import SentenceTransformer
         model = SentenceTransformer(model_name)
         dim = model.get_sentence_embedding_dimension()
         if dim is None:
             dim = 1024
         logger.info("Model %s - embedding dimension: %d", model_name, dim)
+        del model  # zwolnij pamiec
         return dim
     except Exception as e:
         logger.warning("Cannot detect embedding dimension, using default 1024: %s", e)

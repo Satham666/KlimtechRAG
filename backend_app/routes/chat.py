@@ -17,7 +17,7 @@ from ..models import (
     QueryRequest,
     CodeQueryRequest,
 )
-from ..services import rag_pipeline, doc_store, text_embedder
+from ..services import get_rag_pipeline, doc_store, get_text_embedder
 from ..services.llm import get_llm_component
 from ..utils.rate_limit import apply_rate_limit, get_client_id
 from ..utils.dependencies import require_api_key, get_request_id
@@ -132,7 +132,7 @@ async def create_embeddings(body: dict, req: Request):
     embeddings = []
     for i, text in enumerate(inputs):
         try:
-            result = text_embedder.run(text=str(text))
+            result = get_text_embedder().run(text=str(text))
             embedding = result["embedding"]
             embeddings.append(
                 {
@@ -176,7 +176,7 @@ async def query_rag(
         return {"answer": cached, "cached": True}
 
     try:
-        rag_result = rag_pipeline.run(
+        rag_result = get_rag_pipeline().run(
             {
                 "embedder": {"text": request.query},
                 "prompt_builder": {"query": request.query},
@@ -301,7 +301,7 @@ async def openai_chat_completions(
                     QdrantEmbeddingRetriever,
                 )
 
-                query_embedding = text_embedder.run(text=user_message)
+                query_embedding = get_text_embedder().run(text=user_message)
                 retriever = QdrantEmbeddingRetriever(
                     document_store=doc_store, top_k=request.top_k
                 )
@@ -408,7 +408,7 @@ async def query_code_agent(
     apply_rate_limit(get_client_id(req))
 
     try:
-        rag_result = rag_pipeline.run(
+        rag_result = get_rag_pipeline().run(
             {
                 "embedder": {"text": request.query},
                 "prompt_builder": {"query": request.query},
@@ -481,7 +481,7 @@ async def rag_debug(query: str = "test"):
 
     # Test retrieval
     try:
-        embedding_result = text_embedder.run(text=query)
+        embedding_result = get_text_embedder().run(text=query)
         retriever = QdrantEmbeddingRetriever(document_store=doc_store, top_k=3)
         retrieval_result = retriever.run(query_embedding=embedding_result["embedding"])
         docs = retrieval_result.get("documents", [])

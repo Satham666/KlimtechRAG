@@ -1,7 +1,8 @@
 import logging
 import os
 import time
-from .routes import model_switch
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,8 +14,11 @@ from .routes import (
     filesystem_router,
     admin_router,
     ui_router,
+    model_switch_router,
     web_search_router,
 )
+from .routes.whisper_stt import router as whisper_router
+from .routes.gpu_status import router as gpu_router
 
 from .services import doc_store
 from .file_registry import init_db as init_file_registry
@@ -46,7 +50,21 @@ class RequestIdFilter(logging.Filter):
 
 logger.addFilter(RequestIdFilter())
 
-app = FastAPI()
+
+# ---------------------------------------------------------------------------
+# Lifespan — zastepuje deprecated @app.on_event("startup")
+# ---------------------------------------------------------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- startup ---
+    init_file_registry()
+    logger.info("File registry initialized")
+    yield
+    # --- shutdown ---
+    logger.info("KlimtechRAG Backend shutting down")
+
+
+app = FastAPI(lifespan=lifespan)
 
 # ---------------------------------------------------------------------------
 # CORS — wymagane dla Nextcloud AI Assistant (cross-origin requests)
@@ -54,12 +72,20 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        # HTTP
         "http://192.168.31.70:8081",  # Nextcloud
         "http://192.168.31.70:8000",  # Backend UI
         "http://localhost:8081",
         "http://localhost:8000",
         "http://127.0.0.1:8081",
         "http://127.0.0.1:8000",
+        # HTTPS
+        "https://192.168.31.70:8443",  # Backend HTTPS
+        "https://192.168.31.70:8444",  # Nextcloud HTTPS
+        "https://localhost:8443",
+        "https://localhost:8444",
+        "https://127.0.0.1:8443",
+        "https://127.0.0.1:8444",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -71,8 +97,10 @@ app.include_router(ingest_router)
 app.include_router(filesystem_router)
 app.include_router(admin_router)
 app.include_router(ui_router)
-app.include_router(model_switch.router)
+app.include_router(model_switch_router)
 app.include_router(web_search_router)
+app.include_router(whisper_router)
+app.include_router(gpu_router)
 
 
 @app.middleware("http")
@@ -106,12 +134,6 @@ async def generic_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": "Internal server error", "request_id": request_id},
     )
-
-
-@app.on_event("startup")
-async def startup_event():
-    init_file_registry()
-    logger.info("File registry initialized")
 
 
 if __name__ == "__main__":

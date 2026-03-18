@@ -16,7 +16,7 @@ SAFE_VRAM_LIMIT_GB = 14.0
 SAFE_VRAM_OVERHEAD_GB = 0.5
 THREADS = 32
 
-CONTEXT_LEVELS = [98304, 81920, 65536, 49152, 32768]
+CONTEXT_LEVELS = [98304, 81920, 65536, 49152, 32768, 16384, 8192, 4096]
 DEFAULT_BATCH = 512
 DEFAULT_N_PREDICT = 4096
 DEFAULT_TEMP = 0.3
@@ -78,7 +78,7 @@ def estimate_kv_cache_size(context_tokens, num_layers=32):
 
 
 def get_real_vram_usage():
-    """Próbuje pobrać aktualne zużycie VRAM przez rocm-smi."""
+    """Próbuje pobrać aktualne zużycie VRAM przez rocm-smi (GPU 0 = Instinct)."""
     try:
         result = subprocess.run(
             ["rocm-smi", "--showmeminfo", "vram", "--csv"],
@@ -87,12 +87,13 @@ def get_real_vram_usage():
             timeout=2,
         )
         if result.returncode == 0:
-            lines = result.stdout.strip().split("\n")
-            if len(lines) >= 2:
-                parts = [p.strip() for p in lines[1].split(",")]
-                if len(parts) >= 4:
-                    vram_used = float(parts[3]) / (1024**3)
-                    vram_total = float(parts[2]) / (1024**3)
+            # Format CSV: device,VRAM Total Memory (B),VRAM Total Used Memory (B)
+            lines = [l for l in result.stdout.strip().split("\n") if l and not l.startswith("WARNING")]
+            for line in lines[1:]:  # skip header
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) >= 3 and "card0" in parts[0]:
+                    vram_total = float(parts[1]) / (1024**3)
+                    vram_used = float(parts[2]) / (1024**3)
                     return vram_used, vram_total
     except Exception:
         pass
@@ -118,9 +119,8 @@ def calculate_params(model_path):
     num_layers = estimate_model_layers(model_path)
 
     current_vram_used, current_vram_total = get_real_vram_usage()
-    available_vram = SAFE_VRAM_LIMIT_GB - current_vram_used - SAFE_VRAM_OVERHEAD_GB
-    available_vram = min(available_vram, SAFE_VRAM_LIMIT_GB)
-    available_vram = max(available_vram, 8.0)
+    available_vram = current_vram_total - current_vram_used - SAFE_VRAM_OVERHEAD_GB
+    available_vram = max(available_vram, 2.0)  # minimum 2 GB zeby w ogole cos uruchomic
 
     print(f"\n{'=' * 60}")
     print("   ANALIZA ZASOBÓW VRAM")

@@ -69,8 +69,24 @@ def kill_watchdog() -> None:
         pkill("watch_nextcloud", "Watchdog")
 
 
+def kill_nginx() -> None:
+    print("   nginx HTTPS reverse proxy...")
+    try:
+        result = subprocess.run(
+            ["sudo", "-n", "nginx", "-s", "stop"], capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            print("      OK nginx zatrzymany")
+        else:
+            print("      SKIP nginx nie dzialal")
+    except subprocess.TimeoutExpired:
+        print("      TIMEOUT")
+    except Exception as e:
+        print(f"      ERR {e}")
+
+
 def kill_backend() -> None:
-    print("⚡ Backend FastAPI...")
+    print("Backend FastAPI...")
     pkill("backend_app.main", "Backend")
     # Zwolnij port jeśli coś zostało
     try:
@@ -96,15 +112,11 @@ def kill_venv_python() -> None:
 
 
 def kill_all_remaining() -> None:
-    """Zabija wszystkie pozostałe procesy związane z projektem."""
+    """Zabija wszystkie pozostale procesy zwiazane z projektem."""
     print("⚡ Dodatkowe procesy...")
-    # Zabij byśmy pewny: uvicorn, fastapi, itp
     patterns = [
         ("uvicorn", "Uvicorn"),
         ("fastapi", "FastAPI"),
-        ("qdrant", "Qdrant native"),
-        ("nextcloud", "Nextcloud native"),
-        ("n8n", "n8n native"),
     ]
     for pattern, name in patterns:
         try:
@@ -176,12 +188,18 @@ def cleanup_pid_files() -> None:
 
 
 def check_ports() -> None:
-    print("\n📋 Sprawdzanie portów...")
+    print("\n Sprawdzanie portow...")
     ports_to_check = {
         "8000": "Backend",
         "8082": "LLM",
         "6333": "Qdrant",
-        "3000": "Open WebUI",
+        "8081": "Nextcloud",
+        "5678": "n8n",
+        # HTTPS ports
+        "8443": "Backend HTTPS",
+        "8444": "Nextcloud HTTPS",
+        "5679": "n8n HTTPS",
+        "6334": "Qdrant HTTPS",
     }
     try:
         result = subprocess.run(
@@ -198,10 +216,10 @@ def check_ports() -> None:
 
 def main():
     print("\n" + "=" * 50)
-    print("   🛑 KLIMTECHRAG STOP 🛑")
+    print("   KLIMTECHRAG STOP")
     print("=" * 50 + "\n")
 
-    print("📍 Faza 1: Procesy aplikacji...")
+    print("Faza 1: Procesy aplikacji...")
     kill_watchdog()
     kill_backend()
     kill_llama()
@@ -209,17 +227,18 @@ def main():
 
     time.sleep(1)
 
-    print("\n📍 Faza 2: Dodatkowe procesy...")
+    print("\nFaza 2: Dodatkowe procesy...")
+    kill_nginx()
     kill_all_remaining()
 
     time.sleep(1)
 
-    print("\n📍 Faza 3: Kontenery Podman...")
+    print("\nFaza 3: Kontenery Podman...")
     stop_containers()
 
     time.sleep(1)
 
-    print("\n📍 Faza 4: Zwolnienie portów...")
+    print("\nFaza 4: Zwolnienie portow...")
     kill_remaining_ports()
 
     time.sleep(1)
@@ -227,17 +246,16 @@ def main():
     cleanup_pid_files()
     check_ports()
 
-    # Usuń LLM command file
     llm_cmd_file = os.path.join(LOG_DIR, "llm_command.txt")
     if os.path.exists(llm_cmd_file):
         try:
             os.remove(llm_cmd_file)
-            print(f"🧹 Usunięto: {llm_cmd_file}")
+            print(f"Usunieto: {llm_cmd_file}")
         except Exception:
             pass
 
     print("\n" + "=" * 50)
-    print("✅ System zatrzymany — wszystkie procesy zabite.")
+    print("System zatrzymany.")
     print("=" * 50 + "\n")
 
 

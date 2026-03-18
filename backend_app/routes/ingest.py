@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 import shutil
@@ -17,7 +18,7 @@ from haystack_integrations.components.retrievers.qdrant import QdrantEmbeddingRe
 
 from ..config import settings
 from ..models import IngestPathRequest
-from ..services import indexing_pipeline, doc_store, text_embedder
+from ..services import get_indexing_pipeline, doc_store, get_text_embedder
 from ..services.qdrant import ensure_indexed
 from ..utils.rate_limit import apply_rate_limit, get_client_id
 from ..utils.dependencies import require_api_key, get_request_id
@@ -27,10 +28,18 @@ from ..file_registry import (
     mark_failed,
     get_pending_files,
     register_file,
+    find_duplicate_by_hash,
+    get_connection as _get_registry_connection,
 )
 
 router = APIRouter(tags=["ingest"])
 logger = logging.getLogger("klimtechrag")
+
+
+def _hash_bytes(data: bytes) -> str:
+    """Oblicza SHA-256 hash z bajtow pliku."""
+    return hashlib.sha256(data).hexdigest()
+
 
 # ---------------------------------------------------------------------------
 # Mapowanie rozszerzeń → podfoldery Nextcloud / uploads
@@ -67,12 +76,26 @@ EXT_TO_DIR = {
 }
 
 # Rozszerzenia które ingest potrafi przetworzyć na tekst
-TEXT_INDEXABLE = {".pdf", ".txt", ".md", ".py", ".js", ".ts",
-                  ".json", ".yml", ".yaml", ".doc", ".docx", ".odt", ".rtf"}
+TEXT_INDEXABLE = {
+    ".pdf",
+    ".txt",
+    ".md",
+    ".py",
+    ".js",
+    ".ts",
+    ".json",
+    ".yml",
+    ".yaml",
+    ".doc",
+    ".docx",
+    ".odt",
+    ".rtf",
+}
 
 # ---------------------------------------------------------------------------
 # Helpery tekstu
 # ---------------------------------------------------------------------------
+
 
 def _get_embedding_model(request: Request) -> str:
     """Zwraca embedding model z nagłówka X-Embedding-Model lub wartość domyślną."""
@@ -81,6 +104,7 @@ def _get_embedding_model(request: Request) -> str:
 
 def clean_text(text: str) -> str:
     import re
+
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     lines = [line.strip() for line in text.split("\n") if line.strip()]
@@ -91,7 +115,9 @@ def extract_pdf_text(file_path: str) -> str:
     try:
         result = subprocess.run(
             ["pdftotext", "-layout", file_path, "-"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         text = result.stdout.strip()
         if len(text) > 100:
@@ -122,7 +148,9 @@ def parse_with_docling(file_path: str) -> str:
         backend="onnxruntime",
     )
     converter = DocumentConverter(
-        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
+        format_options={
+            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+        }
     )
     result = converter.convert(file_path)
     return clean_text(result.document.export_to_markdown())
@@ -133,6 +161,7 @@ def read_text_file(file_path: str, suffix: str) -> str:
     if suffix in {".doc", ".docx", ".odt", ".rtf"}:
         try:
             import mammoth
+
             with open(file_path, "rb") as f:
                 result = mammoth.extract_raw_text(f)
             return clean_text(result.value)
@@ -145,6 +174,7 @@ def read_text_file(file_path: str, suffix: str) -> str:
 # ---------------------------------------------------------------------------
 # Helpery Nextcloud
 # ---------------------------------------------------------------------------
+
 
 def save_to_nextcloud(file_content: bytes, filename: str, ext: str) -> tuple[str, str]:
     """
@@ -178,19 +208,28 @@ def rescan_nextcloud(subdir: str) -> None:
         nc_path = f"/{settings.nextcloud_user}/files/RAG_Dane/{subdir}"
         result = subprocess.run(
             [
-                "podman", "exec", settings.nextcloud_container,
-                "php", "occ", "files:scan",
-                "--path", nc_path,
+                "podman",
+                "exec",
+                settings.nextcloud_container,
+                "php",
+                "occ",
+                "files:scan",
+                "--path",
+                nc_path,
                 "--shallow",
             ],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         if result.returncode == 0:
             logger.info("[NC] Rescan OK: %s", nc_path)
         else:
             logger.warning("[NC] Rescan błąd (nie krytyczny): %s", result.stderr[:200])
     except subprocess.TimeoutExpired:
-        logger.warning("[NC] Rescan timeout — Nextcloud może pokazać plik z opóźnieniem")
+        logger.warning(
+            "[NC] Rescan timeout — Nextcloud może pokazać plik z opóźnieniem"
+        )
     except Exception as e:
         logger.warning("[NC] Rescan wyjątek: %s", e)
 
@@ -198,6 +237,7 @@ def rescan_nextcloud(subdir: str) -> None:
 # ---------------------------------------------------------------------------
 # Background indexing (wspólny dla /upload i watchdog)
 # ---------------------------------------------------------------------------
+
 
 def ingest_file_background(file_path: str) -> None:
     """
@@ -210,7 +250,11 @@ def ingest_file_background(file_path: str) -> None:
     suffix = os.path.splitext(filename)[1].lower()
 
     if suffix not in TEXT_INDEXABLE:
-        logger.info("[BG] %s — format %s nie jest jeszcze indeksowalny (plik zapisany)", filename, suffix)
+        logger.info(
+            "[BG] %s — format %s nie jest jeszcze indeksowalny (plik zapisany)",
+            filename,
+            suffix,
+        )
         return
 
     try:
@@ -224,8 +268,10 @@ def ingest_file_background(file_path: str) -> None:
             logger.info("[BG] Plik pusty: %s", filename)
             return
 
-        docs = [Document(content=markdown_text, meta={"source": filename, "type": suffix})]
-        result = indexing_pipeline.run({"splitter": {"documents": docs}})
+        docs = [
+            Document(content=markdown_text, meta={"source": filename, "type": suffix})
+        ]
+        result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
         chunks = result["writer"]["documents_written"]
 
         mark_indexed(file_path, chunks)
@@ -241,6 +287,7 @@ def ingest_file_background(file_path: str) -> None:
 # ---------------------------------------------------------------------------
 # Endpoint /upload — przyjmuje plik, zapisuje do Nextcloud, indeksuje w tle
 # ---------------------------------------------------------------------------
+
 
 @router.post("/upload")
 async def upload_file_to_rag(
@@ -278,25 +325,27 @@ async def upload_file_to_rag(
                 detail=f"Plik za duży: {file_size / 1024 / 1024:.1f} MB (limit {settings.max_file_size_bytes / 1024 / 1024:.0f} MB)",
             )
 
-        # 0. Dedup
+        # 0. Dedup — sprawdz czy plik o takim hasha juz istnieje
         _h = _hash_bytes(content)
         _ex = find_duplicate_by_hash(_h)
         if _ex:
-            return {"message":"Plik juz istnieje","duplicate":True,"filename":file.filename,"existing_path":_ex}
-        # 0. Dedup
-        _h = _hash_bytes(content)
-        _ex = find_duplicate_by_hash(_h)
-        if _ex:
-            return {"message":"Plik juz istnieje","duplicate":True,"filename":file.filename,"existing_path":_ex}
+            return {
+                "message": "Plik juz istnieje",
+                "duplicate": True,
+                "filename": file.filename,
+                "existing_path": _ex,
+            }
+
         # 1. Zapisz do Nextcloud
         target_path, subdir = save_to_nextcloud(content, file.filename, ext)
         register_file(target_path)
-        from ..file_registry import get_connection as _gc
-        with _gc() as _c:
-            _c.execute("UPDATE files SET content_hash=? WHERE path=?",(  _h,target_path)); _c.commit()
-        from ..file_registry import get_connection as _gc
-        with _gc() as _c:
-            _c.execute("UPDATE files SET content_hash=? WHERE path=?",(  _h,target_path)); _c.commit()
+
+        # Zapisz hash do rejestru plikow
+        with _get_registry_connection() as _c:
+            _c.execute(
+                "UPDATE files SET content_hash=? WHERE path=?", (_h, target_path)
+            )
+            _c.commit()
 
         # 2. Odśwież Nextcloud (w tle — nie blokuje odpowiedzi)
         background_tasks.add_task(rescan_nextcloud, subdir)
@@ -310,10 +359,18 @@ async def upload_file_to_rag(
 
         logger.info(
             "[Upload] %s → Nextcloud/%s (%.1f KB) | %s",
-            file.filename, subdir, file_size / 1024, index_msg,
+            file.filename,
+            subdir,
+            file_size / 1024,
+            index_msg,
             extra={"request_id": request_id},
         )
-        return {"message":"Plik zapisany","filename":file.filename,"duplicate":False,"size_bytes":file_size}
+        return {
+            "message": "Plik zapisany",
+            "filename": file.filename,
+            "duplicate": False,
+            "size_bytes": file_size,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -324,6 +381,7 @@ async def upload_file_to_rag(
 # ---------------------------------------------------------------------------
 # Endpoint /ingest — stary endpoint (multipart, temp file). Zostaje dla kompatybilności.
 # ---------------------------------------------------------------------------
+
 
 @router.post("/ingest")
 async def ingest_file(
@@ -340,7 +398,9 @@ async def ingest_file(
 
     suffix = os.path.splitext(file.filename)[1].lower()
     if suffix not in settings.allowed_extensions_docs:
-        raise HTTPException(status_code=400, detail=f"File format not allowed: {file.filename}")
+        raise HTTPException(
+            status_code=400, detail=f"File format not allowed: {file.filename}"
+        )
 
     temp_file_path = None
     try:
@@ -350,37 +410,69 @@ async def ingest_file(
 
         file_size = os.path.getsize(temp_file_path)
         if file_size > settings.max_file_size_bytes:
-            raise HTTPException(status_code=413, detail=f"File too large: {file_size} bytes")
+            raise HTTPException(
+                status_code=413, detail=f"File too large: {file_size} bytes"
+            )
 
         # Sprawdzenie czy użytkownik wybrał ColPali
         embedding_model = _get_embedding_model(request)
         if embedding_model.lower().startswith("vidore/colpali"):
             if suffix != ".pdf":
-                raise HTTPException(status_code=400, detail="ColPali obsługuje tylko pliki PDF")
-            from ..services.colpali_embedder import index_pdf as colpali_index_pdf, unload_model
+                raise HTTPException(
+                    status_code=400, detail="ColPali obsługuje tylko pliki PDF"
+                )
+            from ..services.colpali_embedder import (
+                index_pdf as colpali_index_pdf,
+                unload_model,
+            )
+
             try:
-                pages = colpali_index_pdf(pdf_path=temp_file_path, doc_id=file.filename, model_name=embedding_model)
+                pages = colpali_index_pdf(
+                    pdf_path=temp_file_path,
+                    doc_id=file.filename,
+                    model_name=embedding_model,
+                )
             finally:
                 unload_model()
-            return {"message": "Zaindeksowano przez ColPali", "pages_processed": pages, "collection": "klimtech_colpali"}
+            return {
+                "message": "Zaindeksowano przez ColPali",
+                "pages_processed": pages,
+                "collection": "klimtech_colpali",
+            }
 
         if suffix == ".pdf":
             markdown_text = parse_with_docling(temp_file_path)
         elif suffix in TEXT_INDEXABLE:
             markdown_text = read_text_file(temp_file_path, suffix)
         else:
-            return {"message": f"Format {suffix} not text-indexable", "chunks_processed": 0}
+            return {
+                "message": f"Format {suffix} not text-indexable",
+                "chunks_processed": 0,
+            }
 
         if not markdown_text or not markdown_text.strip():
             return {"message": "File empty (Scanned PDF?)", "chunks_processed": 0}
 
-        docs = [Document(content=markdown_text, meta={"source": file.filename, "type": suffix})]
-        logger.info("[ingest] Embedding %s | %s", file.filename, log_stats("Start"),
-                    extra={"request_id": request_id})
-        result = indexing_pipeline.run({"splitter": {"documents": docs}})
+        docs = [
+            Document(
+                content=markdown_text, meta={"source": file.filename, "type": suffix}
+            )
+        ]
+        logger.info(
+            "[ingest] Embedding %s | %s",
+            file.filename,
+            log_stats("Start"),
+            extra={"request_id": request_id},
+        )
+        result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
         chunks = result["writer"]["documents_written"]
-        logger.info("[ingest] %s → %d chunków | %s", file.filename, chunks,
-                    log_stats("Koniec"), extra={"request_id": request_id})
+        logger.info(
+            "[ingest] %s → %d chunków | %s",
+            file.filename,
+            chunks,
+            log_stats("Koniec"),
+            extra={"request_id": request_id},
+        )
 
         return {"message": "File ingested successfully", "chunks_processed": chunks}
 
@@ -392,6 +484,7 @@ async def ingest_file(
 # ---------------------------------------------------------------------------
 # Endpoint /ingest_path — indeksuje plik z dysku (używany przez watchdog i OWUI function)
 # ---------------------------------------------------------------------------
+
 
 @router.post("/ingest_path")
 async def ingest_by_path(
@@ -415,23 +508,39 @@ async def ingest_by_path(
         raise HTTPException(status_code=400, detail=f"Extension not allowed: {suffix}")
 
     if suffix not in TEXT_INDEXABLE:
-        return {"message": f"Format {suffix} not text-indexable yet", "chunks_processed": 0, "filename": filename}
+        return {
+            "message": f"Format {suffix} not text-indexable yet",
+            "chunks_processed": 0,
+            "filename": filename,
+        }
 
     # Sprawdzenie czy użytkownik wybrał ColPali
     embedding_model = _get_embedding_model(req)
     if embedding_model.lower().startswith("vidore/colpali"):
         if suffix != ".pdf":
-            raise HTTPException(status_code=400, detail="ColPali obsługuje tylko pliki PDF")
-        from ..services.colpali_embedder import index_pdf as colpali_index_pdf, unload_model
+            raise HTTPException(
+                status_code=400, detail="ColPali obsługuje tylko pliki PDF"
+            )
+        from ..services.colpali_embedder import (
+            index_pdf as colpali_index_pdf,
+            unload_model,
+        )
         from ..routes.chat import clear_cache
+
         try:
-            pages = colpali_index_pdf(pdf_path=file_path, doc_id=filename, model_name=embedding_model)
+            pages = colpali_index_pdf(
+                pdf_path=file_path, doc_id=filename, model_name=embedding_model
+            )
         finally:
             unload_model()
         mark_indexed(file_path, pages)
         ensure_indexed()
         clear_cache()
-        return {"message": "OK (ColPali)", "chunks_processed": pages, "filename": filename}
+        return {
+            "message": "OK (ColPali)",
+            "chunks_processed": pages,
+            "filename": filename,
+        }
 
     try:
         if suffix == ".pdf":
@@ -441,10 +550,16 @@ async def ingest_by_path(
 
         if not markdown_text or not markdown_text.strip():
             mark_indexed(file_path, 0)
-            return {"message": "File empty", "chunks_processed": 0, "filename": filename}
+            return {
+                "message": "File empty",
+                "chunks_processed": 0,
+                "filename": filename,
+            }
 
-        docs = [Document(content=markdown_text, meta={"source": filename, "type": suffix})]
-        result = indexing_pipeline.run({"splitter": {"documents": docs}})
+        docs = [
+            Document(content=markdown_text, meta={"source": filename, "type": suffix})
+        ]
+        result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
         chunks = result["writer"]["documents_written"]
 
         mark_indexed(file_path, chunks)
@@ -464,6 +579,7 @@ async def ingest_by_path(
 # Endpoint /ingest_all — indeksuje wszystkie pending z file_registry
 # ---------------------------------------------------------------------------
 
+
 @router.post("/ingest_all")
 async def ingest_all_pending(req: Request, limit: int = 10):
     from ..routes.chat import clear_cache
@@ -479,19 +595,33 @@ async def ingest_all_pending(req: Request, limit: int = 10):
     for f in files:
         if f.extension not in TEXT_INDEXABLE:
             mark_indexed(f.path, 0)  # oznacz jako skipped żeby nie wracać
-            results.append({"filename": f.filename, "chunks": 0, "status": "skipped_format"})
+            results.append(
+                {"filename": f.filename, "chunks": 0, "status": "skipped_format"}
+            )
             continue
 
         # Obsługa ColPali dla PDF
         if f.extension == ".pdf" and use_colpali:
             try:
                 from ..services.colpali_embedder import index_pdf as colpali_index_pdf
-                pages = colpali_index_pdf(pdf_path=f.path, doc_id=f.filename, model_name=embedding_model)
+
+                pages = colpali_index_pdf(
+                    pdf_path=f.path, doc_id=f.filename, model_name=embedding_model
+                )
                 mark_indexed(f.path, pages)
-                results.append({"filename": f.filename, "chunks": pages, "status": "ok_colpali"})
+                results.append(
+                    {"filename": f.filename, "chunks": pages, "status": "ok_colpali"}
+                )
             except Exception as e:
                 mark_failed(f.path, str(e)[:100])
-                results.append({"filename": f.filename, "chunks": 0, "status": "error", "error": str(e)[:100]})
+                results.append(
+                    {
+                        "filename": f.filename,
+                        "chunks": 0,
+                        "status": "error",
+                        "error": str(e)[:100],
+                    }
+                )
             continue
 
         try:
@@ -505,19 +635,32 @@ async def ingest_all_pending(req: Request, limit: int = 10):
                 results.append({"filename": f.filename, "chunks": 0, "status": "empty"})
                 continue
 
-            docs = [Document(content=markdown_text, meta={"source": f.filename, "type": f.extension})]
-            result = indexing_pipeline.run({"splitter": {"documents": docs}})
+            docs = [
+                Document(
+                    content=markdown_text,
+                    meta={"source": f.filename, "type": f.extension},
+                )
+            ]
+            result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
             chunks = result["writer"]["documents_written"]
             mark_indexed(f.path, chunks)
             results.append({"filename": f.filename, "chunks": chunks, "status": "ok"})
 
         except Exception as e:
             mark_failed(f.path, str(e)[:100])
-            results.append({"filename": f.filename, "chunks": 0, "status": "error", "error": str(e)[:100]})
+            results.append(
+                {
+                    "filename": f.filename,
+                    "chunks": 0,
+                    "status": "error",
+                    "error": str(e)[:100],
+                }
+            )
 
     # Zwolnij VRAM z ColPali przed powrotem
     if use_colpali:
         from ..services.colpali_embedder import unload_model
+
         unload_model()
 
     ensure_indexed()
@@ -528,6 +671,7 @@ async def ingest_all_pending(req: Request, limit: int = 10):
 # ---------------------------------------------------------------------------
 # Endpoint /ingest_pdf_vlm — PDF z opisem obrazów przez VLM
 # ---------------------------------------------------------------------------
+
 
 @router.post("/ingest_pdf_vlm")
 async def ingest_pdf_with_vlm(
@@ -561,21 +705,32 @@ async def ingest_pdf_with_vlm(
             markdown_text = parse_with_docling(file_path)
         else:
             from ..ingest.image_handler import process_pdf_with_images
+
             result_data = process_pdf_with_images(
                 pdf_path=file_path,
                 extract_images=True,
                 describe_images=True,
                 max_images=max_images,
             )
-            markdown_text = clean_text(result_data.get("combined_content", "")) or parse_with_docling(file_path)
+            markdown_text = clean_text(
+                result_data.get("combined_content", "")
+            ) or parse_with_docling(file_path)
 
         if not markdown_text or not markdown_text.strip():
             mark_indexed(file_path, 0)
-            return {"message": "File empty", "chunks_processed": 0, "filename": filename}
+            return {
+                "message": "File empty",
+                "chunks_processed": 0,
+                "filename": filename,
+            }
 
-        docs = [Document(content=markdown_text,
-                         meta={"source": filename, "type": ".pdf", "vlm": str(vlm_started)})]
-        result = indexing_pipeline.run({"splitter": {"documents": docs}})
+        docs = [
+            Document(
+                content=markdown_text,
+                meta={"source": filename, "type": ".pdf", "vlm": str(vlm_started)},
+            )
+        ]
+        result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
         chunks = result["writer"]["documents_written"]
 
         mark_indexed(file_path, chunks)
@@ -583,7 +738,12 @@ async def ingest_pdf_with_vlm(
         clear_cache()
         logger.info("[PDF+VLM] %s → %d chunks", filename, chunks)
 
-        return {"message": "OK", "chunks_processed": chunks, "filename": filename, "vlm_used": vlm_started}
+        return {
+            "message": "OK",
+            "chunks_processed": chunks,
+            "filename": filename,
+            "vlm_used": vlm_started,
+        }
 
     except Exception as e:
         mark_failed(file_path, str(e)[:200])
@@ -597,8 +757,10 @@ async def ingest_pdf_with_vlm(
 @router.get("/vlm/status")
 async def vlm_status():
     import requests as _requests
+
     try:
         from ..ingest.image_handler import VLM_PORT
+
         r = _requests.get(f"http://localhost:{VLM_PORT}/health", timeout=2)
         return {"vlm_running": r.status_code == 200, "port": VLM_PORT}
     except Exception:
