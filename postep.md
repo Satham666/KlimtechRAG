@@ -1,7 +1,7 @@
 # Postep wdrozenia KlimtechRAG — Naprawa bledow i optymalizacja
 
 **Rozpoczecie:** 2026-03-15
-**Ostatnia aktualizacja:** 2026-03-16 (sesja naprawcza — ZAKONCZONA) + 2026-03-16 (Whisper STT)
+**Ostatnia aktualizacja:** 2026-03-18 (v7.3: New UI + Lazy Loading + GPU Dashboard + SEKCJA 16: VLM Prompts)
 
 ---
 
@@ -314,6 +314,109 @@ Dodanie endpointu `/gpu/status` do monitorowania GPU w czasie rzeczywistym.
 | llama-server | 8082 | LLM/VLM (llama.cpp, AMD Instinct) |
 | n8n | 5678 | Automatyzacja workflow |
 | Qdrant | 6333 | Baza wektorowa |
+
+---
+
+## SEKCJA 16: Refaktoryzacja VLM Prompts — Z AKCEPTACJI
+
+**Status:** DO WYKONANIA  
+**Data akceptacji:** 2026-03-18  
+**Dotyczy:** `backend_app/ingest/image_handler.py`
+
+### Plan (z akceptacja.md)
+
+| # | Co | Gdzie | Efekt |
+|---|-----|-------|-------|
+| 1 | Prompty → plik konfiguracyjny | Nowy `backend_app/prompts/vlm_prompts.py` | Zmiana promptu bez zmiany kodu |
+| 2 | Rozbudowa DEFAULT prompt | `vlm_prompts.py` → `DEFAULT` | Lepsze opisy, format, ekstrakcja tekstu |
+| 3 | 8 promptów per typ obrazu | `vlm_prompts.py` → 8 wariantów | Auto-dobór promptu do typu obrazu |
+| 4 | Dynamiczne parametry llama-cli | `image_handler.py` + `config.py` | Spójność z resztą systemu |
+
+### Szczegóły
+
+**Punkt 1: Wyciągnięcie promptów z kodu do pliku konfiguracyjnego**
+- Nowy: `backend_app/prompts/__init__.py`
+- Nowy: `backend_app/prompts/vlm_prompts.py`
+- Zmiana: `backend_app/ingest/image_handler.py` — import promptów z nowego modułu
+
+**Punkt 2: Rozbudowa promptu domyślnego**
+- Obecny prompt obsługuje tylko 3 typy (medyczne, diagramy, wykresy)
+- Brak instrukcji o formacie wyjścia, brak wyciągania tekstu/numerów, brak kontekstu dokumentu
+- NOWY prompt `DEFAULT` — uniwersalny, szczegółowy, z instrukcjami formatu wyjścia
+
+**Punkt 3: Zestaw promptów per typ obrazu**
+- 8 wariantów w `vlm_prompts.py`:
+
+```
+vlm_prompts.py:
+├── DEFAULT          — uniwersalny, szczegółowy, z formatem wyjścia
+├── DIAGRAM          — dla schematów, flowchartów, algorytmów
+├── CHART            — dla wykresów (dane, osie, trendy, wartości)
+├── TABLE            — dla tabel (zachowaj strukturę, kolumny, wiersze)
+├── PHOTO            — dla zdjęć (co widać, kontekst, detale)
+├── SCREENSHOT       — dla screenów UI (elementy interfejsu, tekst)
+├── TECHNICAL        — dla schematów technicznych (wymiary, części)
+└── MEDICAL          — dla obrazów medycznych (anatomia, procedury)
+```
+
+Każdy prompt zawiera:
+- Jasną instrukcję CO opisać
+- Format wyjścia (structured, max ~200 słów)
+- Instrukcję wyciągania tekstu/numerów z obrazu
+- Język odpowiedzi (polski)
+
+Dobór promptu automatyczny na podstawie `image_type` z `ExtractedImage`.
+
+**Punkt 4: Dynamiczne parametry llama-cli**
+
+Problem: W `image_handler.py` linie 128-145 mają hardcoded parametry:
+```python
+cmd = [
+    LLAMA_CLI_BIN,
+    "-m", VLM_MODEL,
+    "--image", image_path,
+    "-p", prompt,
+    "-n", "512",        # ← hardcoded
+    "--temp", "0.1",    # ← hardcoded
+    "-ngl", "99",       # ← hardcoded
+    "-c", "4096",       # ← hardcoded
+    "--no-display",
+]
+```
+
+Niespójne z `start_klimtech_v3.py`, gdzie parametry są obliczane dynamicznie przez `model_parametr.calculate_params()`.
+
+Rozwiązanie:
+1. Wywołać `model_parametr.calculate_params(VLM_MODEL)` przy starcie VLM
+2. Parametry specyficzne dla VLM (`-n`, `--temp`) przenieść do konfiguracji:
+   - `config.py` → nowe pola: `vlm_max_tokens`, `vlm_temperature`, `vlm_context`
+   - Lub `vlm_prompts.py` → sekcja `VLM_PARAMS`
+3. Zachować sensowne domyślne wartości jako fallback
+
+### Status
+
+| # | Opis | Status |
+|---|------|--------|
+| 16a | Utworzyć katalog `backend_app/prompts/` | ⏳ DO ZROBIENIA |
+| 16b | Utworzyć `prompts/__init__.py` | ⏳ DO ZROBIENIA |
+| 16c | Utworzyć `prompts/vlm_prompts.py` z 8 wariantami | ⏳ DO ZROBIENIA |
+| 16d | Refaktoryzować `image_handler.py` — import promptów | ⏳ DO ZROBIENIA |
+| 16e | Refaktoryzować `image_handler.py` — dynamiczne params | ⏳ DO ZROBIENIA |
+
+### Pliki do zmiany
+
+- `backend_app/ingest/image_handler.py` — refactor (import promptów, dynamiczne params)
+- Nowy: `backend_app/prompts/__init__.py`
+- Nowy: `backend_app/prompts/vlm_prompts.py`
+- `backend_app/config.py` — dodanie VLM params (opcjonalne)
+
+### Pliki BEZ zmian
+
+- `start_klimtech_v3.py`
+- `model_manager.py`
+- `routes/chat.py`
+- `routes/ingest.py`
+- `static/index.html` (już zamieniony na code.html)
 
 ---
 

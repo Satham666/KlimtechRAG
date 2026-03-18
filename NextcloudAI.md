@@ -1,8 +1,8 @@
 # NextcloudAI — Plan wdrożenia (Sekcje 11, 12, 13)
 
-**Data:** 2026-03-15
-**Wersja docelowa:** v7.2
-**Powiązanie:** PODSUMOWANIE.md sekcje 11, 12, 13
+**Data:** 2026-03-18
+**Wersja docelowa:** v7.3
+**Powiązanie:** PODSUMOWANIE.md sekcje 11, 12, 13, 15
 
 ---
 
