@@ -2,9 +2,9 @@
 
 ⚠️ WAŻNE: Komendy z "sudo" są ZAWSZE wyświetlane dla użytkownika do ręcznego wykonania w osobnym terminalu. Model AI nie może wykonywać komend z sudo (brak hasła).
 
-**Wersja:** v7.5  
-**Data:** 2026-03-19 (noc)  
-**Repozytorium:** https://github.com/Satham666/KlimtechRAG  
+**Wersja:** v7.5
+**Data:** 2026-03-19 (rano)
+**Repozytorium:** https://github.com/Satham666/KlimtechRAG
 **Katalog serwera:** `/media/lobo/BACKUP/KlimtechRAG/`  
 
 ⚠️ UWAGA: Katalog `/home/lobo/KlimtechRAG/` został USUNIĘTY (2026-03-18)!
@@ -179,7 +179,8 @@ Nextcloud Assistant (przeglądarka na :8081)
 ```
 /media/lobo/BACKUP/KlimtechRAG/
 │
-├── start_klimtech_v3.py          # Start całego systemu (nginx, qdrant, backend)
+├── start_klimtech_v3.py          # Start całego systemu (nginx, qdrant, nextcloud, postgres, n8n, backend)
+│                                 # ✅ NAPRAWIONE v7.5: --restart flag placement + create_standalone_containers()
 ├── stop_klimtech.py              # Stop całego systemu
 ├── start_backend_gpu.py          # Start backend w trybie GPU ingest
 ├── model_parametr.py             # Obliczanie parametrów llama-server (ctx, cache, ngl)
@@ -224,13 +225,13 @@ Nextcloud Assistant (przeglądarka na :8081)
 │   │   └── dependencies.py       # API key auth (X-API-Key + Bearer fallback)
 │   │
 │   ├── scripts/
-│   │   ├── watch_nextcloud.py    # Watchdog v3.0 — monitoruje RAG_Dane/*, auto-ingest
+│   │   ├── watch_nextcloud.py    # Watchdog v3.0 — monitoruje uploads/*, auto-ingest
 │   │   ├── ingest_gpu.py         # Batch GPU ingest (e5-large)
 │   │   └── ingest_colpali.py     # Batch ColPali ingest (Pipeline B)
 │   │
 │   ├── ingest/
 │   │   └── image_handler.py      # Ekstrakcja obrazów z PDF + VLM opisy
-│   │                             # UWAGA: hardcoded params — do refaktoryzacji (Sekcja 16)
+│   │                             # ✅ REFAKTORYZACJA v7.3: dynamiczne prompty z prompts/vlm_prompts.py
 │   │
 │   ├── prompts/                  # ✅ UTWORZONE (Sekcja 16 v7.3)
 │   │   ├── __init__.py           # ✅ DONE
@@ -240,11 +241,17 @@ Nextcloud Assistant (przeglądarka na :8081)
 │       └── index.html            # Główny UI (zawartość code.html + v7.3 GPU Dashboard)
 │
 ├── data/
-│   ├── nextcloud/                # Dane kontenera Nextcloud (wolumen Podman)
+│   ├── nextcloud/                # ⚠️ NIEUŻYWANE v7.5 (zastąpione przez Named Volumes)
 │   │   └── config/config.php     # allow_local_remote_servers: true
+│   ├── uploads/                  # JEDYNA ścieżka dla plików RAG (v7.5)
+│   │   ├── pdf_RAG/              # .pdf → ColPali ingest
+│   │   ├── txt_RAG/              # .txt, .md, .py, .js, .ts, .json, .yml, .yaml
+│   │   ├── Audio_RAG/            # .mp3, .wav, .ogg, .flac
+│   │   ├── Doc_RAG/              # .doc, .docx, .odt, .rtf
+│   │   ├── Images_RAG/           # .jpg, .jpeg, .png, .gif, .bmp, .webp
+│   │   ├── Video_RAG/           # .mp4, .avi, .mkv, .mov
+│   │   └── json_RAG/             # .json
 │   ├── n8n/                      # Dane kontenera n8n (wolumen Podman)
-│   ├── uploads/                  # Tymczasowe uploady backendu
-│   │   └── pdf_RAG/              # PDF do ColPali ingest
 │   ├── file_registry.db          # SQLite — rejestr zaindeksowanych plików
 │   └── ssl/
 │       ├── klimtech.crt          # Certyfikat self-signed
@@ -262,7 +269,8 @@ Nextcloud Assistant (przeglądarka na :8081)
 │   └── workflow_vram_manager.json# Zarządzanie VRAM (switch modeli)
 │
 ├── scripts/
-│   └── setup_nextcloud_ai.sh     # ⏳ Planowany skrypt konfiguracji NC
+│   ├── plan.txt                 # ✅ DODANE v7.5: Poprawny plan instalacji Nextcloud (Named Volumes)
+│   └── fix_nextcloud_hybrid.sh # ⚠️ NIEDZIAŁAJĄCE v7.5: Hybrydowe podejście (baza ext4, pliki exFAT)
 │
 ├── venv/                         # Virtualenv Python 3.12 (przeniesiony z /home/lobo/)
 │
@@ -391,7 +399,30 @@ LLAMA_API_PORT=8082
 | API Key | `sk-local` |
 | Model | `klimtech-bielik` |
 
-### 7.5 Kontener Nextcloud — krytyczne ustawienia
+### 7.5 Kontener Nextcloud — krytyczne ustawienia (v7.5)
+
+**⚠️ WAGA v7.5: Zmieniona architektura danych!**
+
+W poprzednich wersjach (v7.4) próbowano podejścia hybrydowego:
+- Baza PostgreSQL: Named Volume `klimtech_postgres_data` (ext4) ✓
+- Pliki Nextcloud: Bind mount na exFAT ✗
+
+To podejście NIE DZIAŁAŁO z powodu ograniczeń exFAT:
+- exFAT nie obsługuje uprawnień Unix (chown/chmod)
+- Kontener www-data (UID 33) nie może pisać do katalogu owned przez "lobo" (UID 1000)
+- chmod 777 NIE POMAGA na exFAT
+- Mapowanie /var/www/html na exFAT powodowało brak plików Nextcloud (version.php missing)
+
+**Architektura v7.5 — POPRAWNA (Named Volumes):**
+
+| Component | Location | Filesystem |
+|-----------|---------|------------|
+| Pod `klimtech_pod` | Wspólna sieć localhost | - |
+| PostgreSQL | W Pod, named volume `klimtech_postgres_data` | ext4 |
+| Nextcloud Data | W Pod, named volume `klimtech_nextcloud_data` | ext4 |
+| Nextcloud Code | W kontenerze (NIE mapowane) | ext4 (kontenera) |
+
+**Konfiguracja systemowa:**
 
 ```bash
 # Musi być ustawione — bez tego NC blokuje prywatne IP
@@ -399,8 +430,29 @@ podman exec -u www-data nextcloud php occ config:system:set \
   allow_local_remote_servers --value=true --type=boolean
 
 # HTTPS proxy config
-podman exec nextcloud php occ config:system:set overwriteprotocol --value="https"
-podman exec nextcloud php occ config:system:set overwritehost --value="192.168.31.70:8444"
+podman exec -u www-data nextcloud php occ config:system:set overwriteprotocol --value="https"
+podman exec -u www-data nextcloud php occ config:system:set overwritehost --value="192.168.31.70:8444"
+
+# Opcjonalne — wyłączenie kontroli uprawnień i blokowania plików
+podman exec -u www-data nextcloud php occ config:system:set check_data_directory_permissions --value=false --type=boolean
+podman exec -u www-data nextcloud php occ config:system:set filelocking.enabled --value=false --type=boolean
+```
+
+**Katalog custom_apps (wymagany przed instalacją aplikacji AI):**
+
+```bash
+# Tworzenie katalogu
+podman exec -u root nextcloud mkdir -p /var/www/html/custom_apps
+
+# Ustawienie uprawnień
+podman exec -u root nextcloud chown www-data:www-data /var/www/html/custom_apps
+```
+
+**Instalacja aplikacji AI:**
+
+```bash
+podman exec -u www-data nextcloud php occ app:install integration_openai
+podman exec -u www-data nextcloud php occ app:install assistant
 ```
 
 ---
@@ -558,6 +610,8 @@ podman exec -u www-data nextcloud php occ config:system:get allow_local_remote_s
 | 1 | 🔴 | VLM opis obrazów — brak mmproj w llama-cli | Nierozwiązane | — |
 | 2 | 🔴 | `ingest_gpu.py` zabija `start_klimtech.py` | Nierozwiązane | Używaj `start_backend_gpu.py` |
 | 3 | 🔴 | Nextcloud AI Assistant nie odpowiada (kod 417) | ✅ ROZWIĄZANE v7.5 | Named Volume (ext4) |
+| 4 | 🔴 | Flagi --restart błędnie umieszczone w skrypcie | ✅ ROZWIĄZANE v7.5 | Naprawiono lokalizację flag |
+| 5 | 🟡 | Brak funkcji tworzenia kontenerów qdrant/n8n | ✅ ROZWIĄZANE v7.5 | Dodano create_standalone_containers() |
 
 ### Problem 3: Nextcloud AI Assistant 417 — ROZWIĄZANIE (v7.5)
 
@@ -571,7 +625,7 @@ podman exec -u www-data nextcloud php occ config:system:get allow_local_remote_s
 **Rozwiązanie v7.5: Named Volume dla WSZYSTKIEGO**
 
 | Component | Location | Filesystem |
-|-----------|---------|-----------|
+|-----------|---------|------------|
 | Pod `klimtech_pod` | Wspólna sieć localhost | - |
 | PostgreSQL | W Pod, named volume `klimtech_postgres_data` | ext4 |
 | Nextcloud Data | W Pod, named volume `klimtech_nextcloud_data` | ext4 |
@@ -606,6 +660,7 @@ podman run -d --name postgres_nextcloud --pod klimtech_pod --restart always \
 
 # 4. Nextcloud (Named Volume, NIE exFAT!)
 podman volume create klimtech_nextcloud_data
+
 podman run -d --name nextcloud --pod klimtech_pod --restart always \
     -e POSTGRES_HOST="localhost" -e POSTGRES_DB=nextcloud \
     -e POSTGRES_USER=nextcloud -e POSTGRES_PASSWORD=klimtech123 \
@@ -613,7 +668,12 @@ podman run -d --name nextcloud --pod klimtech_pod --restart always \
     -e NEXTCLOUD_ADMIN_USER="admin" -e NEXTCLOUD_ADMIN_PASSWORD="klimtech123" \
     -v klimtech_nextcloud_data:/var/www/html/data docker.io/library/nextcloud:32
 
-# 5. Konfiguracja (~45s po starcie)
+# 5. Czekaj ~45s na instalację
+
+# 6. Konfiguracja
+podman exec -u root nextcloud mkdir -p /var/www/html/custom_apps
+podman exec -u root nextcloud chown www-data:www-data /var/www/html/custom_apps
+
 podman exec -u www-data nextcloud php occ app:install integration_openai
 podman exec -u www-data nextcloud php occ app:install assistant
 podman exec -u www-data nextcloud php occ config:system:set check_data_directory_permissions --value=false --type=boolean
@@ -624,6 +684,64 @@ podman exec -u www-data nextcloud php occ config:system:set overwritehost --valu
 ```
 
 **Login Nextcloud:** `admin` / `klimtech123`
+
+### Problem 4: Flagi --restart błędnie umieszczone — ROZWIĄZANIE (v7.5)
+
+**Root cause:** Flaga `--restart always` była umieszczona PO nazwie obrazu zamiast PRZED.
+
+**Objawy:**
+- PostgreSQL: Exited (1) z błędem "FATAL: --restart requires a value"
+- Nextcloud: Exited (127) z błędem "exec: --restart: not found"
+
+**Lokalizacja błędów w start_klimtech_v3.py:**
+- Linia 140-141: PostgreSQL - `--restart always` PO `docker.io/library/postgres:16`
+- Linia 183-184: Nextcloud - `--restart always` PO `docker.io/library/nextcloud:32`
+
+**Rozwiązanie:**
+Przeniesiono flagę `--restart always` PRZED nazwą obrazu:
+```python
+# PostgreSQL
+["--restart", "always", ..., "docker.io/library/postgres:16"]
+
+# Nextcloud
+["--restart", "always", ..., "docker.io/library/nextcloud:32"]
+```
+
+**Plik zmieniony:** `/media/lobo/BACKUP/KlimtechRAG/start_klimtech_v3.py`
+
+### Problem 5: Brak funkcji tworzenia kontenerów qdrant/n8n — ROZWIĄZANIE (v7.5)
+
+**Root cause:** Skrypt `start_klimtech_v3.py` próbował uruchomić nieistniejące kontenery za pomocą `podman start`.
+
+**Objawy:**
+- qdrant i n8n nie istniały
+- Skrypt zgłaszał `[SKIP] qdrant` i `[SKIP] n8n`
+
+**Rozwiązanie:**
+Dodano funkcję `create_standalone_containers()` w `start_klimtech_v3.py`:
+```python
+def create_standalone_containers():
+    """Tworzy standalone kontenery (qdrant, n8n) jeśli nie istnieją."""
+    # Sprawdź czy kontenery istnieją
+    existing = subprocess.run(["podman", "ps", "-a", "--format", "{{.Names}}"], ...)
+
+    # Utwórz qdrant jeśli nie istnieje
+    if "qdrant" not in existing_names:
+        podman run -d --name qdrant --restart always -p 6333:6333 docker.io/qdrant/qdrant:latest
+
+    # Utwórz n8n jeśli nie istnieje
+    if "n8n" not in existing_names:
+        podman run -d --name n8n --restart always -p 5678:5678 \
+            -e N8N_PORT=5678 -e N8N_HOST=0.0.0.0 -e N8N_PROTOCOL=http \
+            docker.io/n8nio/n8n:latest
+```
+
+**Uwaga o porcie qdrant:**
+- Zmieniono z `-p 6333:6333 -p 6334:6334` na `-p 6333:6333`
+- Port 6334 był już zajęty przez nginx HTTPS reverse proxy
+- Port 6333 jest wystarczający dla HTTP dostępu (port 6334 to HTTPS)
+
+**Plik zmieniony:** `/media/lobo/BACKUP/KlimtechRAG/start_klimtech_v3.py`
 
 ---
 
@@ -637,22 +755,57 @@ podman exec -u www-data nextcloud php occ config:system:set overwritehost --valu
 | v7.3 | 11 | New UI (code.html), GPU Dashboard, lazy loading (VRAM 14MB), RAG domyślnie OFF |
 | v7.4 | 12 | Hybrid Storage (PostgreSQL on ext4) + Podman Pod architecture (NIEDZIAŁAŁO!) |
 | v7.5 | 13 | Nextcloud Fix - Named Volume (ext4) zamiast exFAT |
+| v7.5 | 14 | Start Script Fix - naprawiono flagi --restart, dodano create_standalone_containers() |
+
+**Szczegóły Sesji 14 (2026-03-19):**
+- ✅ Naprawiono lokalizację flagi `--restart always` w PostgreSQL i Nextcloud
+- ✅ Dodano funkcję `create_standalone_containers()` do automatycznego tworzenia qdrant/n8n
+- ✅ Naprawiono portowanie qdrant (6333 zamiast 6333+6334 - konflikt z nginx)
+- ✅ Wyczyszczono stare wolumeny i wdrożono świeżą instalację
+- ✅ Zainstalowono aplikacje AI (integration_openai 3.10.1, assistant 2.13.0)
+- ✅ Skonfigurowano Nextcloud (occ commands)
+- ✅ Wszystkie kontenery działają (PostgreSQL, Nextcloud, qdrant, n8n)
+
+**Kontenery po Sesji 14:**
+```
+Pod 'klimtech_pod' (wspólna sieć localhost)
+├── nextcloud (32.0.6.1) - Up (6m)
+└── postgres_nextcloud (16) - Up (6m)
+
+Kontenery standalone:
+├── qdrant - Up (2m) - Port 6333
+└── n8n - Up (5m) - Port 5678
+```
 
 ---
 
 ## 14. Planowane zmiany
 
-### Refaktoryzacja VLM Prompts (`backend_app/ingest/image_handler.py`) — ✅ WYKONANE v7.3
+### ✅ WYKONANE (Sesje 11-14)
 
 | # | Co | Gdzie | Status |
 |---|-----|-------|--------|
-| 16a | Utwórz katalog `backend_app/prompts/` | — | ✅ DONE |
-| 16b | Utwórz `prompts/__init__.py` | — | ✅ DONE |
-| 16c | Utwórz `prompts/vlm_prompts.py` z 8 wariantami | — | ✅ DONE |
-| 16d | Refaktoryzuj `image_handler.py` — import promptów | `image_handler.py` | ✅ DONE |
-| 16e | Refaktoryzuj `image_handler.py` — dynamiczne params | `image_handler.py` | ✅ DONE |
+| 16a | Utwórz katalog `backend_app/prompts/` | — | ✅ DONE (Sesja 11e v7.3) |
+| 16b | Utwórz `prompts/__init__.py` | — | ✅ DONE (Sesja 11e v7.3) |
+| 16c | Utwórz `prompts/vlm_prompts.py` z 8 wariantami | — | ✅ DONE (Sesja 11e v7.3) |
+| 16d | Refaktoryzuj `image_handler.py` — import promptów | `image_handler.py` | ✅ DONE (Sesja 11e v7.3) |
+| 16e | Refaktoryzuj `image_handler.py` — dynamiczne params | `image_handler.py` | ✅ DONE (Sesja 11e v7.3) |
 
 **8 wariantów promptów VLM:** DEFAULT, DIAGRAM, CHART, TABLE, PHOTO, SCREENSHOT, TECHNICAL, MEDICAL
+
+| # | Co | Gdzie | Status |
+|---|-----|-------|--------|
+| H1 | Dodaj funkcję _hash_file() | ingest.py | ✅ DONE (Sesja 11f) |
+| H2 | Modyfikuj /ingest_path — sprawdzanie hashy | ingest.py | ✅ DONE (Sesja 11f) |
+| H3 | Dodaj endpoint /files/check | ingest.py | ✅ DONE (Sesja 11f) |
+| H4 | Utwórz workflow_auto_index_v2.json | n8n_workflows/ | ✅ DONE (Sesja 11f) |
+
+| # | Co | Gdzie | Status |
+|---|-----|-------|--------|
+| NC-1 | Naprawić start_klimtech_v3.py — flagi --restart | start_klimtech_v3.py | ✅ DONE (Sesja 14) |
+| NC-2 | Dodać create_standalone_containers() | start_klimtech_v3.py | ✅ DONE (Sesja 14) |
+| NC-3 | Naprawić portowanie qdrant (6333 zamiast 6333+6334) | start_klimtech_v3.py | ✅ DONE (Sesja 14) |
+| NC-4 | Konfiguracja Nextcloud (apps + occ) | skrypt ręczny | ✅ DONE (Sesja 14) |
 
 ### Inne planowane (niski priorytet)
 
@@ -661,6 +814,75 @@ podman exec -u www-data nextcloud php occ config:system:set overwritehost --valu
 - Chunked summarization dla długich dokumentów
 - Nextcloud `webhook_listeners` — event-driven zamiast pollingu
 - Auto-transkrypcja audio w n8n (Whisper + e5-large → Qdrant)
+
+**PODRĘCZNIE WYKONANE:**
+- ✅ Refaktoryzacja VLM Prompts (8 wariantów)
+- ✅ Sprawdzanie hashy plików przed indeksowaniem
+- ✅ Nextcloud Start Script Fix (flagi --restart, create_standalone_containers)
+- ✅ Konfiguracja Nextcloud (apps AI + occ config)
+
+---
+
+## 15. Podsumowanie sesji 14 (2026-03-19)
+
+### Zakończone zadania:
+1. ✅ Naprawiono flagi `--restart always` w `start_klimtech_v3.py`
+   - PostgreSQL: --restart always PRZED nazwą obrazu
+   - Nextcloud: --restart always PRZED nazwą obrazu
+
+2. ✅ Dodano funkcję `create_standalone_containers()`
+   - Automatyczne tworzenie qdrant (port 6333)
+   - Automatyczne tworzenie n8n (port 5678)
+
+3. ✅ Wyczyszczono stare wolumeny i wdrożono świeżą instalację
+   - podman volume rm klimtech_postgres_data klimtech_nextcloud_data
+   - Utworzenie świeżych wolumenów z Named Volumes
+
+4. ✅ Zainstalowano Nextcloud 32.0.6.1
+   - "Nextcloud was successfully installed"
+   - Named Volume dla danych (ext4) - NIE exFAT
+
+5. ✅ Zainstalowano aplikacje AI
+   - integration_openai 3.10.1
+   - assistant 2.13.0
+
+6. ✅ Skonfigurowano Nextcloud
+   - Utworzono katalog custom_apps
+   - Ustawiono config systemowe (occ commands)
+
+7. ✅ Wszystkie kontenery działają
+   - Pod 'klimtech_pod' z PostgreSQL i Nextcloud
+   - Standalone: qdrant (6333), n8n (5678)
+
+8. ✅ Zaktualizowano dokumentację
+   - postep.md: szczegółowa kronologia instalacji
+   - PROJEKT_OPIS.md: zaktualizowana struktura katalogów i problemy
+
+### Adresy końcowe:
+- **Nextcloud HTTP:** http://192.168.31.70:8081
+- **Nextcloud HTTPS:** https://192.168.31.70:8444
+- **Backend API:** http://192.168.31.70:8000
+- **Backend UI:** https://192.168.31.70:8443
+- **Qdrant:** http://192.168.31.70:6333
+- **Qdrant HTTPS:** https://192.168.31.70:6334
+- **n8n:** http://192.168.31.70:5678
+
+### Login Nextcloud:
+- **User:** admin
+- **Password:** klimtech123
+
+### Uwagi dla użytkownika:
+1. Po zalogowaniu się do Nextcloud, usuń hardcoded credentials ze skryptu:
+   - Plik: `/media/lobo/BACKUP/KlimtechRAG/start_klimtech_v3.py`
+   - Linie: 178-180 (NEXTCLOUD_ADMIN_USER i NEXTCLOUD_ADMIN_PASSWORD)
+
+2. Skonfiguruj AI Provider w Nextcloud:
+   - Admin → Artificial Intelligence → OpenAI Local
+   - Service URL: `http://192.168.31.70:8000`
+   - API Key: `sk-local`
+   - Model: `klimtech-bielik`
+
+3. Przetestuj Nextcloud Assistant w przeglądarce
 
 ---
 

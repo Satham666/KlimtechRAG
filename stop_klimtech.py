@@ -18,7 +18,10 @@ WATCHDOG_PID_FILE = os.path.join(LOG_DIR, "klimtech_watchdog.pid")
 # Kontenery (poza Pod)
 CONTAINERS_STANDALONE = ["qdrant", "n8n"]
 # Pod z Nextcloud i PostgreSQL (wspólna sieć = localhost)
-POD_NAME = "klimtech"
+POD_NAMES = [
+    "klimtech_pod",
+    "klimtech",
+]  # klimtech_pod = nowy, klimtech = stary (compat)
 
 
 def kill_by_pid_file(pid_file: str, name: str) -> bool:
@@ -76,7 +79,10 @@ def kill_nginx() -> None:
     print("   nginx HTTPS reverse proxy...")
     try:
         result = subprocess.run(
-            ["sudo", "-n", "nginx", "-s", "stop"], capture_output=True, text=True, timeout=10
+            ["sudo", "-n", "nginx", "-s", "stop"],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0:
             print("      OK nginx zatrzymany")
@@ -159,42 +165,49 @@ def kill_remaining_ports() -> None:
 
 
 def stop_pod():
-    """Zatrzymuje i usuwa Pod z wszystkimi kontenerami."""
-    print("   Zatrzymywanie Pod klimtech...")
-    try:
-        result = subprocess.run(
-            ["podman", "pod", "stop", "-t", "10", POD_NAME],
-            capture_output=True, text=True, timeout=30
-        )
-        if result.returncode == 0:
-            print(f"   ✅ {POD_NAME} zatrzymany")
-        else:
-            print(f"   ⚪ {POD_NAME}: nie działał")
-    except subprocess.TimeoutExpired:
-        print(f"   ⏱️  {POD_NAME}: timeout")
-    except Exception as e:
-        print(f"   ⚠️  {POD_NAME}: {e}")
-    
-    # Usuń pod po zatrzymaniu
-    try:
-        subprocess.run(["podman", "pod", "rm", "-f", POD_NAME], capture_output=True, timeout=10)
-        print(f"   ✅ {POD_NAME} usunięty")
-    except Exception:
-        pass
+    """Zatrzymuje i usuwa wszystkie Pody klimtech."""
+    for pod_name in POD_NAMES:
+        print(f"   Zatrzymywanie Pod {pod_name}...")
+        try:
+            result = subprocess.run(
+                ["podman", "pod", "stop", "-t", "10", pod_name],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                print(f"   ✅ {pod_name} zatrzymany")
+            else:
+                print(f"   ⚪ {pod_name}: nie działał")
+        except subprocess.TimeoutExpired:
+            print(f"   ⏱️  {pod_name}: timeout")
+        except Exception as e:
+            print(f"   ⚠️  {pod_name}: {e}")
+
+        # Usuń pod po zatrzymaniu
+        try:
+            subprocess.run(
+                ["podman", "pod", "rm", "-f", pod_name], capture_output=True, timeout=10
+            )
+            print(f"   ✅ {pod_name} usunięty")
+        except Exception:
+            pass
 
 
 def stop_containers():
     print("\n🐳 Zatrzymywanie kontenerów Podman...")
-    
+
     # Najpierw Pod (to zatrzymuje nextcloud i postgres_nextcloud)
     stop_pod()
-    
+
     # Potem pozostałe kontenery standalone
     for container in CONTAINERS_STANDALONE:
         try:
             result = subprocess.run(
                 ["podman", "stop", "-t", "5", container],
-                capture_output=True, text=True, timeout=15,
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
             if result.returncode == 0:
                 print(f"   ✅ {container}")
@@ -251,7 +264,9 @@ def cleanup_podman():
     try:
         result = subprocess.run(
             ["podman", "system", "prune", "-f"],
-            capture_output=True, text=True, timeout=60
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         if result.returncode == 0:
             for line in result.stderr.splitlines():
