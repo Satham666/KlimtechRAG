@@ -2,7 +2,7 @@
 
 > **Cel tego pliku:** Po wczytaniu tego pliku model AI natychmiast wie co zostało zrobione, co jest do zrobienia i jakie są plany. Aktualizuj po każdej sesji.
 
-**Ostatnia aktualizacja:** 2026-03-21  
+**Ostatnia aktualizacja:** 2026-03-21 (aktualizacja dokumentacji)  
 **Wersja systemu:** v7.3  
 **Serwer:** 192.168.31.70 | Katalog: `/media/lobo/BACKUP/KlimtechRAG/`  
 **GitHub:** https://github.com/Satham666/KlimtechRAG
@@ -59,11 +59,13 @@ cd /media/lobo/BACKUP/KlimtechRAG && source venv/bin/activate.fish
 - HTTPS nginx reverse proxy (self-signed cert)
 - `index.html` — pełnofunkcyjny UI z czatem, sesjami, upload, web search
 
-### Sekcja 16: VLM Prompts (UKOŃCZONA)
+### Sekcja 16: VLM Prompts (UKOŃCZONA) - DODANE DO DOKUMENTACJI
 - `backend_app/prompts/__init__.py` — utworzony
 - `backend_app/prompts/vlm_prompts.py` — 8 wariantów promptów: DEFAULT, DIAGRAM, CHART, TABLE, PHOTO, SCREENSHOT, TECHNICAL, MEDICAL
 - `VLM_PARAMS` dict (max_tokens, temperature, context_length, gpu_layers)
 - Funkcje: `get_prompt()`, `get_full_prompt()`, `get_vlm_params()`
+- **DODANO** sekcję do PROJEKT_OPIS.md (sekcja 10: VLM Prompts)
+- **DODANO** opis model_manager.py (sekcja 11: Zarządzanie modelami)
 - **NIE podpięte jeszcze** do `image_handler.py` (krok 16d/16e)
 
 ---
@@ -96,7 +98,7 @@ podman logs nextcloud 2>&1 | tail -100
 **Status:** NIEROZWIĄZANE  
 **Obejście:** Używaj `start_backend_gpu.py`
 
-### Problem 5: monitoring.py GPU: 0% dla AMD — 🟡 kosmetyczny
+### Problem 5: monitoring.py GPU: 0% dla AMD — ✅ ROZWIĄZANY
 **Status:** Rozwiązany przez `gpu_status.py` (rocm-smi)
 
 ### Problem 6: Refaktoryzacja image_handler.py — 🟡
@@ -152,8 +154,8 @@ podman logs nextcloud 2>&1 | tail -100
 | `backend_app/services/llm.py` | **Standalone** OpenAIGenerator |
 | `backend_app/services/colpali_embedder.py` | ColPali multi-vector |
 | `backend_app/models/schemas.py` | Pydantic: **use_rag=False** domyślnie |
-| `backend_app/prompts/vlm_prompts.py` | 8 wariantów promptów VLM |
-| `backend_app/ingest/image_handler.py` | VLM opisy obrazów (prompty hardcoded → do refaktoru) |
+| `backend_app/prompts/vlm_prompts.py` | 8 wariantów promptów VLM + VLM_PARAMS |
+| `backend_app/services/model_manager.py` | Lifecycle llama-server, przełączanie LLM↔VLM |
 | `backend_app/static/index.html` | UI v7.3 (czat, GPU dashboard, upload) |
 | `start_klimtech_v3.py` | Start systemu (nginx + kontenery + backend) |
 | `stop_klimtech.py` | Stop systemu |
@@ -222,6 +224,8 @@ curl -k https://192.168.31.70:8443/health
    3. Sekcja 16d-16e (podpięcie vlm_prompts do image_handler.py)
 
 3. **Przy debugowaniu NC Asystenta:** Prawdopodobna przyczyna to header `Expect: 100-continue` — middleware w `main.py` usuwający ten header powinno rozwiązać problem.
+
+4. **Dokumentacja zaktualizowana:** Dodano sekcje VLM Prompts, Zarządzanie modelami, kluczowe decyzje architektoniczne.
 
 ---
 

@@ -390,7 +390,145 @@ Interfejs użytkownika dostępny na `https://192.168.31.70:8443`:
 
 ---
 
-## 10. Komendy operacyjne
+## 10. VLM Prompts — opisy obrazów w PDF
+
+### 10.1 Architektura VLM (Vision Language Model)
+
+KlimtechRAG obsługuje opisywanie obrazów w dokumentach PDF za pomocą VLM (Vision Language Model). System zawiera 8 specjalistycznych promptów dla różnych typów obrazów:
+
+| Typ obrazu | Cel promptu | Model VLM |
+|------------|-------------|-----------|
+| **DEFAULT** | Uniwersalny, szczegółowy opis | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
+| **DIAGRAM** | Schematy blokowe, flowcharty, UML | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
+| **CHART** | Wykresy (liniowe, słupkowe, kołowe) | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
+| **TABLE** | Tabele danych, zestawienia, cenniki | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
+| **PHOTO** | Zdjęcia obiektów, ludzi, sprzętu | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
+| **SCREENSHOT** | Zrzuty ekranu UI, aplikacji | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
+| **TECHNICAL** | Schematy elektryczne, mechaniczne | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
+| **MEDICAL** | Obrazowanie medyczne (RTG, MRI, USG) | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
+
+### 10.2 Parametry VLM
+
+```python
+VLM_PARAMS = {
+    "max_tokens": 512,
+    "temperature": 0.1,
+    "context_length": 4096,
+    "gpu_layers": 99,  # wszystkie warstwy na GPU
+}
+```
+
+### 10.3 Pipeline VLM
+
+1. **Wykrywanie obrazów w PDF** — `image_handler.py` ekstrahuje obrazy
+2. **Klasyfikacja typu** — heurystyka określa typ obrazu (diagram, chart, table, etc.)
+3. **Wybór promptu** — `vlm_prompts.py` dostarcza odpowiedni prompt
+4. **Generowanie opisu** — llama-cli z VLM tworzy tekstowy opis
+5. **Wzbogacenie dokumentu** — opisy są dodawane jako kontekst do tekstu PDF
+6. **Indeksowanie** — przetworzony dokument z opisami trafia do RAG
+
+### 10.4 Struktura plików
+
+```
+backend_app/prompts/
+├── __init__.py
+└── vlm_prompts.py          # 8 wariantów promptów, VLM_PARAMS, funkcje pomocnicze
+
+backend_app/ingest/
+└── image_handler.py         # Ekstrakcja obrazów + VLM (refaktoryzacja w toku)
+```
+
+### 10.5 Data Flow VLM
+
+```mermaid
+graph TB
+    A[Plik PDF] --> B[Ekstrakcja obrazów<br>image_handler.py]
+    B --> C[Klasyfikacja typu<br>heurystyka]
+    C --> D[Wybór promptu<br>vlm_prompts.py]
+    D --> E[VLM generowanie<br>llama-cli + mmproj]
+    E --> F[Opis obrazu<br>max 200 słów]
+    F --> W[Wzbogacenie dokumentu<br>+ kontekst RAG]
+    W --> G[Indeksowanie<br>klimtech_docs]
+    G --> H[Zapytanie RAG<br>+ opisy obrazów]
+```
+
+### 10.6 Implementacja
+
+```python
+# Przykład użycia
+from prompts.vlm_prompts import get_prompt, get_vlm_params
+
+prompt = get_prompt("diagram")  # Zwraca DIAGRAM_PROMPT
+full_prompt = get_full_prompt("diagram")  # System + User template
+params = get_vlm_params()  # Parametry llama-cli
+```
+
+### 10.5 Implementacja
+
+```python
+# Przykład użycia
+from prompts.vlm_prompts import get_prompt, get_vlm_params
+
+prompt = get_prompt("diagram")  # Zwraca DIAGRAM_PROMPT
+full_prompt = get_full_prompt("diagram")  # System + User template
+params = get_vlm_params()  # Parametry llama-cli
+```
+
+---
+
+## 11. Zarządzanie modelami LLM/VLM
+
+### 11.1 Architektura model_manager.py
+
+**backend_app/services/model_manager.py** — centralny system zarządzania modelami LLM i VLM:
+
+- **Lifecycle serwera** — start/stop/switch llama-server
+- **Automatyczne przełączanie** — LLM ↔ VLM z zarządzaniem VRAM
+- **Progress logging** — szczegółowe logi uruchamiania
+- **Konfiguracja modeli** — JSON config z listą dostępnych modeli
+
+### 11.2 Kluczowe funkcje
+
+| Funkcja | Cel | Parametry |
+|---------|-----|-----------|
+| `start_llm_server()` | Uruchomienie LLM | `model_path`, `model_type="llm"` |
+| `start_vlm_server()` | Uruchomienie VLM | `model_path`, `model_type="vlm"` |
+| `switch_model()` | Przełączanie modeli | `model_type` ("llm" lub "vlm") |
+| `get_server_status()` | Status serwera | Zwraca running/model_type/port |
+| `get_available_models()` | Lista dostępnych modeli | Zwraca dict z kategoriami |
+
+### 11.3 AMD GPU environment
+
+```python
+amd_env = {
+    "HIP_VISIBLE_DEVICES": "0",
+    "GPU_MAX_ALLOC_PERCENT": "100", 
+    "HSA_ENABLE_SDMA": "0",
+    "HSA_OVERRIDE_GFX_VERSION": "9.0.6",
+}
+```
+
+### 11.4 Progress logging
+
+- **Plik:** `logs/llm_progress.log`
+- **Endpoint:** `/model/progress-log` (polling)
+- **Format:** `[HH:MM:SS] Wiadomość`
+- **Zawartość:** Analiza VRAM, lista modeli, parametry, status startu
+
+### 11.5 Workflow przełączania
+
+```mermaid
+graph LR
+    A[Żądanie switch] --> B[Stop obecny serwer]
+    B --> C[Czekaj 5s na VRAM]
+    C --> D[Uruchom nowy model]
+    D --> E[Zaktualizuj config]
+    E --> F[Return status]
+```
+
+---
+
+## 12. Komendy operacyjne
 
 ### Start / Stop systemu
 
@@ -422,7 +560,7 @@ curl -k https://192.168.31.70:8443/gpu/status
 
 ---
 
-## 11. Kluczowe decyzje architektoniczne
+## 12. Kluczowe decyzje architektoniczne
 
 1. **Lazy loading VRAM** — embedding i pipeline RAG ładowane dopiero przy pierwszym użyciu, nie na starcie backendu. VRAM start: 14 MB zamiast 4.5 GB.
 2. **use_rag=False domyślnie** — czat nie dławi się kontekstem RAG. Użytkownik włącza RAG gdy potrzebuje.
@@ -430,6 +568,10 @@ curl -k https://192.168.31.70:8443/gpu/status
 4. **_detect_base() priorytet** — preferuje `/media/lobo/BACKUP/KlimtechRAG` (tam są modele GGUF) nad `~/KlimtechRAG` (stary repo bez modeli).
 5. **ColPali oddzielna kolekcja** — `klimtech_colpali` (dim=128, MAX_SIM) osobno od `klimtech_docs` (dim=1024).
 6. **JavaScript w Python strings** — template literals (backticks) w JS embedded w Python powodują błędy — zawsze concatenation (+) i var zamiast const/let.
+7. **Model Manager lifecycle** — centralny zarządca przełączania LLM↔VLM z automatycznym zwalnianiem VRAM.
+8. **VLM prompt specialization** — 8 dedykowanych promptów dla różnych typów obrazów (diagramy, tabele, zdjęcia, etc.).
+9. **AMD GPU environment** — HSA_OVERRIDE_GFX_VERSION=9.0.6, GPU_MAX_ALLOC_PERCENT=100 dla Instinct 16GB.
+10. **Fish shell constraint** — heredoc (`cat << 'EOF'`) nie działa, używaj `python3 -c "..."`.
 
 ---
 

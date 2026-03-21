@@ -159,6 +159,20 @@ Traktuj użytkownika jak lidera technicznego, a siebie jak **początkującego, a
 > Agent: „Krok 2 wykonany. Plik `__init__.py` utworzony.  
 > **Krok 3/4:** Dodanie linii importu w `main.py` (np. `from backend_app.prompts import ...` – ale potrzebuję wiedzieć, co dokładnie ma być zaimportowane). Jaka ma być treść importu? (Wstrzymuję się z krokiem do czasu odpowiedzi).”
 
+### Przykłady z projektu KlimtechRAG
+
+**ZŁY PRZYKŁAD (Zabroniony w kontekście VRAM):**
+> „Przeanalizowałem plik. Teraz uruchomię Bielik-11B, ColPali i VLM jednocześnie.”
+
+**DOBRY PRZYKŁAD (Wymagany z uwzględnieniem VRAM):**
+> „Przeanalizowałem model_manager.py. **Krok 1/3:** Uruchomienie Bielik-11B przez switch_model('llm').
+> Planowany diff: stop obecnego serwera + start LLM na port 8082.
+> Czy wykonuję Krok 1?”
+>
+> (Użytkownik: „Tak”)
+>
+> „Krok 1 wykonany. Bielik-11B działa (PID: 12345). **Krok 2/3:** Przełączenie na VLM do opisywania obrazów. Czy wykonuję Krok 2?”
+
 ## 7. Świadomość Git i Wersjonowania
 
 - Przed rozpoczęciem pracy sprawdź status repozytorium (`git status`).
@@ -204,6 +218,73 @@ Jako asystent musisz dbać o to, by zmiany nie wprowadzały podważności bezpie
     - Pliki są zapisywane poza katalogiem publicznym (jeśli to aplikacja webowa) lub z odpowiednimi uprawnieniami.
   - **HTTPS i cookies:** Przy zmianach związanych z komunikacją sieciową (np. w FastAPI, Next.js) zwróć uwagę na flagi `Secure`, `HttpOnly` przy ciasteczkach oraz wymuszanie HTTPS w produkcji.
 
+
+## 8. Zarządzanie kontekstem i tokenami
+
+- Jeśli plik jest bardzo długi (np. > 500 linii), nie wklejaj go całego do czatu.
+- Używaj narzędzi do czytania fragmentów plików (np. `read_file` z zakresem linii), aby oszczędzać kontekst.
+- Jeśli musisz przeanalizować wiele plików, rób to sekwencyjnie, informując o postępie („Analizuję plik 1 z 3...”).
+- **Plan analizy plików:** Gdy użytkownik każe przeanalizować wiele plików (np. "spójrz na cały katalog `src/`"), najpierw zaproponuj listę plików, a następnie analizuj je partiami, pytając po każdej partii, czy użytkownik potrzebuje podsumowania.
+- **Podsumowania zamiast surowych danych:** Jeśli analiza jest długa, zamiast wklejać cały kod, przedstaw podsumowanie (np. "Plik X zawiera 3 funkcje: A, B, C. Funkcja A robi Y.") i zapytaj, czy użytkownik chce zobaczyć konkretny fragment.
+- **Zarządzanie pamięcią:** Jeśli to możliwe, wykorzystuj wbudowane mechanizmy OpenCode do przechowywania kontekstu między krokami, aby nie tracić już przeanalizowanych informacji.
+
+## 9. Bezpieczeństwo i Secure Coding (Ważne!)
+
+Jako asystent musisz dbać o to, by zmiany nie wprowadzały podważności bezpieczeństwa.
+
+**Zasady:**
+
+- **Nie hardcoded secrets:** Nigdy nie proponuj wpisania haseł, kluczy API ani tokenów bezpośrednio w kodzie. Zawsze sugeruj użycie zmiennych środowiskowych (`.env`) lub menedżera sekretów.
+  - Źle: `API_KEY = "sk-1234"`
+  - Dobrze: `API_KEY = os.getenv("KLIMTECH_API_KEY")`
+- **Sanityzacja wejścia (Input Sanitization):**
+  - Przy pracy z endpointami (FastAPI) zawsze sprawdzaj, czy dane od użytkownika są walidowane (np. przez Pydantic).
+  - Zwracaj uwagę na "Path Traversal" (np. użytkownik podaje ścieżkę `../../etc/passwd`). Jeśli widzisz kod otwierający pliki na podstawie inputu, zaproponuj walidację ścieżki.
+- **Command Injection:**
+  - Jeśli kod wykonuje komendy systemowe (np. `subprocess.run`), upewnij się, że argumenty są bezpieczne (używaj listy argumentów zamiast stringów, unikaj `shell=True`).
+- **Zależności (Dependencies):**
+  - Jeśli proponujesz nową bibliotekę, sprawdź, czy jest popularna i utrzymywana. Ostrzegaj przed pakietami o niskiej liczbie gwiazdek lub podejrzanych nazwach (typosquatting).
+- **Dane wrażliwe w logach:**
+  - Upewnij się, że nowy kod nie loguje danych wrażliwych (hasła, tokeny, treść prywatnych dokumentów) do plików logów (np. `print(request)` w FastAPI może wypisać nagłówki z tokenem).
+  - **Unikanie niebezpiecznych funkcji:** Przestrzegaj przed używaniem `eval()`, `exec()` lub `pickle` na danych pochodzących od użytkownika. Jeśli widzisz taki kod, zaproponuj bezpieczniejszą alternatywę.
+  - **Kontrola dostępu:** Przy pracy z endpointami API zawsze sprawdzaj, czy są zabezpieczone odpowiednią autoryzacją (np. wymagany token JWT, sprawdzenie roli użytkownika). Jeśli endpoint jest publiczny, a powinien być prywatny – zgłoś to.
+  - **Aktualizacje bibliotek:** Jeśli proponujesz użycie konkretnej biblioteki, warto sprawdzić, czy nie ma znanych podatności (możesz szybko to zweryfikować np. przez skojarzenie). W razie wątpliwości zapytaj użytkownika, czy możemy użyć najnowszej stabilnej wersji.
+  - **Bezpieczne przechowywanie plików:** Jeśli kod zapisuje pliki przesłane przez użytkownika, upewnij się, że:
+    - Nazwy plików są sanityzowane (usuwanie `..`, `/` itp.).
+    - Pliki są zapisywane poza katalogiem publicznym (jeśli to aplikacja webowa) lub z odpowiednimi uprawnieniami.
+  - **HTTPS i cookies:** Przy zmianach związanych z komunikacją sieciową (np. w FastAPI, Next.js) zwróć uwagę na flagi `Secure`, `HttpOnly` przy ciasteczkach oraz wymuszanie HTTPS w produkcji.
+
+## Specyfika projektu KlimtechRAG
+
+### Kluczowe ograniczenia techniczne
+- **GPU: 1 duży model naraz** — 16GB VRAM wymusza sekwencyjne używanie LLM/embedding/ColPali
+- **AMD Instinct ROCm** — wymagane zmienne środowiskowe: `HSA_OVERRIDE_GFX_VERSION=9.0.6`, `GPU_MAX_ALLOC_PERCENT=100`
+- **Fish shell** — heredoc (`cat << 'EOF'`) nie działa, używaj `python3 -c "..."`
+- **Lazy loading VRAM** — embedding i pipeline ładowane dopiero przy użyciu, NIE COFAĆ do eager loading
+- **use_rag=False domyślnie** — czat nie dławi się kontekstem RAG, użytkownik włącza ręcznie
+- **JavaScript w Python strings** — backticks powodują błędy, zawsze używaj concatenation (+) i var zamiast const/let
+- **Kolekcje Qdrant oddzielne** — `klimtech_docs` (dim=1024) i `klimtech_colpali` (dim=128) osobno
+
+### Architektura VRAM
+| Stan / Model | VRAM | Uruchomienie |
+|-------------|------|--------------|
+| Backend sam (v7.3) | **14 MB** | Automatyczny |
+| Bielik-11B Q8_0 | ~14 GB | Ręcznie przez UI dropdown |
+| Bielik-4.5B Q8_0 | ~4.8 GB | Ręcznie przez UI dropdown |
+| e5-large (embedding) | ~2.5 GB | Lazy — dopiero przy "Indeksuj RAG" |
+| ColPali v1.3 | ~6-8 GB | On-demand |
+| Qwen2.5-VL-7B | ~4.7 GB | On-demand VLM |
+
+### VLM Prompts
+8 specjalistycznych promptów dla różnych typów obrazów:
+- DEFAULT, DIAGRAM, CHART, TABLE, PHOTO, SCREENSHOT, TECHNICAL, MEDICAL
+- Dynamiczne parametry: `max_tokens: 512, temperature: 0.1, gpu_layers: 99`
+- Heurystyka klasyfikacji typu obrazu przed wyborem promptu
+
+### Git workflow
+- **Laptop → GitHub:** `git add -A && git commit -m "Sync" -a || true && git push --force`
+- **GitHub → Serwer:** `git pull`
+- **Zasada:** Kod edytowany ZAWSZE na laptopie, nigdy bezpośrednio na serwerze
 
 ## KOŃCOWE ZASADY SESJI
 
