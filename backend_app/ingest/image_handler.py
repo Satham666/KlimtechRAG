@@ -41,8 +41,25 @@ def _find_vlm_model():
     
     return ""
 VLM_MODEL = _find_vlm_model()
-LLAMA_SERVER_BIN = os.path.expanduser("~/KlimtechRAG/llama.cpp/build/bin/llama-server")
-LLAMA_CLI_BIN = os.path.expanduser("~/KlimtechRAG/llama.cpp/build/bin/llama-cli")
+
+
+def _find_llama_binary(name: str) -> str:
+    """Szuka binarki llama w lokalizacjach opartych na KLIMTECH_BASE_PATH i ~/KlimtechRAG."""
+    from ..config import settings
+    candidates = [
+        os.path.join(settings.base_path, "llama.cpp", "build", "bin", name),
+        os.path.join(settings.base_path, "llama.cpp", name),
+        os.path.expanduser(f"~/KlimtechRAG/llama.cpp/build/bin/{name}"),
+        os.path.expanduser(f"~/KlimtechRAG/llama.cpp/{name}"),
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return candidates[0]  # fallback do pierwszego (błąd ujawni się przy uruchomieniu)
+
+
+LLAMA_SERVER_BIN = _find_llama_binary("llama-server")
+LLAMA_CLI_BIN = _find_llama_binary("llama-cli")
 VLM_PORT = 8083
 VLM_TIMEOUT = 60
 

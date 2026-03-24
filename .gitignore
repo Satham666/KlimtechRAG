@@ -7,4 +7,6 @@ logs/
 Rozmowy_Claude/
 .env
 modele_LLM/
-.ruff_cache/
+.ruff_cache/*.bak
+*.backup
+nohup.out

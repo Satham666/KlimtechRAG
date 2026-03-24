@@ -1,3 +1,5 @@
+import secrets
+
 from fastapi import Depends, HTTPException, Request
 
 from ..config import settings
@@ -13,7 +15,7 @@ def require_api_key(request: Request) -> None:
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer "):
             key = auth[7:]
-    if key != settings.api_key:
+    if not secrets.compare_digest(key or "", settings.api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 

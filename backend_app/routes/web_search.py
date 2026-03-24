@@ -7,15 +7,18 @@ Uses DuckDuckGo for search and trafilatura for HTML-to-text conversion.
 Author: KlimtechRAG
 """
 
+import ipaddress
 import json
 import logging
+import socket
 import time
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import httpx
 
 try:
@@ -34,29 +37,41 @@ except ImportError:
     TRAFILATURA_AVAILABLE = False
     logging.warning("trafilatura not installed")
 
-from ..config import Settings
-from ..utils.dependencies import get_request_id
+from ..config import settings
+from ..utils.dependencies import get_request_id, require_api_key
 from ..utils.rate_limit import apply_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/web", tags=["Web Search"])
 
-settings = Settings()
-
 
 class WebSearchRequest(BaseModel):
     query: str
-    num_results: int = 5
+    num_results: int = Field(5, ge=1, le=20)
 
 
 class WebFetchRequest(BaseModel):
     url: str
-    max_length: int = 50000
+    max_length: int = Field(50000, ge=1, le=500_000)
 
 
 class WebSummarizeRequest(BaseModel):
     url: str
-    max_chars: int = 4000
+    max_chars: int = Field(4000, ge=1, le=50_000)
+
+
+def _assert_public_url(url: str) -> None:
+    """Blokuje SSRF — odrzuca adresy prywatne/lokalne."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="Invalid URL scheme")
+    host = parsed.hostname or ""
+    try:
+        ip = ipaddress.ip_address(socket.gethostbyname(host))
+    except (socket.gaierror, ValueError):
+        raise HTTPException(status_code=400, detail="Cannot resolve host")
+    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+        raise HTTPException(status_code=400, detail="Private/local addresses not allowed")
 
 
 class WebSearchResult(BaseModel):
@@ -78,13 +93,13 @@ def _extract_domain(url: str) -> str:
 
 
 @router.post("/search")
-async def web_search(request: WebSearchRequest, req: Request) -> JSONResponse:
+async def web_search(request: WebSearchRequest, req: Request, _=Depends(require_api_key)) -> JSONResponse:
     """
     Search the web using DuckDuckGo.
 
     Returns list of search results with title, URL, snippet, and domain.
     """
-    request_id = get_request_id(req)
+    request_id = await get_request_id(req)
 
     # Rate limiting
     client_id = req.client.host if req.client else "unknown"
@@ -133,14 +148,14 @@ async def web_search(request: WebSearchRequest, req: Request) -> JSONResponse:
 
 
 @router.post("/fetch")
-async def web_fetch(request: WebFetchRequest, req: Request) -> JSONResponse:
+async def web_fetch(request: WebFetchRequest, req: Request, _=Depends(require_api_key)) -> JSONResponse:
     """
     Fetch a web page and extract text content.
 
     Uses trafilatura for HTML-to-text conversion.
     Returns title, text content, and metadata.
     """
-    request_id = get_request_id(req)
+    request_id = await get_request_id(req)
 
     # Rate limiting
     client_id = req.client.host if req.client else "unknown"
@@ -154,9 +169,7 @@ async def web_fetch(request: WebFetchRequest, req: Request) -> JSONResponse:
 
     logger.info(f"Web fetch: {request.url}", extra={"request_id": request_id})
 
-    # Validate URL
-    if not request.url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=400, detail="Invalid URL scheme")
+    _assert_public_url(request.url)
 
     try:
         # Download with timeout and size limit
@@ -231,7 +244,7 @@ async def web_fetch(request: WebFetchRequest, req: Request) -> JSONResponse:
 
 
 @router.post("/summarize")
-async def web_summarize(request: WebSummarizeRequest, req: Request) -> JSONResponse:
+async def web_summarize(request: WebSummarizeRequest, req: Request, _=Depends(require_api_key)) -> JSONResponse:
     """
     Fetch a web page and summarize it using the LLM.
 
@@ -240,12 +253,13 @@ async def web_summarize(request: WebSummarizeRequest, req: Request) -> JSONRespo
     3. Sends to LLM with summarize prompt
     4. Returns LLM-generated summary
     """
-    request_id = get_request_id(req)
+    request_id = await get_request_id(req)
 
     # Rate limiting
     client_id = req.client.host if req.client else "unknown"
     apply_rate_limit(client_id)
 
+    _assert_public_url(request.url)
     logger.info(f"Web summarize: {request.url}", extra={"request_id": request_id})
 
     try:
@@ -339,7 +353,7 @@ Podsumowanie:"""
 
 
 @router.get("/status")
-async def web_status(req: Request) -> JSONResponse:
+async def web_status(req: Request, _=Depends(require_api_key)) -> JSONResponse:
     """Check availability of web search dependencies."""
     return JSONResponse(
         {

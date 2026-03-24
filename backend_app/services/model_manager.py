@@ -240,20 +240,19 @@ def start_llm_server(model_path: str, model_type: str = "llm") -> Dict[str, Any]
 
     # Uruchom proces
     try:
-        log_stdout = open(os.path.join(LOG_DIR, "llm_server_stdout.log"), "a")
-        log_stderr = open(os.path.join(LOG_DIR, "llm_server_stderr.log"), "a")
-
         process_env = os.environ.copy()
         process_env.update(amd_env)
 
-        proc = subprocess.Popen(
-            llama_cmd,
-            cwd=LLAMA_DIR,
-            stdout=log_stdout,
-            stderr=log_stderr,
-            start_new_session=True,
-            env=process_env,
-        )
+        with open(os.path.join(LOG_DIR, "llm_server_stdout.log"), "a") as log_stdout, \
+             open(os.path.join(LOG_DIR, "llm_server_stderr.log"), "a") as log_stderr:
+            proc = subprocess.Popen(
+                llama_cmd,
+                cwd=LLAMA_DIR,
+                stdout=log_stdout,
+                stderr=log_stderr,
+                start_new_session=True,
+                env=process_env,
+            )
 
         # Czekaj na inicjalizację
         time.sleep(15)
@@ -562,18 +561,17 @@ def start_model_with_progress(
             }
         )
 
-        log_out = open(os.path.join(LOG_DIR, "llm_server_stdout.log"), "a")
-        log_err = open(os.path.join(LOG_DIR, "llm_server_stderr.log"), "a")
-
         try:
-            proc = subprocess.Popen(
-                cmd,
-                cwd=os.path.join(BASE_DIR, "llama.cpp"),
-                stdout=log_out,
-                stderr=log_err,
-                start_new_session=True,
-                env=amd_env,
-            )
+            with open(os.path.join(LOG_DIR, "llm_server_stdout.log"), "a") as log_out, \
+                 open(os.path.join(LOG_DIR, "llm_server_stderr.log"), "a") as log_err:
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=os.path.join(BASE_DIR, "llama.cpp"),
+                    stdout=log_out,
+                    stderr=log_err,
+                    start_new_session=True,
+                    env=amd_env,
+                )
 
             # Zapisz konfigurację
             config = get_models_config() or {}

@@ -44,6 +44,7 @@ class ChatCompletionResponse(BaseModel):
 
 class QueryRequest(BaseModel):
     query: str
+    category_filter: str | None = None  # np. "medicine", "law" — filtruje Qdrant po meta.category
 
 
 class CodeQueryRequest(BaseModel):

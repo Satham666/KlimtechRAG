@@ -1,9 +1,13 @@
 import whisper
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 import tempfile
 import os
 
+from ..utils.dependencies import require_api_key
+
 router = APIRouter(tags=["whisper"])
+
+_MAX_AUDIO_SIZE = 100 * 1024 * 1024  # 100 MB
 
 _whisper_model = None
 
@@ -15,7 +19,7 @@ def get_whisper_model(size: str = "small"):
     return _whisper_model
 
 
-@router.post("/v1/audio/transcriptions")
+@router.post("/v1/audio/transcriptions", dependencies=[Depends(require_api_key)])
 async def transcribe_audio(
     file: UploadFile = File(...),
     model: str = Form("whisper-1"),
@@ -33,8 +37,14 @@ async def transcribe_audio(
             400, f"Unsupported file format. Allowed: {allowed_extensions}"
         )
 
+    content = await file.read()
+    if len(content) > _MAX_AUDIO_SIZE:
+        raise HTTPException(
+            413, f"Audio file too large (max {_MAX_AUDIO_SIZE // 1024 // 1024} MB)"
+        )
+
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-        tmp.write(await file.read())
+        tmp.write(content)
         tmp_path = tmp.name
 
     try:
@@ -58,12 +68,12 @@ async def transcribe_audio(
     return {"text": text}
 
 
-@router.get("/whisper/models")
+@router.get("/whisper/models", dependencies=[Depends(require_api_key)])
 async def list_whisper_models():
     return {"models": whisper.available_models()}
 
 
-@router.get("/whisper/status")
+@router.get("/whisper/status", dependencies=[Depends(require_api_key)])
 async def whisper_status():
     global _whisper_model
     return {

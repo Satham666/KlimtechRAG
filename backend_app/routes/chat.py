@@ -18,6 +18,7 @@ from ..models import (
     CodeQueryRequest,
 )
 from ..services import get_rag_pipeline, doc_store, get_text_embedder
+from ..services.rag import run_rag_pipeline
 from ..services.llm import get_llm_component
 from ..utils.rate_limit import apply_rate_limit, get_client_id
 from ..utils.dependencies import require_api_key, get_request_id
@@ -74,9 +75,9 @@ powiedz o tym szczerze. Odpowiadaj po polsku, chyba że użytkownik pyta w innym
 
 
 @router.get("/models")
-async def list_models_no_v1():
+async def list_models_no_v1(req: Request, _=Depends(require_api_key)):
     """Zwraca dostępne modele — wymagane przez Nextcloud."""
-    return await list_models()
+    return await list_models(req, _)
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +86,7 @@ async def list_models_no_v1():
 
 
 @router.get("/v1/models")
-async def list_models():
+async def list_models(req: Request = None, _=Depends(require_api_key)):
     """Zwraca dostępne modele — wymagane przez klientów OpenAI-compatible (np. OWUI)."""
     model_name = settings.llm_model_name or "klimtech-bielik"
     return {
@@ -110,7 +111,7 @@ async def list_models():
 
 
 @router.post("/v1/embeddings")
-async def create_embeddings(body: dict, req: Request):
+async def create_embeddings(body: dict, req: Request, _=Depends(require_api_key)):
     """
     OpenAI-compatible embeddings endpoint.
     OWUI używa go do tworzenia wektorów przy ingeście do Knowledge Base
@@ -176,14 +177,11 @@ async def query_rag(
         return {"answer": cached, "cached": True}
 
     try:
-        rag_result = get_rag_pipeline().run(
-            {
-                "embedder": {"text": request.query},
-                "prompt_builder": {"query": request.query},
-            },
-            include_outputs_from={"retriever"},
+        rag_result = run_rag_pipeline(
+            query=request.query,
+            category_filter=request.category_filter,
         )
-        local_docs = rag_result["retriever"]["documents"]
+        local_docs = rag_result.get("retriever", {}).get("documents", [])
 
         web_snippet = ""
         try:
@@ -408,14 +406,8 @@ async def query_code_agent(
     apply_rate_limit(get_client_id(req))
 
     try:
-        rag_result = get_rag_pipeline().run(
-            {
-                "embedder": {"text": request.query},
-                "prompt_builder": {"query": request.query},
-            },
-            include_outputs_from={"retriever"},
-        )
-        local_docs = rag_result["retriever"]["documents"]
+        rag_result = run_rag_pipeline(query=request.query)
+        local_docs = rag_result.get("retriever", {}).get("documents", [])
 
         prompt_text = "You are a Senior Python Developer. Analyze the following code/docs strictly.\n\nContext:\n"
         for doc in local_docs:
@@ -458,7 +450,7 @@ async def query_code_agent(
 
 
 @router.get("/rag/debug")
-async def rag_debug(query: str = "test"):
+async def rag_debug(req: Request, query: str = "test", _=Depends(require_api_key)):
     import requests as _requests
     from haystack_integrations.components.retrievers.qdrant import (
         QdrantEmbeddingRetriever,

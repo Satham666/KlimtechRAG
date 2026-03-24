@@ -16,7 +16,9 @@ from fastapi import (
 from haystack import Document
 from haystack_integrations.components.retrievers.qdrant import QdrantEmbeddingRetriever
 
+from ..categories.classifier import classify_document
 from ..config import settings
+from ..fs_tools import resolve_path, FsSecurityError
 from ..models import IngestPathRequest
 from ..services import get_indexing_pipeline, doc_store, get_text_embedder
 from ..services.qdrant import ensure_indexed
@@ -131,8 +133,10 @@ def extract_pdf_text(file_path: str) -> str:
         text = result.stdout.strip()
         if len(text) > 100:
             return text
-    except Exception:
-        pass
+    except subprocess.TimeoutExpired:
+        logger.warning("[PDF] pdftotext timeout po 30s dla: %s", file_path)
+    except Exception as e:
+        logger.warning("[PDF] pdftotext błąd: %s", e)
     return ""
 
 
@@ -277,8 +281,13 @@ def ingest_file_background(file_path: str) -> None:
             logger.info("[BG] Plik pusty: %s", filename)
             return
 
+        category = classify_document(filepath=file_path, content=markdown_text)
         docs = [
-            Document(content=markdown_text, meta={"source": filename, "type": suffix})
+            Document(content=markdown_text, meta={
+                "source": filename,
+                "type": suffix,
+                "category": category,
+            })
         ]
         result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
         chunks = result["writer"]["documents_written"]
@@ -286,7 +295,7 @@ def ingest_file_background(file_path: str) -> None:
         mark_indexed(file_path, chunks)
         ensure_indexed()
         clear_cache()
-        logger.info("[BG] ✅ %s → %d chunków w Qdrant", filename, chunks)
+        logger.info("[BG] ✅ %s → %d chunków w Qdrant (kategoria: %s)", filename, chunks, category)
 
     except Exception as e:
         mark_failed(file_path, str(e)[:200])
@@ -317,7 +326,12 @@ async def upload_file_to_rag(
     if not file.filename:
         raise HTTPException(status_code=400, detail="Brak nazwy pliku")
 
-    ext = os.path.splitext(file.filename)[1].lower()
+    import re as _re
+    safe_filename = _re.sub(r"[^\w\-_\.]", "_", os.path.basename(file.filename))
+    if not safe_filename or safe_filename.startswith("."):
+        raise HTTPException(status_code=400, detail="Nieprawidłowa nazwa pliku")
+
+    ext = os.path.splitext(safe_filename)[1].lower()
     if ext not in EXT_TO_DIR:
         raise HTTPException(
             status_code=400,
@@ -325,6 +339,14 @@ async def upload_file_to_rag(
         )
 
     try:
+        # Wczesny check z Content-Length przed wczytaniem do RAM
+        cl = req.headers.get("content-length")
+        if cl and int(cl) > settings.max_file_size_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Plik za duży (limit {settings.max_file_size_bytes // 1024 // 1024} MB)",
+            )
+
         content = await file.read()
         file_size = len(content)
 
@@ -346,7 +368,7 @@ async def upload_file_to_rag(
             }
 
         # 1. Zapisz do Nextcloud
-        target_path, subdir = save_to_uploads(content, file.filename, ext)
+        target_path, subdir = save_to_uploads(content, safe_filename, ext)
         register_file(target_path)
 
         # Zapisz hash do rejestru plikow
@@ -462,9 +484,14 @@ async def ingest_file(
         if not markdown_text or not markdown_text.strip():
             return {"message": "File empty (Scanned PDF?)", "chunks_processed": 0}
 
+        category = classify_document(filepath=safe_filename, content=markdown_text)
         docs = [
             Document(
-                content=markdown_text, meta={"source": file.filename, "type": suffix}
+                content=markdown_text, meta={
+                    "source": file.filename,
+                    "type": suffix,
+                    "category": category,
+                }
             )
         ]
         logger.info(
@@ -506,7 +533,11 @@ async def ingest_by_path(
     require_api_key(req)
     apply_rate_limit(get_client_id(req))
 
-    file_path = body.path
+    try:
+        file_path = resolve_path(settings.base_path, body.path)
+    except FsSecurityError:
+        raise HTTPException(status_code=403, detail="Path outside allowed directory")
+
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
@@ -600,8 +631,13 @@ async def ingest_by_path(
                 "filename": filename,
             }
 
+        category = classify_document(filepath=file_path, content=markdown_text)
         docs = [
-            Document(content=markdown_text, meta={"source": filename, "type": suffix})
+            Document(content=markdown_text, meta={
+                "source": filename,
+                "type": suffix,
+                "category": category,
+            })
         ]
         result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
         chunks = result["writer"]["documents_written"]
@@ -609,7 +645,7 @@ async def ingest_by_path(
         mark_indexed(file_path, chunks)
         ensure_indexed()
         clear_cache()
-        logger.info("[ingest_path] %s → %d chunks", filename, chunks)
+        logger.info("[ingest_path] %s → %d chunks (kategoria: %s)", filename, chunks, category)
 
         return {"message": "OK", "chunks_processed": chunks, "filename": filename}
 
@@ -772,7 +808,11 @@ async def ingest_pdf_with_vlm(
     require_api_key(req)
     apply_rate_limit(get_client_id(req))
 
-    file_path = body.path
+    try:
+        file_path = resolve_path(settings.base_path, body.path)
+    except FsSecurityError:
+        raise HTTPException(status_code=403, detail="Path outside allowed directory")
+
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 

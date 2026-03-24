@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from haystack import Pipeline
 from haystack.components.builders import PromptBuilder
@@ -18,6 +19,25 @@ logger = logging.getLogger("klimtechrag")
 # ---------------------------------------------------------------------------
 _indexing_pipeline = None
 _rag_pipeline = None
+
+
+def _build_category_filter(category: Optional[str]) -> Optional[dict]:
+    """
+    Buduje filtr Haystack dla Qdrant na podstawie ID kategorii.
+
+    Args:
+        category: ID kategorii np. "medicine", "law" lub None (brak filtra)
+
+    Returns:
+        Słownik filtra Haystack lub None.
+
+    Example:
+        >>> _build_category_filter("medicine")
+        {"field": "meta.category", "operator": "==", "value": "medicine"}
+    """
+    if not category or category == "other":
+        return None
+    return {"field": "meta.category", "operator": "==", "value": category}
 
 
 def get_indexing_pipeline():
@@ -66,3 +86,28 @@ def get_rag_pipeline():
         _rag_pipeline.connect("prompt_builder", "llm")
         logger.info("RAG pipeline gotowy")
     return _rag_pipeline
+
+
+def run_rag_pipeline(query: str, category_filter: Optional[str] = None) -> dict:
+    """
+    Uruchamia RAG pipeline z opcjonalnym filtrowaniem po kategorii.
+
+    Args:
+        query:           Zapytanie użytkownika.
+        category_filter: ID kategorii do filtrowania (np. "medicine") lub None.
+
+    Returns:
+        Wynik pipeline (dict z kluczem "llm").
+    """
+    pipeline = get_rag_pipeline()
+    filters = _build_category_filter(category_filter)
+
+    run_input: dict = {
+        "embedder": {"text": query},
+        "prompt_builder": {"query": query},
+    }
+    if filters:
+        run_input["retriever"] = {"filters": filters}
+        logger.info("RAG query z filtrem kategorii: %s", category_filter)
+
+    return pipeline.run(run_input)

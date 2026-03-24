@@ -1,4 +1,5 @@
 import logging
+import secrets
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket
@@ -13,6 +14,7 @@ from ..file_registry import (
     list_files,
     get_pending_files,
 )
+from ..utils.dependencies import require_api_key
 
 router = APIRouter(tags=["admin"])
 logger = logging.getLogger("klimtechrag")
@@ -58,7 +60,9 @@ async def metrics_endpoint():
 async def delete_documents(
     source: Optional[str] = None,
     doc_id: Optional[str] = None,
+    req: Request = None,
 ):
+    require_api_key(req)
     if not source and not doc_id:
         raise HTTPException(
             status_code=400, detail="Provide at least source or doc_id filter"
@@ -84,6 +88,10 @@ async def delete_documents(
 
 @router.websocket("/ws/health")
 async def websocket_health(ws: WebSocket):
+    api_key = ws.headers.get("X-API-Key") or ""
+    if settings.api_key and not secrets.compare_digest(api_key, settings.api_key):
+        await ws.close(code=4001, reason="Unauthorized")
+        return
     await ws.accept()
     try:
         while True:
@@ -94,7 +102,8 @@ async def websocket_health(ws: WebSocket):
         await ws.close()
 
 @router.get("/files/stats")
-async def files_stats():
+async def files_stats(req: Request = None):
+    require_api_key(req)
     stats = get_file_stats()
     try:
         import requests as _req
@@ -116,7 +125,9 @@ async def files_list(
     ext: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 200,
+    req: Request = None,
 ):
+    require_api_key(req)
     files = list_files(extension=ext, status=status, limit=limit)
     return {
         "count": len(files),
@@ -137,13 +148,15 @@ async def files_list(
 
 
 @router.post("/files/sync")
-async def files_sync():
+async def files_sync(req: Request = None):
+    require_api_key(req)
     count = sync_with_filesystem()
     return {"registered": count, "message": f"Zsynchronizowano {count} plików"}
 
 
 @router.get("/files/pending")
-async def files_pending():
+async def files_pending(req: Request = None):
+    require_api_key(req)
     files = get_pending_files()
     return {
         "count": len(files),

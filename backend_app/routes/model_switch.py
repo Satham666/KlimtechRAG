@@ -10,7 +10,7 @@ Endpoints:
 - GET  /model/list           - Lista dostępnych modeli
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 
@@ -27,10 +27,16 @@ from ..services.model_manager import (
     clear_progress_log,
     _log,
     LLAMA_PORT,
+    BASE_DIR,
 )
+from ..utils.dependencies import require_api_key
 
 
-router = APIRouter(prefix="/model", tags=["Model Management"])
+router = APIRouter(
+    prefix="/model",
+    tags=["Model Management"],
+    dependencies=[Depends(require_api_key)],
+)
 
 
 # ---------------------------------------------------------------------------
@@ -459,12 +465,17 @@ class StartModelRequest(_BM):
 
 
 @router.post("/start")
-async def start_model(req: StartModelRequest):
+async def start_model(body: StartModelRequest):
     """
     Uruchamia llama-server dla podanego modelu w tle.
     Postep logowany do llm_progress.log — pobieraj przez /model/progress-log
     """
-    result = start_model_with_progress(req.model_path, req.model_type, LLAMA_PORT)
+    from pathlib import Path
+    allowed = Path(BASE_DIR).resolve()
+    target = Path(body.model_path).resolve()
+    if not str(target).startswith(str(allowed)):
+        raise HTTPException(status_code=403, detail="Model path outside allowed directory")
+    result = start_model_with_progress(body.model_path, body.model_type, LLAMA_PORT)
     return result
 
 

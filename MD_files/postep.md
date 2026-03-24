@@ -2,8 +2,8 @@
 
 > **Cel tego pliku:** Po wczytaniu tego pliku model AI natychmiast wie co zostało zrobione, co jest do zrobienia i jakie są plany. Aktualizuj po każdej sesji.
 
-**Ostatnia aktualizacja:** 2026-03-21 (aktualizacja dokumentacji)  
-**Wersja systemu:** v7.3  
+**Ostatnia aktualizacja:** 2026-03-23
+**Wersja systemu:** v7.4
 **Serwer:** 192.168.31.70 | Katalog: `/media/lobo/BACKUP/KlimtechRAG/`  
 **GitHub:** https://github.com/Satham666/KlimtechRAG
 
@@ -59,6 +59,51 @@ cd /media/lobo/BACKUP/KlimtechRAG && source venv/bin/activate.fish
 - HTTPS nginx reverse proxy (self-signed cert)
 - `index.html` — pełnofunkcyjny UI z czatem, sesjami, upload, web search
 
+### Sesja 12: Audyt bezpieczeństwa + czyszczenie projektu (2026-03-23, laptop)
+
+#### Audyt bezpieczeństwa (plik: `AUDYT_2026-03-23_22-19-27.md`)
+Połączono audyt Haiku 4.5 (2026-03-21) z nowym audytem Sonnet 4.6. 25 znalezisk (5 CRITICAL, 6 HIGH, 7 MEDIUM, 4 LOW, 3 INFO). Naprawiono wszystkie pozycje CRITICAL i HIGH. Postęp zapisany w `POSTEP_AUDYT.md`.
+
+Kluczowe naprawy:
+- `utils/dependencies.py` — `secrets.compare_digest` zamiast `==` (timing attack)
+- `routes/admin.py` — auth na `/documents DELETE`, `/files/*`, WebSocket `/ws/health`
+- `routes/chat.py` — auth na `/v1/embeddings`, `/rag/debug`, `/models`
+- `routes/ingest.py` — `resolve_path()` w `/ingest_path` i `/ingest_pdf_vlm`, sanityzacja nazw plików, pre-check Content-Length
+- `routes/model_switch.py` — router-level auth, walidacja ścieżki modelu
+- `routes/web_search.py` — SSRF: `_assert_public_url()`, `require_api_key` na wszystkich endpointach
+- `routes/whisper_stt.py` — limit 100 MB, auth na wszystkich endpointach
+- `services/model_manager.py` — FD leak: `open()` → `with open(...)` (2 miejsca)
+- `ingest/image_handler.py` — usunięto hardcoded ścieżki, używa `_find_llama_binary()`
+- Stworzono `.env` (root projektu) z `KLIMTECH_API_KEY=sk-local`
+- `.gitignore` — dodano `*.bak`, `*.backup`, `nohup.out`
+
+#### Czyszczenie projektu
+Usunięto pliki `.bak`/`.backup`/`.old` (6 plików). Zarchiwizowano 7 plików `session-*.md` → `MD_files/Archiw/`. Przeniesiono skrypty do `scripts/` (`fix_postgres.sh`, `setup_sudoers_nginx.sh`, `ingest_embed.py`). Przekonwertowano `scripts/plan.txt` → `MD_files/INSTALACJA_NEXTCLOUD.md`. Usunięto `modele_LLM/.env`, `code.html`, `ingest_fix.py`, `backend_app/prompts/apply_changes.sh`, puste katalogi repo_github.
+
+---
+
+### Sesja 13: Filtrowanie tematyczne RAG — Fazy 0–3 (2026-03-23, laptop)
+
+#### Nowy pakiet `backend_app/categories/`
+- `definitions.py` — **14 kategorii głównych** z pełną strukturą podkategorii (zgodnie z `DRZEWO_KATEGORII.md`): medicine, law, finance, technology, construction, education, agriculture, society, culture, sport, family, religion, environment, other. Każda kategoria ma: id, names (pl/en/de), path, path_hints, keywords (pl/en/de), subcategories (3 poziomy głębokości).
+- `classifier.py` — `classify_document(filepath, content) → str`. Logika: (1) path-based z normalizacją diakrytyków, (2) keyword-based na 3000 znakach treści (PL+EN+DE), (3) fallback "other". Pre-kalkulowane struktury dla wydajności.
+- `__init__.py` — eksportuje `CATEGORIES`, `classify_document`, `get_category_ids`, `get_category_name`.
+
+#### Integracja z pipeline'm
+- `services/rag.py` — dodano `_build_category_filter()` i `run_rag_pipeline(query, category_filter)`. Filtr Qdrant: `{"field": "meta.category", "operator": "==", "value": category}`.
+- `routes/ingest.py` — 3 miejsca (`ingest_file_background`, `/upload`, `/ingest_path`) — każdy dokument dostaje `meta["category"]` z klasyfikatora.
+- `routes/chat.py` — endpoint `/query` używa `run_rag_pipeline(query, category_filter)`.
+- `models/schemas.py` — `QueryRequest` ma nowe pole `category_filter: str | None = None`.
+
+#### Skrypt Nextcloud
+- `scripts/create_nextcloud_folders.py` — tworzy strukturę 300+ folderów w Nextcloud przez `podman exec occ files:mkdir`. Obsługuje `--dry-run`, `--base-path`. Uruchomić na serwerze gdy będzie dostęp.
+
+#### Archiwizacja
+- `category_definitions.py` (root) → `MD_files/Archiw/`
+- `category_generator.py` (root) → `MD_files/Archiw/`
+
+---
+
 ### Sekcja 16: VLM Prompts (UKOŃCZONA) - DODANE DO DOKUMENTACJI
 - `backend_app/prompts/__init__.py` — utworzony
 - `backend_app/prompts/vlm_prompts.py` — 8 wariantów promptów: DEFAULT, DIAGRAM, CHART, TABLE, PHOTO, SCREENSHOT, TECHNICAL, MEDICAL
@@ -109,20 +154,23 @@ podman logs nextcloud 2>&1 | tail -100
 
 ## ⏳ DO ZROBIENIA
 
-### Priorytet WYSOKI
+### Priorytet WYSOKI — wymaga serwera
 
 | # | Zadanie | Notatki |
 |---|---------|---------|
-| A | Debugować NC Assistant 417 | Sprawdź Expect header, logi NC |
-| B | Przetestować Whisper STT | `curl -F file=@audio.mp3 .../v1/audio/transcriptions` |
-| C | Zmapować Speech-to-text w NC Admin | Po teście B |
+| A | Uruchomić `create_nextcloud_folders.py` | `python3 scripts/create_nextcloud_folders.py --dry-run` → potem bez --dry-run |
+| B | Debugować NC Assistant 417 | Sprawdź Expect header, logi NC |
+| C | Przetestować Whisper STT | `curl -F file=@audio.mp3 .../v1/audio/transcriptions` |
+| D | Sprawdzić czy `.env` na serwerze ma `KLIMTECH_API_KEY=sk-local` | `/media/lobo/BACKUP/KlimtechRAG/.env` |
 
-### Priorytet ŚREDNI — Sekcja 16d-16e
+### Priorytet ŚREDNI
 
 | # | Zadanie | Plik | Status |
 |---|---------|------|--------|
-| 16d | Refaktoryzuj `image_handler.py` — import z `vlm_prompts` | `ingest/image_handler.py` | ⏳ |
-| 16e | Dynamiczne params llama-cli (zamiast hardcoded) | `ingest/image_handler.py` | ⏳ |
+| M1 | UI — dropdown z kategoriami w czacie | `static/index.html` + `GET /categories` endpoint | ⏳ |
+| M2 | Endpoint `GET /categories` dla UI | `routes/chat.py` lub nowy router | ⏳ |
+| M3 | Sekcja 16d — podpięcie vlm_prompts do image_handler.py | `ingest/image_handler.py` | ⏳ |
+| M4 | Rozważyć web search enhancement z kategoriami | `routes/web_search.py` | ⏳ |
 
 ### Priorytet NISKI
 
@@ -134,6 +182,7 @@ podman logs nextcloud 2>&1 | tail -100
 | L4 | NC `webhook_listeners` — event-driven zamiast pollingu |
 | L5 | Auto-transkrypcja audio w n8n (Whisper + e5-large → Qdrant) |
 | L6 | Naprawić `stop_klimtech.py` — nie zabija wszystkich procesów |
+| L7 | Usunąć `start_backend_gpu.py` jeśli nie używany |
 
 ---
 
@@ -156,6 +205,9 @@ podman logs nextcloud 2>&1 | tail -100
 | `backend_app/models/schemas.py` | Pydantic: **use_rag=False** domyślnie |
 | `backend_app/prompts/vlm_prompts.py` | 8 wariantów promptów VLM + VLM_PARAMS |
 | `backend_app/services/model_manager.py` | Lifecycle llama-server, przełączanie LLM↔VLM |
+| `backend_app/categories/definitions.py` | 14 kategorii RAG (pl/en/de keywords + struktura folderów) |
+| `backend_app/categories/classifier.py` | `classify_document(filepath, content)` → path/keyword/fallback |
+| `scripts/create_nextcloud_folders.py` | Tworzy 300+ folderów w Nextcloud (podman exec occ) |
 | `backend_app/static/index.html` | UI v7.3 (czat, GPU dashboard, upload) |
 | `start_klimtech_v3.py` | Start systemu (nginx + kontenery + backend) |
 | `stop_klimtech.py` | Stop systemu |
@@ -218,15 +270,24 @@ python3 start_klimtech_v3.py
 curl -k https://192.168.31.70:8443/health
 ```
 
-2. **Rekomendowana kolejność pracy:**
-   1. Debugowanie NC Asystenta (417) — najważniejszy nierozwiązany problem
-   2. Test Whisper STT
-   3. Sekcja 16d-16e (podpięcie vlm_prompts do image_handler.py)
+2. **Rekomendowana kolejność pracy (po uzyskaniu dostępu do serwera):**
+   1. `python3 scripts/create_nextcloud_folders.py --dry-run` → sprawdź, potem uruchom
+   2. Wrzuć testowy plik PDF do `/DOKUMENTY_RAG/medycyna/` w Nextcloud → sprawdź czy `meta.category == "medicine"`
+   3. Test `/query` z `category_filter: "medicine"` — czy filtrowanie działa w Qdrant
+   4. Debugowanie NC Asystenta 417 (Expect header)
+   5. Test Whisper STT
 
-3. **Przy debugowaniu NC Asystenta:** Prawdopodobna przyczyna to header `Expect: 100-continue` — middleware w `main.py` usuwający ten header powinno rozwiązać problem.
+3. **Filtrowanie kategorii — jak przetestować:**
+```bash
+curl -s -X POST http://localhost:8000/query \
+  -H "X-API-Key: sk-local" -H "Content-Type: application/json" \
+  -d '{"query": "co to zawał serca", "category_filter": "medicine"}'
+```
 
-4. **Dokumentacja zaktualizowana:** Dodano sekcje VLM Prompts, Zarządzanie modelami, kluczowe decyzje architektoniczne.
+4. **Przy debugowaniu NC Asystenta:** Prawdopodobna przyczyna to header `Expect: 100-continue` — middleware w `main.py` usuwający ten header powinno rozwiązać problem.
+
+5. **Pliki TYLKO NA LAPTOPIE (nie zsynchronizowane z serwerem):** Wszystkie zmiany z sesji 12 i 13 — wymagają `git push` + `git pull` na serwerze.
 
 ---
 
-*Ostatnia aktualizacja: 2026-03-21*
+*Ostatnia aktualizacja: 2026-03-23*

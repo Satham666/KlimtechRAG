@@ -23,3 +23,8 @@ def apply_rate_limit(client_id: str) -> None:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
     timestamps.append(now)
     rate_limit_store[client_id] = timestamps
+
+    # Usuń nieaktywnych klientów (ostatni request > 2 okna temu)
+    stale = [k for k, ts in rate_limit_store.items() if not ts or now - ts[-1] > 2 * window]
+    for k in stale:
+        del rate_limit_store[k]
