@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 
 from fastapi import (
     APIRouter,
@@ -22,6 +23,7 @@ from ..fs_tools import resolve_path, FsSecurityError
 from ..models import IngestPathRequest
 from ..services import get_indexing_pipeline, doc_store, get_text_embedder
 from ..services.qdrant import ensure_indexed
+from ..services.embedder_pool import get_embedder, unload_embedder
 from ..utils.rate_limit import apply_rate_limit, get_client_id
 from ..utils.dependencies import require_api_key, get_request_id
 from ..monitoring import log_stats
@@ -484,7 +486,7 @@ async def ingest_file(
         if not markdown_text or not markdown_text.strip():
             return {"message": "File empty (Scanned PDF?)", "chunks_processed": 0}
 
-        category = classify_document(filepath=safe_filename, content=markdown_text)
+        category = classify_document(filepath=file.filename, content=markdown_text)
         docs = [
             Document(
                 content=markdown_text, meta={
@@ -557,7 +559,7 @@ async def ingest_by_path(
     # === SPRAWDZENIE HASHY - deduplikacja ===
     content_hash = _hash_file(file_path)
     existing_path = find_duplicate_by_hash(content_hash)
-    
+
     if existing_path and existing_path != file_path:
         return {
             "message": "Plik o takim hash'u już istnieje w bazie",
@@ -566,9 +568,10 @@ async def ingest_by_path(
             "filename": filename,
             "chunks_processed": 0,
         }
-    
+
     if existing_path == file_path:
         from ..file_registry import get_connection as _get_conn
+
         with _get_conn() as _c:
             row = _c.execute(
                 "SELECT status FROM files WHERE path = ?", (file_path,)
@@ -667,13 +670,13 @@ async def check_file_status(path: str, req: Request):
     Używane przez n8n workflow do sprawdzania hashy przed indeksowaniem.
     """
     require_api_key(req)
-    
+
     with _get_registry_connection() as conn:
         row = conn.execute(
             "SELECT path, filename, content_hash, status, indexed_at, chunks_count FROM files WHERE path = ?",
-            (path,)
+            (path,),
         ).fetchone()
-    
+
     if not row:
         return {
             "exists": False,
@@ -681,9 +684,9 @@ async def check_file_status(path: str, req: Request):
             "status": "not_registered",
             "should_index": True,
         }
-    
+
     should_index = row["status"] not in ("indexed", "pending")
-    
+
     return {
         "exists": True,
         "path": row["path"],
@@ -703,90 +706,213 @@ async def check_file_status(path: str, req: Request):
 
 @router.post("/ingest_all")
 async def ingest_all_pending(req: Request, limit: int = 10):
+    """
+    Indeksowanie wszystkich pending plików z inteligentną selekcją embeddera.
+
+    Notatki:
+    - Pliki są grupowane po wybranym modelu embeddingu (visual/semantic/code)
+    - Każda grupa indeksowana batch'em z odpowiednim embedderem
+    - VRAM zwalniana per batch (load/unload)
+    - Fallback na e5-large dla nieznanych rozszerzeń
+    """
     from ..routes.chat import clear_cache
+    from ..services.model_selector import (
+        select_model_for_file,
+        is_model_implemented,
+        get_model_metadata,
+    )
 
     require_api_key(req)
     files = get_pending_files()[:limit]
     results = []
 
-    # Sprawdzenie czy użytkownik wybrał ColPali
-    embedding_model = _get_embedding_model(req)
-    use_colpali = embedding_model.lower().startswith("vidore/colpali")
+    if not files:
+        return {"indexed": 0, "results": []}
 
+    # ─────────────────────────────────────────────────────────────────
+    # 1. GRUPUJ PLIKI PO MODELU EMBEDDERA
+    # ─────────────────────────────────────────────────────────────────
+    files_by_model = {}
     for f in files:
         if f.extension not in TEXT_INDEXABLE:
-            mark_indexed(f.path, 0)  # oznacz jako skipped żeby nie wracać
+            mark_indexed(f.path, 0)
             results.append(
                 {"filename": f.filename, "chunks": 0, "status": "skipped_format"}
             )
             continue
 
-        # Obsługa ColPali dla PDF
-        if f.extension == ".pdf" and use_colpali:
+        # Auto-select model na podstawie rozszerzenia
+        model_name = select_model_for_file(f.path)
+
+        if model_name not in files_by_model:
+            files_by_model[model_name] = []
+        files_by_model[model_name].append(f)
+
+    logger.info(
+        f"📦 Grupowanie plików: {len(files_by_model)} modeli, "
+        f"{sum(len(v) for v in files_by_model.values())} plików"
+    )
+
+    # ─────────────────────────────────────────────────────────────────
+    # 2. INDEKSUJ KAŻDĄ GRUPĘ Z ODPOWIEDNIM EMBEDDEREM
+    # ─────────────────────────────────────────────────────────────────
+    for model_name, file_batch in files_by_model.items():
+        metadata = get_model_metadata(model_name)
+        logger.info(
+            f"🔄 [{model_name}] Indeksowanie {len(file_batch)} plików "
+            f"({metadata['type']}, {metadata['dimension']}D, {metadata['vram_mb']}MB VRAM)"
+        )
+
+        # ─── ColPali (Visual) ───
+        if model_name == "colpali":
             try:
                 from ..services.colpali_embedder import index_pdf as colpali_index_pdf
 
-                pages = colpali_index_pdf(
-                    pdf_path=f.path, doc_id=f.filename, model_name=embedding_model
-                )
-                mark_indexed(f.path, pages)
-                results.append(
-                    {"filename": f.filename, "chunks": pages, "status": "ok_colpali"}
-                )
+                # Załaduj embedder z pool'u
+                _colpali_loaded = get_embedder("colpali")
+
+                for f in file_batch:
+                    if f.extension != ".pdf":
+                        logger.warning(
+                            f"[ColPali] Skip non-PDF {f.filename} (only PDF supported)"
+                        )
+                        mark_indexed(f.path, 0)
+                        results.append(
+                            {"filename": f.filename, "chunks": 0, "status": "skipped"}
+                        )
+                        continue
+
+                    try:
+                        pages = colpali_index_pdf(
+                            pdf_path=f.path,
+                            doc_id=f.filename,
+                            model_name=metadata["name"],
+                        )
+                        mark_indexed(f.path, pages)
+                        results.append(
+                            {
+                                "filename": f.filename,
+                                "chunks": pages,
+                                "status": "ok_colpali",
+                            }
+                        )
+                        logger.info(f"✅ ColPali: {f.filename} ({pages} pages)")
+                    except Exception as e:
+                        mark_failed(f.path, str(e)[:100])
+                        results.append(
+                            {
+                                "filename": f.filename,
+                                "chunks": 0,
+                                "status": "error_colpali",
+                                "error": str(e)[:100],
+                            }
+                        )
+                        logger.exception(f"❌ ColPali: {f.filename}")
+
+                # Zwolnij ColPali VRAM po batch'u — korzystaj z pool'u
+                unload_embedder("colpali")
+                logger.info("[ColPali] Model zwolniony z VRAM (pool)")
+
+            except ImportError:
+                logger.warning("[ColPali] colpali_embedder import error, skip batch")
+                for f in file_batch:
+                    mark_indexed(f.path, 0)
+                    results.append(
+                        {
+                            "filename": f.filename,
+                            "chunks": 0,
+                            "status": "skipped_colpali_unavailable",
+                        }
+                    )
+
+        # ─── e5-large & bge-large (Semantic + Code) ───
+        else:
+            try:
+                for f in file_batch:
+                    try:
+                        # Parsuj dokument
+                        if f.extension == ".pdf":
+                            markdown_text = parse_with_docling(f.path)
+                        else:
+                            markdown_text = read_text_file(f.path, f.extension)
+
+                        if not markdown_text or not markdown_text.strip():
+                            mark_indexed(f.path, 0)
+                            results.append(
+                                {
+                                    "filename": f.filename,
+                                    "chunks": 0,
+                                    "status": "empty",
+                                }
+                            )
+                            logger.info(f"⚪ Empty: {f.filename}")
+                            continue
+
+                        # Indeksuj za pomocą RAG pipeline'u
+                        docs = [
+                            Document(
+                                content=markdown_text,
+                                meta={
+                                    "source": f.filename,
+                                    "type": f.extension,
+                                    "embedding_model": model_name,
+                                },
+                            )
+                        ]
+                        result = get_indexing_pipeline().run(
+                            {"splitter": {"documents": docs}}
+                        )
+                        chunks = result["writer"]["documents_written"]
+                        mark_indexed(f.path, chunks)
+                        results.append(
+                            {
+                                "filename": f.filename,
+                                "chunks": chunks,
+                                "status": f"ok_{model_name}",
+                            }
+                        )
+                        logger.info(f"✅ {model_name}: {f.filename} ({chunks} chunks)")
+
+                    except Exception as e:
+                        mark_failed(f.path, str(e)[:100])
+                        results.append(
+                            {
+                                "filename": f.filename,
+                                "chunks": 0,
+                                "status": "error",
+                                "error": str(e)[:100],
+                            }
+                        )
+                        logger.exception(f"❌ {model_name}: {f.filename}")
+
             except Exception as e:
-                mark_failed(f.path, str(e)[:100])
-                results.append(
-                    {
-                        "filename": f.filename,
-                        "chunks": 0,
-                        "status": "error",
-                        "error": str(e)[:100],
-                    }
-                )
-            continue
+                logger.exception(f"❌ {model_name} batch error: {e}")
+                for f in file_batch:
+                    mark_failed(f.path, str(e)[:100])
+                    results.append(
+                        {
+                            "filename": f.filename,
+                            "chunks": 0,
+                            "status": "error",
+                            "error": str(e)[:100],
+                        }
+                    )
+            finally:
+                # Zwolnij embedder z pool'u po batch'u (e5-large / bge-large)
+                if model_name != "colpali":
+                    unload_embedder(model_name)
+                    logger.info(f"[{model_name}] Model zwolniony z VRAM (pool)")
 
-        try:
-            if f.extension == ".pdf":
-                markdown_text = parse_with_docling(f.path)
-            else:
-                markdown_text = read_text_file(f.path, f.extension)
-
-            if not markdown_text or not markdown_text.strip():
-                mark_indexed(f.path, 0)
-                results.append({"filename": f.filename, "chunks": 0, "status": "empty"})
-                continue
-
-            docs = [
-                Document(
-                    content=markdown_text,
-                    meta={"source": f.filename, "type": f.extension},
-                )
-            ]
-            result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
-            chunks = result["writer"]["documents_written"]
-            mark_indexed(f.path, chunks)
-            results.append({"filename": f.filename, "chunks": chunks, "status": "ok"})
-
-        except Exception as e:
-            mark_failed(f.path, str(e)[:100])
-            results.append(
-                {
-                    "filename": f.filename,
-                    "chunks": 0,
-                    "status": "error",
-                    "error": str(e)[:100],
-                }
-            )
-
-    # Zwolnij VRAM z ColPali przed powrotem
-    if use_colpali:
-        from ..services.colpali_embedder import unload_model
-
-        unload_model()
-
+    # ─────────────────────────────────────────────────────────────────
+    # 3. CLEANUP
+    # ─────────────────────────────────────────────────────────────────
     ensure_indexed()
     clear_cache()
-    return {"indexed": len(results), "results": results}
+
+    indexed_count = len([r for r in results if "ok" in r.get("status", "")])
+    logger.info(f"🎯 Indeksowanie skończone: {indexed_count}/{len(results)} sukces")
+
+    return {"indexed": indexed_count, "results": results}
 
 
 # ---------------------------------------------------------------------------

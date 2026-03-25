@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Set
 
@@ -15,9 +16,9 @@ def _detect_base() -> str:
     env = os.environ.get("KLIMTECH_BASE_PATH", "").strip()
     if env and Path(env).exists():
         return env
-    home_path = Path.home() / "KlimtechRAG"
-    if home_path.exists():
-        return str(home_path)
+    backup_path = Path("/media/lobo/BACKUP/KlimtechRAG")
+    if backup_path.exists():
+        return str(backup_path)
     return "/media/lobo/BACKUP/KlimtechRAG"
 
 
@@ -121,6 +122,56 @@ class Settings(BaseSettings):
         env_file = os.path.join(BASE, ".env")
         case_sensitive = False
         extra = "ignore"
+
+
+def setup_logging():
+    """
+    Konfiguruje jeden logger dla całej aplikacji KlimtechRAG.
+    Wszystkie moduły używają tego samego loggera -> jeden plik logów.
+    """
+    import logging
+    from pathlib import Path
+
+    log_dir = os.path.join(BASE, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "backend.log")
+
+    log_level = getattr(logging, os.getenv("LOG_LEVEL", "DEBUG").upper(), logging.DEBUG)
+
+    # Format z prefiksem modułu
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    # Root logger dla całej aplikacji
+    root_logger = logging.getLogger("klimtechrag")
+    root_logger.setLevel(log_level)
+
+    # Usuń stare handlery (zapobiegaj duplikatom)
+    root_logger.handlers.clear()
+
+    # FileHandler - główny plik logów
+    file_handler = logging.FileHandler(log_file, encoding="utf-8", mode="a")
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.DEBUG)
+    root_logger.addHandler(file_handler)
+
+    # StreamHandler - STDERR (widoczny w terminalu)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    stream_handler.setLevel(logging.INFO)  # INFO na STDOUT, DEBUG tylko do pliku
+    root_logger.addHandler(stream_handler)
+
+    return root_logger
+
+
+def get_logger(name: str = "klimtechrag"):
+    """
+    Pobiera logger dla modułu.
+    Użycie: logger = get_logger(__name__) lub get_logger("klimtechrag.mój_moduł")
+    """
+    return logging.getLogger(name)
 
 
 settings = Settings()

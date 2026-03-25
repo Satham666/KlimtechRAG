@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket
 from fastapi.responses import JSONResponse
 
+from ..utils.dependencies import require_api_key
 from ..config import settings
 from ..services import doc_store
 from ..file_registry import (
@@ -58,9 +59,9 @@ async def metrics_endpoint():
 
 @router.delete("/documents")
 async def delete_documents(
+    req: Request,
     source: Optional[str] = None,
     doc_id: Optional[str] = None,
-    req: Request = None,
 ):
     require_api_key(req)
     if not source and not doc_id:
@@ -101,21 +102,22 @@ async def websocket_health(ws: WebSocket):
     except Exception:
         await ws.close()
 
+
 @router.get("/files/stats")
 async def files_stats(req: Request = None):
     require_api_key(req)
     stats = get_file_stats()
     try:
         import requests as _req
+
         r = _req.get(
-            f"{settings.qdrant_url}/collections/{settings.qdrant_collection}",
-            timeout=3
+            f"{settings.qdrant_url}/collections/{settings.qdrant_collection}", timeout=3
         ).json()
         result = r.get("result", {})
-        stats["qdrant_points"]  = result.get("points_count", 0)
+        stats["qdrant_points"] = result.get("points_count", 0)
         stats["qdrant_indexed"] = result.get("indexed_vectors_count", 0)
     except Exception:
-        stats["qdrant_points"]  = None
+        stats["qdrant_points"] = None
         stats["qdrant_indexed"] = None
     return stats
 

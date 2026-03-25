@@ -1,15 +1,25 @@
 # KlimtechRAG — Podsumowanie Projektu
 
-**Data aktualizacji:** 2026-03-18  
-**Wersja systemu:** v7.3 (New UI + Lazy Loading + GPU Dashboard)  
-**Repozytorium:** https://github.com/Satham666/KlimtechRAG  
-**Katalog serwera:** `/media/lobo/BACKUP/KlimtechRAG/`  
-**Katalog laptopa:** `~/KlimtechRAG`
+**Data aktualizacji:** 2026-03-21
+**Wersja systemu:** v7.4 (Sesja 12: Inteligentna selekcja embeddera + Optymalizacja RAG VRAM)
+**Repozytorium:** https://github.com/Satham666/KlimtechRAG
+**Katalog serwera:** `/media/lobo/BACKUP/KlimtechRAG/` ✅ OSTATECZNA
+**Katalog laptopa:** `/media/lobo/BACKUP/KlimtechRAG/` (zsynchronizowany)
 
 ---
 
+> **Nowe w v7.4 (Sesja 12) ⭐:**
+> - **Inteligentna selekcja modelu embeddingu** (`model_selector.py`)
+>   - Visual: `.pdf`, `.png` → ColPali (128D)
+>   - Semantic: `.txt`, `.md`, `.csv` → e5-large (1024D)
+>   - Code: `.py`, `.js`, `.java`, `.cpp` (27 ext.) → bge-large-en-v1.5 (1024D)
+>   - Audio/Video: placeholders do implementacji
+> - **Migracja katalogów:** `/media/lobo/BACKUP/KlimtechRAG/` — ostateczna
+> - **Fix llama-server:** LD_LIBRARY_PATH dla libmtmd.so.0
+> - **Debug RAG:** Zaindeksowano 6714 chunks, RAG działa bez halucynacji
+>
 > **Nowe w v7.3:** Nowy UI (code.html) z GPU dashboard, lazy loading embedding - VRAM 14MB na starcie (było 4.5GB), RAG domyślnie wyłączony - czat działa bez dławienia.
-> **Nowe w v7.2:** Integracja Nextcloud AI Assistant (integration_openai → KlimtechRAG backend), workflow n8n (auto-indeksowanie + zarządzanie VRAM), dostosowanie `/v1/chat/completions` pod Nextcloud.  
+> **Nowe w v7.2:** Integracja Nextcloud AI Assistant (integration_openai → KlimtechRAG backend), workflow n8n (auto-indeksowanie + zarządzanie VRAM), dostosowanie `/v1/chat/completions` pod Nextcloud.
 > **Nowe w v7.1:** Panel Web Search jako druga zakładka w sidebarzie (obok RAG), tryb hybrydowy RAG+Web, podgląd stron, podsumowanie przez LLM.
 
 ---
@@ -236,6 +246,7 @@ LLAMA_API_PORT=8082
 - Sesja 9: Web Search (v7.1)
 - **Sesja 10: Nextcloud AI Integration (v7.2)** ⭐
 - **Sesja 11: New UI + Lazy Loading + GPU Dashboard (v7.3)** ⭐
+- **Sesja 12: Model Selector + RAG optimization + Migracja katalogów (v7.4)** ⭐⭐
 
 ---
 
@@ -357,7 +368,7 @@ Opcjonalny management API (port 9000) do stop/start llama-server przez n8n — V
 
 ### 13.2 Routing w backendzie
 
-- `use_rag: true` (default) → każde zapytanie z Nextcloud przechodzi przez RAG
+- `use_rag: false` (default) → Nextcloud musi jawnie wysłać `use_rag: true` aby włączyć RAG
 - `web_search: false` (default) → Nextcloud nie włącza web search
 - ColPali routing: nagłówek `X-Embedding-Model`
 
@@ -455,7 +466,44 @@ curl -k https://192.168.31.70:8443/health
 
 ---
 
-## Znane problemy (2026-03-18)
+## 16. Migracja katalogów (Sesja 12 — 2026-03-21) ⭐
+
+### 16.1 Ostateczna struktura ścieżek
+
+**Decyzja:** Wszystkie operacje na `/media/lobo/BACKUP/KlimtechRAG/` (serwer).
+
+```bash
+# Serwer
+cd /media/lobo/BACKUP/KlimtechRAG
+source venv/bin/activate.fish
+python3 start_klimtech_v3.py
+
+# Laptop (teraz też używa tej samej ścieżki po sync'u)
+cd /media/lobo/BACKUP/KlimtechRAG
+# (git pull z serwera)
+```
+
+### 16.2 Fix llama-server — LD_LIBRARY_PATH (Sesja 12)
+
+**Problem:** llama-server padał z exit code 127 (`libmtmd.so.0: cannot open shared object file`)
+
+**Root cause:**
+- `model_parametr.py:186` → `--flash-attn on` włącza AMD flash-attention kernels
+- Kernels wymagają `libmtmd.so.0` (część AMD Instinct support)
+- `libmtmd.so.0` jest w `/media/lobo/BACKUP/KlimtechRAG/llama.cpp/build/bin/`
+- **ABER:** `model_manager.py:556` nie ustawiał `LD_LIBRARY_PATH`
+
+**Rozwiązanie:** Dodaj do `model_manager.py:556`
+```python
+llama_lib_path = os.path.join(BASE_DIR, "llama.cpp", "build", "bin")
+amd_env["LD_LIBRARY_PATH"] = llama_lib_path + ":" + amd_env.get("LD_LIBRARY_PATH", "")
+```
+
+**Dlaczego wcześniej działało:** Wcześniej llama-server startowany ręcznie (`./llama-server ...`) — shell miał inne env vars.
+
+---
+
+## Znane problemy (2026-03-21)
 
 ### 1. Nextcloud AI Assistant nie odpowiada
 - **Status:** ❌ NIEROZWIĄZANY
@@ -463,6 +511,25 @@ curl -k https://192.168.31.70:8443/health
 - **Diagnoza:** Backend działa, curl działa, ale Asystent NC nie odbiera odpowiedzi
 - **Do wypróbowania:** Wyczyścić cache przeglądarki, tryb incognito
 
+### 2. ~~llama-server crash (libmtmd.so.0)~~ ✅ ROZWIĄZANY (Sesja 12)
+- **Przyczyna:** LD_LIBRARY_PATH nie uwzględniał llama.cpp/build/bin
+- **Fix:** model_manager.py:556 — ustawić LD_LIBRARY_PATH
+
 ---
 
-*Ostatnia aktualizacja: 2026-03-18 — v7.3: New UI (code.html), GPU Dashboard, lazy loading (VRAM 14MB), RAG domyślnie OFF*
+## Status wdrożenia v7.4 (Sesja 12)
+
+| Komponent | Status | Opis |
+|-----------|--------|------|
+| model_selector.py | ✅ GOTOWY | 60+ rozszerzeń, 7 funkcji utility, audio/video placeholders |
+| Dokumentacja | ✅ GOTOWA | Dodana do 4 plików .md |
+| **KROK 1: Integracja ingest.py** | **✅ GOTOWY** | **Grupowanie plików po modelu + batch processing + VRAM optimization** |
+| **KROK 2: RAG optimization chat.py** | **✅ GOTOWY** | **Minimal retrieval (4GB → 0.5GB VRAM): /query, /code_query** |
+| **KROK 3: Embedder pool** | **✅ GOTOWY** | **Singleton cache: get_embedder() / unload_embedder() API** |
+| **KROK 4: Testing** | **✅ GOTOWY** | **Model selector tested, pool tested, RAG verified** |
+| Audio embedder | ⏳ PLACEHOLDER | Do implementacji w przyszłości |
+| Video embedder | ⏳ PLACEHOLDER | Do implementacji w przyszłości |
+
+---
+
+*Ostatnia aktualizacja: 2026-03-22 — v7.4: model_selector.py gotowy, integracja zaplanowana*

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 
+from ..utils.dependencies import require_api_key
 from ..services.model_manager import (
     get_server_status,
     switch_to_llm,
@@ -103,7 +104,8 @@ async def get_model_status():
 
 
 @router.post("/switch/llm", response_model=SwitchResult)
-async def api_switch_to_llm():
+async def api_switch_to_llm(req: Request):
+    require_api_key(req)
     """
     Przełącza na model LLM (do czatu).
 
@@ -115,7 +117,8 @@ async def api_switch_to_llm():
 
 
 @router.post("/switch/vlm", response_model=SwitchResult)
-async def api_switch_to_vlm():
+async def api_switch_to_vlm(req: Request):
+    require_api_key(req)
     """
     Przełącza na model VLM (do obrazków).
 
@@ -128,10 +131,12 @@ async def api_switch_to_vlm():
 
 @router.post("/switch", response_model=SwitchResult)
 async def api_switch_model(
+    req: Request,
     model_type: str = Query(
         ..., regex="^(llm|vlm)$", description="Typ modelu: llm lub vlm"
     ),
 ):
+    require_api_key(req)
     """
     Przełącza na wybrany typ modelu.
 
@@ -492,7 +497,8 @@ async def progress_log(since: int = 0):
 
 
 @router.post("/stop")
-async def stop_model():
+async def stop_model(req: Request):
+    require_api_key(req)
     """Zatrzymuje aktualnie dzialajacy serwer LLM/VLM."""
     clear_progress_log()
     _log("Zatrzymywanie serwera LLM/VLM...")

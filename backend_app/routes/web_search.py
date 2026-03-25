@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 import httpx
 
 try:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
 
     DUCKDUCKGO_AVAILABLE = True
 except ImportError:
@@ -101,6 +101,8 @@ async def web_search(request: WebSearchRequest, req: Request, _=Depends(require_
     """
     request_id = await get_request_id(req)
 
+    require_api_key(req)
+
     # Rate limiting
     client_id = req.client.host if req.client else "unknown"
     apply_rate_limit(client_id)
@@ -156,6 +158,8 @@ async def web_fetch(request: WebFetchRequest, req: Request, _=Depends(require_ap
     Returns title, text content, and metadata.
     """
     request_id = await get_request_id(req)
+
+    require_api_key(req)
 
     # Rate limiting
     client_id = req.client.host if req.client else "unknown"
@@ -254,6 +258,8 @@ async def web_summarize(request: WebSummarizeRequest, req: Request, _=Depends(re
     4. Returns LLM-generated summary
     """
     request_id = await get_request_id(req)
+
+    require_api_key(req)
 
     # Rate limiting
     client_id = req.client.host if req.client else "unknown"

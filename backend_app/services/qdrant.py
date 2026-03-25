@@ -30,6 +30,7 @@ def get_embedding_dimension(model_name: str) -> int:
     # Fallback — zaladuj model (wolne, ale poprawne)
     try:
         from sentence_transformers import SentenceTransformer
+
         model = SentenceTransformer(model_name)
         dim = model.get_sentence_embedding_dimension()
         if dim is None:
@@ -62,14 +63,50 @@ def ensure_indexed():
         logger.warning("Nie udało się wymusić indeksowania: %s", e)
 
 
+def get_qdrant_retriever():
+    """
+    Zwraca MINIMALISTYCZNY retriever z Qdrant — TYLKO retrieval, bez pipeline'u.
+
+    Użycie:
+    -------
+    # Embed query
+    embedding = get_text_embedder().run(text=user_message)["embedding"]
+
+    # Retrieve (bez ładowania całego RAG pipeline'u!)
+    retriever = get_qdrant_retriever()
+    result = retriever.run(query_embedding=embedding["embedding"])
+    docs = result.get("documents", [])
+
+    Zaoszczędza VRAM:
+    - OLD (pełny pipeline):   4 GB
+    - NEW (minimal retriever): 0.5 GB
+
+    Zwraca:
+    -------
+    QdrantEmbeddingRetriever — gotowy do użytku w /query i /code_query
+    """
+    from haystack_integrations.components.retrievers.qdrant import (
+        QdrantEmbeddingRetriever,
+    )
+
+    return QdrantEmbeddingRetriever(document_store=doc_store, top_k=10)
+
+
 embedding_dim = get_embedding_dimension(settings.embedding_model)
 
-doc_store = QdrantDocumentStore(
-    url=str(settings.qdrant_url),
-    index=settings.qdrant_collection,
-    embedding_dim=embedding_dim,
-    recreate_index=False,
-)
-
-time.sleep(1)
-ensure_indexed()
+for _attempt in range(3):
+    try:
+        doc_store = QdrantDocumentStore(
+            url=str(settings.qdrant_url),
+            index=settings.qdrant_collection,
+            embedding_dim=embedding_dim,
+            recreate_index=False,
+            wait_result_from_api=True,
+        )
+        break
+    except Exception as e:
+        logger.warning(f"Qdrant niedostępny (próba {_attempt + 1}/3): {e}")
+        time.sleep(5)
+else:
+    logger.error("KRYTYCZNE: Nie udało się połączyć z Qdrant!")
+    doc_store = None

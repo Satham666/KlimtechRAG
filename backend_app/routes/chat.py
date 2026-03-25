@@ -3,7 +3,7 @@ import logging
 import time
 from typing import Dict, Tuple, Optional
 
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from fastapi import APIRouter, Depends, HTTPException, Request
 from haystack import Document as HaystackDocument
 
@@ -17,8 +17,7 @@ from ..models import (
     QueryRequest,
     CodeQueryRequest,
 )
-from ..services import get_rag_pipeline, doc_store, get_text_embedder
-from ..services.rag import run_rag_pipeline
+from ..services import doc_store, get_text_embedder
 from ..services.llm import get_llm_component
 from ..utils.rate_limit import apply_rate_limit, get_client_id
 from ..utils.dependencies import require_api_key, get_request_id
@@ -169,6 +168,15 @@ async def query_rag(
     req: Request,
     request_id: str = Depends(get_request_id),
 ):
+    """
+    Podstawowy RAG query z tool calling.
+
+    ZMIANA (Sesja 12): Minimal retrieval — nie ładuje pełnego RAG pipeline'u!
+    - OLD: get_rag_pipeline().run() → 4 GB VRAM
+    - NEW: get_qdrant_retriever().run() → 0.5 GB VRAM
+    """
+    from ..services.qdrant import get_qdrant_retriever
+
     require_api_key(req)
     apply_rate_limit(get_client_id(req))
 
@@ -177,21 +185,42 @@ async def query_rag(
         return {"answer": cached, "cached": True}
 
     try:
-        rag_result = run_rag_pipeline(
-            query=request.query,
-            category_filter=request.category_filter,
+        # ─────────────────────────────────────────────────────────────
+        # 1. RETRIEVE Z QDRANT (minimal — bez pipeline'u)
+        # ─────────────────────────────────────────────────────────────
+        query_embedding = get_text_embedder().run(text=request.query)
+        retriever = get_qdrant_retriever()
+        retrieval_result = retriever.run(
+            query_embedding=query_embedding["embedding"]
         )
-        local_docs = rag_result.get("retriever", {}).get("documents", [])
+        local_docs = retrieval_result.get("documents", [])
 
+        logger.info(
+            "[RAG] Minimal retrieval: %d dokumentów",
+            len(local_docs),
+            extra={"request_id": request_id},
+        )
+
+        # ─────────────────────────────────────────────────────────────
+        # 2. WEB SEARCH (opcjonalnie)
+        # ─────────────────────────────────────────────────────────────
         web_snippet = ""
         try:
             with DDGS() as ddgs:
-                results = list(ddgs.text(request.query, max_results=2))
+                results = list(ddgs.text(request.query, max_results=20))
                 if results:
                     web_snippet = " | ".join([res.get("body", "") for res in results])
+                    logger.info(
+                        "[Web] %d snippets dla query",
+                        len(results),
+                        extra={"request_id": request_id},
+                    )
         except Exception as e:
             logger.warning("Web search error: %s", e, extra={"request_id": request_id})
 
+        # ─────────────────────────────────────────────────────────────
+        # 3. BUILD PROMPT
+        # ─────────────────────────────────────────────────────────────
         final_docs = list(local_docs)
         if web_snippet:
             final_docs.append(
@@ -204,10 +233,13 @@ async def query_rag(
         prompt_text += "\n\n" + tool_instructions() + "\n\n"
         prompt_text += f"USER_QUESTION: {request.query}\n"
 
+        # ─────────────────────────────────────────────────────────────
+        # 4. LLM + TOOL CALLING (3 iteracje)
+        # ─────────────────────────────────────────────────────────────
         llm_component = get_llm_component()
         current_prompt = prompt_text
         answer: str = ""
-        for _ in range(3):
+        for iteration in range(3):
             llm_result = llm_component.run(prompt=current_prompt)
             answer = llm_result["replies"][0]
             tool_req = maybe_parse_tool_request(answer)
@@ -215,6 +247,10 @@ async def query_rag(
                 break
             try:
                 tool_out = execute_tool(tool_req)
+                logger.debug(
+                    f"[Tool] Iteration {iteration + 1}: {tool_req.get('function', 'unknown')}",
+                    extra={"request_id": request_id},
+                )
             except Exception as e:
                 tool_out = {"tool_error": str(e), "tool_request": tool_req}
             current_prompt = (
@@ -225,6 +261,7 @@ async def query_rag(
             )
 
         set_cached(request.query, answer)
+        logger.info("[Query] Cached answer", extra={"request_id": request_id})
         return {"answer": answer, "cached": False}
 
     except Exception as e:
@@ -295,14 +332,10 @@ async def openai_chat_completions(
                 )
         else:
             try:
-                from haystack_integrations.components.retrievers.qdrant import (
-                    QdrantEmbeddingRetriever,
-                )
+                from ..services.qdrant import get_qdrant_retriever
 
                 query_embedding = get_text_embedder().run(text=user_message)
-                retriever = QdrantEmbeddingRetriever(
-                    document_store=doc_store, top_k=request.top_k
-                )
+                retriever = get_qdrant_retriever()
                 retrieval_result = retriever.run(
                     query_embedding=query_embedding["embedding"]
                 )
@@ -327,7 +360,7 @@ async def openai_chat_completions(
     if request.web_search:
         try:
             with DDGS() as ddgs:
-                web_results = list(ddgs.text(user_message, max_results=3))
+                web_results = list(ddgs.text(user_message, max_results=20))
             if web_results:
                 web_snippets = []
                 for res in web_results:
@@ -383,6 +416,7 @@ async def openai_chat_completions(
                 completion_tokens=len(answer.split()),
                 total_tokens=len(full_prompt.split()) + len(answer.split()),
             ),
+            sources=sources,
         )
     except Exception as e:
         logger.exception(
@@ -402,23 +436,51 @@ async def query_code_agent(
     req: Request,
     request_id: str = Depends(get_request_id),
 ):
+    """
+    Code analysis query z tool calling.
+
+    ZMIANA (Sesja 12): Minimal retrieval — nie ładuje pełnego RAG pipeline'u!
+    - OLD: get_rag_pipeline().run() → 4 GB VRAM
+    - NEW: get_qdrant_retriever().run() → 0.5 GB VRAM
+    """
+    from ..services.qdrant import get_qdrant_retriever
+
     require_api_key(req)
     apply_rate_limit(get_client_id(req))
 
     try:
-        rag_result = run_rag_pipeline(query=request.query)
-        local_docs = rag_result.get("retriever", {}).get("documents", [])
+        # ─────────────────────────────────────────────────────────────
+        # 1. RETRIEVE Z QDRANT (minimal — bez pipeline'u)
+        # ─────────────────────────────────────────────────────────────
+        query_embedding = get_text_embedder().run(text=request.query)
+        retriever = get_qdrant_retriever()
+        retrieval_result = retriever.run(
+            query_embedding=query_embedding["embedding"]
+        )
+        local_docs = retrieval_result.get("documents", [])
 
+        logger.info(
+            "[Code Query] Minimal retrieval: %d dokumentów",
+            len(local_docs),
+            extra={"request_id": request_id},
+        )
+
+        # ─────────────────────────────────────────────────────────────
+        # 2. BUILD PROMPT (Senior Developer persona)
+        # ─────────────────────────────────────────────────────────────
         prompt_text = "You are a Senior Python Developer. Analyze the following code/docs strictly.\n\nContext:\n"
         for doc in local_docs:
             prompt_text += f"{doc.content}\n"
         prompt_text += "\n\n" + tool_instructions() + "\n\n"
         prompt_text += f"CODE_QUESTION: {request.query}\n\nProvide a technical answer."
 
+        # ─────────────────────────────────────────────────────────────
+        # 3. LLM + TOOL CALLING (3 iteracje)
+        # ─────────────────────────────────────────────────────────────
         llm_component = get_llm_component()
         current_prompt = prompt_text
         answer: str = ""
-        for _ in range(3):
+        for iteration in range(3):
             llm_result = llm_component.run(prompt=current_prompt)
             answer = llm_result["replies"][0]
             tool_req = maybe_parse_tool_request(answer)
@@ -426,6 +488,10 @@ async def query_code_agent(
                 break
             try:
                 tool_out = execute_tool(tool_req)
+                logger.debug(
+                    f"[Code Tool] Iteration {iteration + 1}: {tool_req.get('function', 'unknown')}",
+                    extra={"request_id": request_id},
+                )
             except Exception as e:
                 tool_out = {"tool_error": str(e), "tool_request": tool_req}
             current_prompt = (
@@ -435,6 +501,7 @@ async def query_code_agent(
                 + "\n\nNow answer the code question using the TOOL_RESULT."
             )
 
+        logger.info("[Code Query] Answer generated", extra={"request_id": request_id})
         return {"answer": answer}
 
     except Exception as e:

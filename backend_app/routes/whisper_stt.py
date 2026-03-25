@@ -48,8 +48,8 @@ async def transcribe_audio(
         tmp_path = tmp.name
 
     try:
-        model = get_whisper_model()
-        result = model.transcribe(
+        whisper_model = get_whisper_model()
+        result = whisper_model.transcribe(
             tmp_path,
             language=language,
             prompt=prompt,

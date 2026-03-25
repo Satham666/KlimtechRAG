@@ -1,163 +1,102 @@
-# KlimtechRAG — Pełny opis projektu
+# KlimtechRAG — Opis projektu
 
-**Wersja:** v7.3  
-**Data:** 2026-03-21  
-**Repozytorium:** https://github.com/Satham666/KlimtechRAG  
-**Katalog serwera:** `/media/lobo/BACKUP/KlimtechRAG/`  
-**Katalog laptopa:** `~/Programy/KlimtechRAG`
-
----
-
-## 1. Cel i przeznaczenie
-
-**KlimtechRAG** to w pełni lokalny system RAG (Retrieval-Augmented Generation) do pracy z dokumentacją techniczną w języku polskim. Działa w 100% offline — LLM, embedding, OCR i VLM uruchamiane są lokalnie na serwerze Linux z GPU AMD Instinct 16 GB (ROCm/HIP).
-
-### Główne zastosowania
-
-- Odpowiadanie na pytania na podstawie zaindeksowanych dokumentów (PDF, DOCX, TXT, kod źródłowy)
-- Automatyczne OCR skanów i dokumentów graficznych
-- Obsługa dokumentów z obrazkami, tabelami i wykresami (tryb VLM / ColPali)
-- Wyszukiwanie w internecie jako fallback (DuckDuckGo)
-- Tool calling — LLM może wykonywać operacje na plikach (ls, glob, read, grep)
-- Firmowa baza wiedzy technicznej z pełną suwerennością danych
-- Czat AI w Nextcloud — Nextcloud Assistant podpięty do lokalnego backendu
-- Automatyczne indeksowanie plików z Nextcloud — workflow n8n z zarządzaniem VRAM
+**Wersja:** v7.5 (Sesja 14: konsolidacja dokumentacji + naprawy po audycie)
+**Data:** 2026-03-25
+**Repozytorium:** https://github.com/Satham666/KlimtechRAG
+**Katalog serwera:** `/media/lobo/BACKUP/KlimtechRAG/`
+**Serwer:** lobo@hall9000 (192.168.31.70) | AMD Instinct 16GB | ROCm 7.2
 
 ---
 
-## 2. Infrastruktura i środowisko
+## 1. Cel projektu
 
-### 2.1 Maszyny
+Lokalny system RAG (Retrieval-Augmented Generation) do pracy z dokumentacją techniczną w języku polskim. 100% offline — LLM, embedding, OCR i VLM na serwerze z GPU AMD Instinct 16 GB.
 
-| Rola | Hostname | Katalog główny | Uwagi |
-|------|----------|----------------|-------|
-| **Serwer** | lobo@hall9000 (192.168.31.70) | `/media/lobo/BACKUP/KlimtechRAG/` | AMD Instinct 16GB, ROCm 7.2, środowisko bash |
-| **Laptop** | tamiel@hall8000 | `~/Programy/KlimtechRAG` | Maszyna deweloperska, środowisko bash |
-
-### 2.2 Workflow synchronizacji (Git)
-
-- **Laptop → GitHub:** `git add -A && git commit -m "Sync" -a || true && git push --force`
-- **GitHub → Serwer:** `git pull`
-- **Zasada:** Kod edytowany ZAWSZE na laptopie, nigdy bezpośrednio na serwerze.
-
-### 2.3 Środowisko Python
-
-- **Venv:** `/media/lobo/BACKUP/KlimtechRAG/venv/` (Python 3.12)
-- **Aktywacja (fish shell):** `cd /media/lobo/BACKUP/KlimtechRAG && source venv/bin/activate.fish`
-- **Start backendu:** `KLIMTECH_EMBEDDING_DEVICE=cuda:0 python3 -m uvicorn backend_app.main:app --host 0.0.0.0 --port 8000`
-- **Fish shell constraint:** Komendy SSH na serwerze muszą używać `python3 -c "..."` — **nigdy heredoc (`cat << 'EOF'`)**, fish go nie obsługuje.
+Zastosowania: pytania do zaindeksowanych dokumentów (PDF, DOCX, TXT, kod), OCR skanów, VLM opisy obrazów w PDF, web search (DuckDuckGo), tool calling (ls/glob/read/grep), baza wiedzy z suwerennością danych, Nextcloud AI Assistant, n8n auto-indeksowanie.
 
 ---
 
-## 3. Architektura systemu
-
-### 3.1 Diagram architektury
+## 2. Architektura
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              UŻYTKOWNICY                                     │
-│          ↓                        ↓                      ↓                   │
-│  https://:8443               http://:8081           http://:5678             │
-│  KlimtechRAG UI              Nextcloud + AI         n8n workflows            │
-│  (New UI + GPU Dashboard)    (+ Assistant)          (+ VRAM Management)      │
-└────────────┬──────────────────────┬──────────────────────┬────────────────── ┘
-             │                      │                      │
-             │ Chat / Upload        │ Chat / Summarize     │ Trigger
-             ↓                      ↓                      ↓
-┌─────────────────────────────────────────────────────────────────────────────┐
-│               KlimtechRAG Backend (port 8000) — GATEWAY                      │
-│  FastAPI                                                                      │
-│  ├── /v1/chat/completions  ← UI + Nextcloud Assistant + n8n                 │
-│  ├── /v1/models            ← UI + Nextcloud (lista modeli)                  │
-│  ├── /gpu/status           ← GPU Dashboard (temp, VRAM, use)                │
-│  ├── /v1/embeddings        ← RAG embedding                                  │
-│  ├── /upload, /ingest_path ← upload plików                                  │
-│  ├── /web/search, /fetch, /summarize ← Web Search panel                    │
-│  ├── /v1/audio/transcriptions ← Whisper STT                                │
-│  ├── /model/start, /stop, /switch ← zarządzanie VRAM                       │
-│  └── /rag/debug            ← diagnostyka                                    │
-└────────────┬────────────────────┬──────────────────┬────────────────────────┘
-             │                    │                  │
-             ↓                    ↓                  ↓
-┌────────────────────┐  ┌─────────────────┐  ┌────────────────────────────────┐
-│  llama.cpp-server  │  │  Qdrant (6333)  │  │  Nextcloud (8081)              │
-│  (port 8082)       │  │  klimtech_docs  │  │  + integration_openai (app)    │
-│  Bielik-4.5B/11B   │  │  10k+ punktów  │  │  + assistant (app)             │
-│  VRAM: 4-14 GB     │  │  klimtech_colpali│  │  → Service URL: :8000         │
-└────────────────────┘  └─────────────────┘  └────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                         UŻYTKOWNICY                             │
+│     https://:8443          http://:8081        http://:5678      │
+│     KlimtechRAG UI         Nextcloud+AI        n8n workflows    │
+└────────┬───────────────────────┬──────────────────┬─────────────┘
+         │ Chat/Upload           │ Chat/Summarize    │ Trigger
+         ↓                      ↓                   ↓
+┌─────────────────────────────────────────────────────────────────┐
+│            KlimtechRAG Backend (port 8000) — GATEWAY            │
+│  FastAPI + Haystack 2.x                                         │
+│  /v1/chat/completions, /v1/models, /v1/embeddings               │
+│  /gpu/status, /upload, /ingest, /web/search, /model/start...   │
+└────────┬──────────────────┬──────────────────┬──────────────────┘
+         ↓                  ↓                  ↓
+┌────────────────┐ ┌─────────────────┐ ┌──────────────────────────┐
+│ llama.cpp      │ │ Qdrant (6333)   │ │ Nextcloud (8081)         │
+│ (port 8082)    │ │ klimtech_docs   │ │ + integration_openai     │
+│ Bielik 4.5B/11B│ │ klimtech_colpali│ │ + assistant              │
+│ VRAM: 4-14 GB  │ │ + persistent vol│ │ Pod: klimtech_pod        │
+└────────────────┘ └─────────────────┘ └──────────────────────────┘
 ```
 
-### 3.2 Data Flow — zapytanie (Query)
+### VRAM — Lazy Loading (v7.3+)
 
-```
-Pytanie użytkownika
-    → [use_rag=false] → Prosto do llama-server → Odpowiedź
-    → [use_rag=true]  → Embedding pytania (e5-large, 1024 dim)
-                       → Retrieval z Qdrant (top_k=5 chunks)
-                       → Prompt Builder (kontekst + historia)
-                       → llama.cpp-server (Bielik-11B/4.5B)
-                       → Odpowiedź
+Ograniczenie: na GPU zmieści się **jeden duży model** naraz (16 GB).
+VRAM na starcie backendu: **14 MB** (lazy loading).
 
-Opcjonalnie (web_search=true):
-    → DuckDuckGo fallback — gdy RAG nie zwraca wyników
-
-WAŻNE: use_rag=False domyślnie (v7.3) — czat idzie prosto do LLM.
-       RAG włączany ręcznie przyciskiem globe 🌐 w UI.
-```
-
-### 3.3 Data Flow — indeksowanie (Ingestion)
-
-```
-Plik wrzucony do Nextcloud RAG_Dane/ lub przez /upload
-    → Watchdog (watch_nextcloud.py) wykrywa nowy plik
-    → Ekstrakcja tekstu (docling / pdfplumber)
-    → Chunking (200 słów z nakładką)
-
-    Rozgałęzienie:
-    ├── .txt/.md/.py/.json/.docx → Pipeline A: e5-large (1024 dim) → klimtech_docs
-    ├── .pdf (skany/mieszane)    → Pipeline B: ColPali (128 dim multi-vector) → klimtech_colpali
-    └── .pdf z obrazami          → Pipeline C: VLM → wzbogacenie → Pipeline A
-```
-
-### 3.4 Architektura VRAM — Lazy Loading (v7.3)
-
-**Kluczowe ograniczenie:** na GPU zmieści się tylko **jeden duży model** naraz (16 GB GPU).
-
-**v7.3 ZMIANA:** Lazy loading — VRAM na starcie backendu to tylko **14 MB**!
-
-| Stan / Model | VRAM | Uruchomienie |
-|-------------|------|--------------|
-| Backend sam (v7.3) | **14 MB** | Automatyczny |
-| Bielik-11B Q8_0 | ~14 GB | Ręcznie przez UI dropdown |
-| Bielik-4.5B Q8_0 | ~4.8 GB | Ręcznie przez UI dropdown |
-| e5-large (embedding tekstu) | ~2.5 GB | Lazy — dopiero przy "Indeksuj RAG" |
-| ColPali v1.3 (embedding dokumentów) | ~6-8 GB | On-demand |
+| Model | VRAM | Uruchomienie |
+|-------|------|-------------|
+| Backend sam | 14 MB | Automatyczny |
+| Bielik-11B Q8_0 | ~14 GB | Z panelu UI |
+| Bielik-4.5B Q8_0 | ~5 GB | Z panelu UI |
+| e5-large (embedding) | ~2.5 GB | Lazy przy "Indeksuj RAG" |
+| ColPali v1.3 | ~6-8 GB | On-demand |
 | Qwen2.5-VL-7B Q4 | ~4.7 GB | On-demand VLM |
 | Whisper small | ~2 GB | Lazy STT |
 
+### Data Flow — Query
+
+```
+Pytanie → [use_rag=false] → llama-server → Odpowiedź
+        → [use_rag=true]  → Embedding (e5-large CPU) → Qdrant top_k
+                           → Prompt Builder → llama-server → Odpowiedź
+        → [web_search=true] → DuckDuckGo (max 20 wyników) → kontekst
+```
+
+RAG domyślnie OFF. Przyciski UI: `📎 RAG` (use_rag=true), `🌐 RAG+Web` (use_rag+web_search=true).
+
+### Data Flow — Ingestion
+
+```
+Plik (upload/watchdog) → Ekstrakcja tekstu → Chunking (200 słów)
+  ├── .txt/.md/.py/.docx → e5-large (1024 dim) → klimtech_docs
+  ├── .pdf (skany)       → ColPali (128 dim)    → klimtech_colpali
+  └── .pdf z obrazami    → VLM opis → e5-large  → klimtech_docs
+```
+
 ---
 
-## 4. Stack technologiczny
+## 3. Stack technologiczny
 
-### 4.1 Infrastruktura
+| Warstwa | Technologia |
+|---------|-------------|
+| System | Linux Ubuntu 24 / Mint |
+| Python | 3.12 (venv) |
+| GPU | AMD Instinct 16 GB, ROCm 7.2, `HSA_OVERRIDE_GFX_VERSION=9.0.6` |
+| PyTorch | 2.5.1+rocm6.2 |
+| Backend | FastAPI + Haystack 2.x (port 8000) |
+| LLM/VLM | llama.cpp-server (port 8082) |
+| Wektorowa baza | Qdrant w Podman (port 6333), volume `klimtech_qdrant_data` |
+| Kontenery | Podman: qdrant, nextcloud, postgres_nextcloud, n8n |
+| UI | HTML/JS + Tailwind (`static/index.html`) |
+| Nextcloud AI | integration_openai + assistant (port 8081) |
+| Automatyzacja | n8n (port 5678) |
+| HTTPS | nginx reverse proxy (self-signed cert) |
+| Auth | API key `sk-local` przez `X-API-Key` lub `Authorization: Bearer` |
 
-| Warstwa | Technologia | Uwagi |
-|---------|-------------|-------|
-| System | Linux Mint / Ubuntu 24 | Serwer + Laptop |
-| Python | 3.12 (venv) | venv w `/media/lobo/BACKUP/KlimtechRAG/venv/` |
-| GPU | AMD Instinct 16 GB | ROCm 7.2, `HSA_OVERRIDE_GFX_VERSION=9.0.6` |
-| PyTorch | 2.5.1+rocm6.2 | ROCm build |
-| Backend | FastAPI + Haystack 2.x | Port 8000 |
-| LLM/VLM runner | llama.cpp-server | Port 8082, skompilowany pod AMD |
-| Wektorowa baza | Qdrant (Podman) | Port 6333 |
-| Kontenery | Podman | qdrant, nextcloud, postgres_nextcloud, n8n |
-| UI | HTML/JS + Tailwind | `backend_app/static/index.html` |
-| Nextcloud AI | integration_openai + assistant | Port 8081 → backend :8000 |
-| Automatyzacja | n8n | Port 5678 |
-| HTTPS | nginx reverse proxy | self-signed cert |
-| Sync | Git → GitHub | laptop → push --force, serwer → pull |
-
-### 4.2 Modele GGUF (`modele_LLM/`)
+### Modele GGUF (`modele_LLM/`)
 
 | Typ | Model | VRAM | Kwantyzacja |
 |-----|-------|------|-------------|
@@ -167,422 +106,260 @@ Plik wrzucony do Nextcloud RAG_Dane/ lub przez /upload
 | VLM | LFM2.5-VL-1.6B (+mmproj) | ~3.2 GB | BF16 |
 | VLM | Qwen2.5-VL-7B-Instruct (+mmproj) | ~4.7 GB | Q4_K_XL |
 | Audio | LFM2.5-Audio-1.5B (+mmproj) | ~2.2 GB | F16 |
-| Embed (GGUF) | bge-large-en-v1.5 | — | Q8_0 |
 
-### 4.3 Modele HuggingFace
+### Modele HuggingFace
 
-| Model | Typ | Wymiar | Kolekcja Qdrant |
-|-------|-----|--------|-----------------|
-| `intfloat/multilingual-e5-large` | Embedding tekstu | 1024 | `klimtech_docs` |
-| `vidore/colpali-v1.3-hf` | Embedding wizualny (multi-vector) | 128 | `klimtech_colpali` |
+| Model | Wymiar | Kolekcja Qdrant |
+|-------|--------|-----------------|
+| `intfloat/multilingual-e5-large` | 1024 | `klimtech_docs` |
+| `vidore/colpali-v1.3-hf` | 128 | `klimtech_colpali` |
 
 ---
 
-## 5. Struktura katalogów
+## 4. Struktura katalogów
 
 ```
 /media/lobo/BACKUP/KlimtechRAG/
+├── start_klimtech_v3.py       # Start systemu (kontenery + backend + nginx)
+├── stop_klimtech.py           # Stop systemu
+├── .env                       # Konfiguracja środowiskowa
+├── CLAUDE.md                  # Instrukcje dla Claude Code
+├── agents/AGENTS.md           # Instrukcje dla AI asystentów
 │
-├── start_klimtech_v3.py          # Start całego systemu (nginx, qdrant, backend)
-├── stop_klimtech.py              # Stop całego systemu
-├── start_backend_gpu.py          # Start backend w trybie GPU ingest
-├── .env                          # Konfiguracja środowiska
-├── .gitignore                    # Git ignore (venv, .env, modele_LLM/)
-├── PROJEKT_OPIS.md               # Ten plik — opis projektu
-├── postep.md                     # Log postępu — status sesji
-├── agents/AGENTS.md              # Instrukcje dla modeli AI (OpenCode)
-│
-├── backend_app/                  # Główny pakiet Python
-│   ├── main.py                   # Entry point FastAPI + lifespan + CORS + routery
-│   ├── config.py                 # Pydantic Settings (z .env)
-│   ├── file_registry.py          # SQLite — rejestracja zaindeksowanych plików
-│   ├── monitoring.py             # CPU, RAM, GPU stats (rocm-smi)
-│   ├── fs_tools.py               # Filesystem tools (sandboxed)
+├── backend_app/
+│   ├── main.py                # Entry point FastAPI + CORS + middleware
+│   ├── config.py              # Pydantic Settings (z .env)
+│   ├── file_registry.py       # SQLite rejestr plików
+│   ├── monitoring.py          # CPU/RAM stats
+│   ├── fs_tools.py            # Filesystem tools (sandboxed)
 │   │
 │   ├── routes/
-│   │   ├── __init__.py           # Eksport routerów
-│   │   ├── chat.py               # /v1/chat/completions, /query, /v1/embeddings, /v1/models
-│   │   ├── ingest.py             # /upload, /ingest, /ingest_path, /ingest_all, /ingest_pdf_vlm
-│   │   ├── admin.py              # /health, /metrics, /documents, /ws/health, /files/*
-│   │   ├── model_switch.py       # /model/status, /model/switch/*, /model/list, /model/start, /model/stop
-│   │   ├── filesystem.py         # /fs/list, /fs/glob, /fs/read, /fs/grep
-│   │   ├── web_search.py         # /web/status, /web/search, /web/fetch, /web/summarize
-│   │   ├── gpu_status.py         # /gpu/status (rocm-smi, temp, VRAM, use)
-│   │   ├── whisper_stt.py        # /v1/audio/transcriptions (Whisper STT)
-│   │   └── ui.py                 # GET / (serwuje static/index.html)
+│   │   ├── chat.py            # /v1/chat/completions, /query, /v1/embeddings, /v1/models
+│   │   ├── ingest.py          # /upload, /ingest, /ingest_path, /ingest_all
+│   │   ├── admin.py           # /health, /metrics, /documents, /ws/health, /files/*
+│   │   ├── model_switch.py    # /model/status, /model/list, /model/start, /model/stop
+│   │   ├── filesystem.py      # /fs/list, /fs/glob, /fs/read, /fs/grep
+│   │   ├── web_search.py      # /web/search, /web/fetch, /web/summarize
+│   │   ├── gpu_status.py      # /gpu/status (rocm-smi)
+│   │   ├── whisper_stt.py     # /v1/audio/transcriptions
+│   │   └── ui.py              # GET / (serwuje index.html)
 │   │
 │   ├── services/
-│   │   ├── __init__.py           # Eksport: doc_store, get_text_embedder, get_rag_pipeline...
-│   │   ├── qdrant.py             # Klient Qdrant, get_embedding_dimension() (cache)
-│   │   ├── embeddings.py         # Lazy: get_text_embedder() / get_doc_embedder()
-│   │   ├── rag.py                # Lazy: get_indexing_pipeline() / get_rag_pipeline()
-│   │   ├── llm.py                # Standalone OpenAIGenerator (do llama-server)
-│   │   ├── model_manager.py      # llama-server lifecycle (start/stop/switch/progress)
-│   │   └── colpali_embedder.py   # ColPali multi-vector embedding (Pipeline B)
+│   │   ├── qdrant.py          # QdrantDocumentStore + get_qdrant_retriever()
+│   │   ├── embeddings.py      # Lazy: get_text_embedder() / get_doc_embedder()
+│   │   ├── rag.py             # Lazy: get_indexing_pipeline() / get_rag_pipeline()
+│   │   ├── llm.py             # OpenAIGenerator (do llama-server)
+│   │   ├── model_manager.py   # llama-server lifecycle (start/stop/switch)
+│   │   ├── colpali_embedder.py# ColPali multi-vector
+│   │   ├── embedder_pool.py   # Singleton cache embedderów
+│   │   └── model_selector.py  # Automatyczny wybór embeddera po rozszerzeniu
 │   │
-│   ├── models/
-│   │   └── schemas.py            # Pydantic schemas — use_rag: False domyślnie (v7.3)
+│   ├── categories/
+│   │   ├── definitions.py     # 14 kategorii RAG (pl/en/de)
+│   │   └── classifier.py      # classify_document() → kategoria
 │   │
-│   ├── utils/
-│   │   ├── rate_limit.py         # Rate limiting (token bucket)
-│   │   ├── tools.py              # Tool calling helpers
-│   │   └── dependencies.py       # API key auth (X-API-Key + Bearer fallback)
-│   │
-│   ├── scripts/
-│   │   ├── watch_nextcloud.py    # Watchdog v3.0 — monitoruje RAG_Dane/*, auto-ingest
-│   │   ├── ingest_gpu.py         # Batch GPU ingest (e5-large)
-│   │   ├── ingest_colpali.py     # Batch ColPali ingest (Pipeline B)
-│   │   └── model_parametr.py     # Obliczanie parametrów llama-server (ctx, cache, ngl)
-│   │
-│   ├── ingest/
-│   │   └── image_handler.py      # Ekstrakcja obrazów z PDF + VLM opisy
-│   │
-│   ├── prompts/
-│   │   ├── __init__.py
-│   │   └── vlm_prompts.py        # 8 wariantów promptów VLM (DEFAULT..MEDICAL)
-│   │
-│   └── static/
-│       ├── index.html            # Główny UI v7.3 (z JS, GPU Dashboard, czat)
-│       └── code.html             # Kopia statyczna UI (bez JS backend)
+│   ├── models/schemas.py      # Pydantic: use_rag=False domyślnie
+│   ├── utils/                 # rate_limit, tools, dependencies (API key auth)
+│   ├── prompts/vlm_prompts.py # 8 wariantów promptów VLM
+│   ├── ingest/image_handler.py# Ekstrakcja obrazów z PDF + VLM
+│   ├── scripts/               # watch_nextcloud, ingest_gpu, model_parametr
+│   └── static/index.html      # UI v7.3
 │
 ├── data/
-│   ├── nextcloud/                # Dane kontenera Nextcloud
-│   ├── n8n/                      # Dane kontenera n8n
-│   ├── uploads/                  # Tymczasowe uploady backendu
-│   │   └── pdf_RAG/              # PDF do ColPali ingest
-│   ├── file_registry.db          # SQLite — rejestr zaindeksowanych plików
-│   └── ssl/
-│       ├── klimtech.crt          # Certyfikat self-signed
-│       └── klimtech.key          # Klucz prywatny
+│   ├── uploads/               # Pliki do indeksowania
+│   ├── file_registry.db       # SQLite rejestr
+│   └── ssl/                   # Certyfikat + klucz
 │
-├── modele_LLM/                   # (w .gitignore — tylko na serwerze)
-│   ├── model_thinking/           # LLM: Bielik-11B, Bielik-4.5B, LFM2-2.6B
-│   ├── model_video/              # VLM: LFM2.5-VL-1.6B, Qwen2.5-VL-7B
-│   ├── model_audio/              # Audio: LFM2.5-Audio-1.5B
-│   └── model_embedding/          # Embedding GGUF: bge-large-en-v1.5, bge-m3
-│
-├── n8n_workflows/
-│   ├── workflow_auto_index.json  # Auto-indeksowanie (Schedule + WebDAV + routing)
-│   ├── workflow_chat_webhook.json# Webhook czat → backend
-│   └── workflow_vram_manager.json# Zarządzanie VRAM (switch modeli)
-│
-├── venv/                         # Virtualenv Python 3.12
-│
-└── llama.cpp/                    # Skompilowany llama.cpp (AMD Instinct ROCm)
-    └── build/bin/
-        ├── llama-server          # Serwer LLM/VLM
-        └── llama-cli             # CLI do VLM opisów obrazów
+├── modele_LLM/                # (w .gitignore)
+├── n8n_workflows/             # 3 workflow JSON
+├── venv/                      # Python 3.12 venv
+└── llama.cpp/build/bin/       # llama-server, llama-cli (ROCm)
 ```
 
 ---
 
-## 6. Endpointy API (40+ endpointów)
+## 5. Endpointy API
 
-### 6.1 Chat & RAG
-
+### Chat & RAG
 | Endpoint | Metoda | Opis |
 |----------|--------|------|
-| `/v1/chat/completions` | POST | Główny czat OpenAI-compatible (RAG opcjonalny) |
-| `/v1/models` | GET | Lista modeli (Nextcloud + OWUI compatible) |
-| `/models` | GET | Lista modeli bez /v1/ (Nextcloud compat) |
-| `/v1/embeddings` | POST | Generowanie embeddingów tekstu |
-| `/query` | POST | Zapytanie RAG z opcjonalnym web fallback |
-| `/code_query` | POST | Zapytanie z kontekstem kodu |
-| `/rag/debug` | GET | Diagnostyka kolekcji Qdrant |
-| `/` | GET | HTML UI |
+| `/v1/chat/completions` | POST | Główny czat OpenAI-compatible |
+| `/v1/models` | GET | Lista modeli |
+| `/models` | GET | Lista modeli (Nextcloud compat) |
+| `/v1/embeddings` | POST | Generowanie embeddingów |
+| `/query` | POST | RAG query z opcjonalnym web fallback |
+| `/code_query` | POST | Query z kontekstem kodu |
+| `/rag/debug` | GET | Diagnostyka Qdrant |
 
-### 6.2 GPU & Monitoring
-
+### Ingest
 | Endpoint | Metoda | Opis |
 |----------|--------|------|
-| `/gpu/status` | GET | Temperatura, VRAM used/total, GPU utilization |
-| `/health` | GET | Status serwisów (backend, qdrant) |
-| `/metrics` | GET | CPU, RAM, czas działania |
+| `/upload` | POST | Upload + zapis do Nextcloud + ingest w tle |
+| `/ingest` | POST | Upload + bezpośredni ingest (używany przez UI) |
+| `/ingest_path` | POST | Ingest ze ścieżki lokalnej |
+| `/ingest_all` | POST | Batch ingest pending plików z registry |
 
-### 6.3 Ingest (indeksowanie)
-
+### Model Management
 | Endpoint | Metoda | Opis |
 |----------|--------|------|
-| `/upload` | POST | Upload pliku + auto-ingest + zapis do Nextcloud |
-| `/ingest` | POST | Ingest z treścią tekstu (legacy) |
-| `/ingest_path` | POST | Ingest ze ścieżki lokalnej (używany przez n8n) |
-| `/ingest_all` | POST | Batch ingest z file_registry |
-| `/ingest_pdf_vlm` | POST | Ingest PDF z VLM opisami obrazów |
+| `/model/status` | GET | Status llama-server |
+| `/model/start` | POST | Uruchom model |
+| `/model/stop` | POST | Zatrzymaj model |
+| `/model/list` | GET | Lista modeli GGUF |
 
-### 6.4 Model Management
-
+### Monitoring, Web, Filesystem, Audio
 | Endpoint | Metoda | Opis |
 |----------|--------|------|
-| `/model/status` | GET | Status llama-server (running/stopped) |
-| `/model/start` | POST | Uruchom model (z parametrami) |
-| `/model/stop` | POST | Zatrzymaj model (zwolnij VRAM) |
-| `/model/list` | GET | Lista dostępnych modeli GGUF |
-| `/model/progress-log` | GET | Linie postępu ładowania modelu |
-
-### 6.5 Web Search, Filesystem, Audio
-
-| Endpoint | Metoda | Opis |
-|----------|--------|------|
-| `/web/search` | POST | DuckDuckGo search |
-| `/web/fetch` | POST | Pobieranie treści strony |
+| `/gpu/status` | GET | Temperatura, VRAM, GPU use |
+| `/health` | GET | Status serwisów |
+| `/web/search` | POST | DuckDuckGo (max 20 wyników) |
+| `/web/fetch` | POST | Pobranie treści strony |
 | `/web/summarize` | POST | Podsumowanie strony przez LLM |
-| `/fs/list`, `/fs/glob`, `/fs/read`, `/fs/grep` | POST | Filesystem tools (sandboxed) |
-| `/v1/audio/transcriptions` | POST | Whisper STT (OpenAI-compatible) |
+| `/fs/list,glob,read,grep` | POST | Filesystem tools (sandboxed) |
+| `/v1/audio/transcriptions` | POST | Whisper STT |
 
 ---
 
-## 7. Konfiguracja
+## 6. Konfiguracja
 
-### 7.1 Porty systemowe
+### Porty
 
 | Usługa | HTTP | HTTPS (nginx) |
 |--------|------|---------------|
-| Backend FastAPI + UI | 8000 | 8443 |
-| llama.cpp-server | 8082 | — |
+| Backend + UI | 8000 | 8443 |
+| llama-server | 8082 | — |
 | Qdrant | 6333 | 6334 |
-| Nextcloud + AI | 8081 | 8444 |
+| Nextcloud | 8081 | 8444 |
 | n8n | 5678 | 5679 |
 
-### 7.2 Dane dostępowe
+### Dane dostępowe
 
-| Usługa | URL | Login | Hasło |
-|--------|-----|-------|-------|
-| Nextcloud | http://192.168.31.70:8081 | admin | klimtech123 |
-| Backend UI | https://192.168.31.70:8443 | — | sk-local (API key) |
-| n8n | http://192.168.31.70:5678 | admin | admin123 |
+| Usługa | Login | Hasło |
+|--------|-------|-------|
+| Nextcloud | admin | klimtech123 |
+| Backend API key | — | sk-local |
+| n8n | admin | admin123 |
 
-### 7.3 Plik `.env`
+### .env
 
 ```bash
 KLIMTECH_BASE_PATH=/media/lobo/BACKUP/KlimtechRAG
 KLIMTECH_LLM_BASE_URL=http://localhost:8082/v1
 KLIMTECH_LLM_API_KEY=sk-dummy
 KLIMTECH_EMBEDDING_MODEL=intfloat/multilingual-e5-large
+KLIMTECH_EMBEDDING_DEVICE=cpu
 KLIMTECH_QDRANT_URL=http://localhost:6333
 KLIMTECH_QDRANT_COLLECTION=klimtech_docs
+KLIMTECH_API_KEY=sk-local
 ```
 
----
-
-## 8. UI (v7.3)
-
-Interfejs użytkownika dostępny na `https://192.168.31.70:8443`:
-
-- **GPU Dashboard** — temperatura, VRAM used/total, GPU utilization (aktualizacja co 2s)
-- **Header health check** — status Qdrant, Nextcloud, PostgreSQL, n8n
-- **Model Selection** — dropdown z listą modeli GGUF; Uruchom/Zatrzymaj
-- **Upload & Ingest** — drag & drop z progress barem, SHA256 deduplication
-- **Czat** — sesje w localStorage, historia, export/import JSON
-- **Web Search** — DuckDuckGo + podgląd stron + podsumowanie LLM
-- **Terminal POSTĘP** — logi z postępem operacji w czasie rzeczywistym (polling 600ms)
-- **RAG domyślnie OFF** — czat idzie prosto do llama-server
-- **RAG włączany ręcznie** — kliknięcie globe 🌐 → `use_rag: true` + `web_search: true`
-
----
-
-## 9. Trzy pipeline'y embeddingu
-
-| Pipeline | Model | VRAM | Kolekcja | Typy plików |
-|----------|-------|------|---------|-------------|
-| **A: Tekst** | `intfloat/multilingual-e5-large` (1024 dim) | ~2.5 GB | `klimtech_docs` | .txt, .md, .py, .json, .docx, PDF tekstowe |
-| **B: ColPali** | `vidore/colpali-v1.3-hf` (128 dim multi-vector) | ~6-8 GB | `klimtech_colpali` | PDF skany, dokumenty mieszane |
-| **C: VLM wzbogacanie** | Qwen2.5-VL-7B / LFM2.5-VL-1.6B | ~4.7 / ~3.2 GB | → Pipeline A | PDF z osadzonymi obrazami |
-
----
-
-## 10. VLM Prompts — opisy obrazów w PDF
-
-### 10.1 Architektura VLM (Vision Language Model)
-
-KlimtechRAG obsługuje opisywanie obrazów w dokumentach PDF za pomocą VLM (Vision Language Model). System zawiera 8 specjalistycznych promptów dla różnych typów obrazów:
-
-| Typ obrazu | Cel promptu | Model VLM |
-|------------|-------------|-----------|
-| **DEFAULT** | Uniwersalny, szczegółowy opis | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
-| **DIAGRAM** | Schematy blokowe, flowcharty, UML | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
-| **CHART** | Wykresy (liniowe, słupkowe, kołowe) | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
-| **TABLE** | Tabele danych, zestawienia, cenniki | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
-| **PHOTO** | Zdjęcia obiektów, ludzi, sprzętu | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
-| **SCREENSHOT** | Zrzuty ekranu UI, aplikacji | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
-| **TECHNICAL** | Schematy elektryczne, mechaniczne | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
-| **MEDICAL** | Obrazowanie medyczne (RTG, MRI, USG) | Qwen2.5-VL-7B / LFM2.5-VL-1.6B |
-
-### 10.2 Parametry VLM
-
-```python
-VLM_PARAMS = {
-    "max_tokens": 512,
-    "temperature": 0.1,
-    "context_length": 4096,
-    "gpu_layers": 99,  # wszystkie warstwy na GPU
-}
-```
-
-### 10.3 Pipeline VLM
-
-1. **Wykrywanie obrazów w PDF** — `image_handler.py` ekstrahuje obrazy
-2. **Klasyfikacja typu** — heurystyka określa typ obrazu (diagram, chart, table, etc.)
-3. **Wybór promptu** — `vlm_prompts.py` dostarcza odpowiedni prompt
-4. **Generowanie opisu** — llama-cli z VLM tworzy tekstowy opis
-5. **Wzbogacenie dokumentu** — opisy są dodawane jako kontekst do tekstu PDF
-6. **Indeksowanie** — przetworzony dokument z opisami trafia do RAG
-
-### 10.4 Struktura plików
-
-```
-backend_app/prompts/
-├── __init__.py
-└── vlm_prompts.py          # 8 wariantów promptów, VLM_PARAMS, funkcje pomocnicze
-
-backend_app/ingest/
-└── image_handler.py         # Ekstrakcja obrazów + VLM (refaktoryzacja w toku)
-```
-
-### 10.5 Data Flow VLM
-
-```mermaid
-graph TB
-    A[Plik PDF] --> B[Ekstrakcja obrazów<br>image_handler.py]
-    B --> C[Klasyfikacja typu<br>heurystyka]
-    C --> D[Wybór promptu<br>vlm_prompts.py]
-    D --> E[VLM generowanie<br>llama-cli + mmproj]
-    E --> F[Opis obrazu<br>max 200 słów]
-    F --> W[Wzbogacenie dokumentu<br>+ kontekst RAG]
-    W --> G[Indeksowanie<br>klimtech_docs]
-    G --> H[Zapytanie RAG<br>+ opisy obrazów]
-```
-
-### 10.6 Implementacja
-
-```python
-# Przykład użycia
-from prompts.vlm_prompts import get_prompt, get_vlm_params
-
-prompt = get_prompt("diagram")  # Zwraca DIAGRAM_PROMPT
-full_prompt = get_full_prompt("diagram")  # System + User template
-params = get_vlm_params()  # Parametry llama-cli
-```
-
-### 10.5 Implementacja
-
-```python
-# Przykład użycia
-from prompts.vlm_prompts import get_prompt, get_vlm_params
-
-prompt = get_prompt("diagram")  # Zwraca DIAGRAM_PROMPT
-full_prompt = get_full_prompt("diagram")  # System + User template
-params = get_vlm_params()  # Parametry llama-cli
-```
-
----
-
-## 11. Zarządzanie modelami LLM/VLM
-
-### 11.1 Architektura model_manager.py
-
-**backend_app/services/model_manager.py** — centralny system zarządzania modelami LLM i VLM:
-
-- **Lifecycle serwera** — start/stop/switch llama-server
-- **Automatyczne przełączanie** — LLM ↔ VLM z zarządzaniem VRAM
-- **Progress logging** — szczegółowe logi uruchamiania
-- **Konfiguracja modeli** — JSON config z listą dostępnych modeli
-
-### 11.2 Kluczowe funkcje
-
-| Funkcja | Cel | Parametry |
-|---------|-----|-----------|
-| `start_llm_server()` | Uruchomienie LLM | `model_path`, `model_type="llm"` |
-| `start_vlm_server()` | Uruchomienie VLM | `model_path`, `model_type="vlm"` |
-| `switch_model()` | Przełączanie modeli | `model_type` ("llm" lub "vlm") |
-| `get_server_status()` | Status serwera | Zwraca running/model_type/port |
-| `get_available_models()` | Lista dostępnych modeli | Zwraca dict z kategoriami |
-
-### 11.3 AMD GPU environment
-
-```python
-amd_env = {
-    "HIP_VISIBLE_DEVICES": "0",
-    "GPU_MAX_ALLOC_PERCENT": "100", 
-    "HSA_ENABLE_SDMA": "0",
-    "HSA_OVERRIDE_GFX_VERSION": "9.0.6",
-}
-```
-
-### 11.4 Progress logging
-
-- **Plik:** `logs/llm_progress.log`
-- **Endpoint:** `/model/progress-log` (polling)
-- **Format:** `[HH:MM:SS] Wiadomość`
-- **Zawartość:** Analiza VRAM, lista modeli, parametry, status startu
-
-### 11.5 Workflow przełączania
-
-```mermaid
-graph LR
-    A[Żądanie switch] --> B[Stop obecny serwer]
-    B --> C[Czekaj 5s na VRAM]
-    C --> D[Uruchom nowy model]
-    D --> E[Zaktualizuj config]
-    E --> F[Return status]
-```
-
----
-
-## 12. Komendy operacyjne
-
-### Start / Stop systemu
+### Środowisko serwera
 
 ```fish
-cd /media/lobo/BACKUP/KlimtechRAG
-source venv/bin/activate.fish
-python3 start_klimtech_v3.py    # Start
-python3 stop_klimtech.py        # Stop
+cd /media/lobo/BACKUP/KlimtechRAG && source venv/bin/activate.fish
+python3 start_klimtech_v3.py    # start
+python3 stop_klimtech.py        # stop
 ```
 
-### Git sync
+---
+
+## 7. Kontenery Podman
+
+| Kontener | Obraz | Volume | Uwagi |
+|----------|-------|--------|-------|
+| qdrant | qdrant/qdrant:latest | `klimtech_qdrant_data:/qdrant/storage` | Standalone |
+| n8n | n8nio/n8n:latest | — | Standalone |
+| postgres_nextcloud | postgres:16 | `klimtech_postgres_data:/var/lib/postgresql/data` | W pod klimtech_pod |
+| nextcloud | nextcloud:32 | `klimtech_nextcloud_data:/var/www/html/data` | W pod klimtech_pod |
+
+`start_klimtech_v3.py` — tworzy kontenery tylko jeśli nie istnieją, istniejące tylko startuje.
+
+---
+
+## 8. Inteligentna selekcja embeddera
+
+`model_selector.py` automatycznie wybiera embedder na podstawie rozszerzenia pliku:
+
+| Typ | Rozszerzenia | Model | Wymiar |
+|-----|-------------|-------|--------|
+| VISUAL | .pdf, .png, .jpg, .gif, .bmp, .webp | ColPali | 128 |
+| SEMANTIC | .txt, .md, .docx, .csv, .json, .sql | e5-large | 1024 |
+| CODE | .py, .js, .ts, .java, .cpp, .go, .rs (27 ext.) | bge-large-en-v1.5 | 1024 |
+
+---
+
+## 9. Kategorie RAG
+
+14 kategorii w `categories/definitions.py`: medicine, law, finance, technology, construction, education, agriculture, society, culture, sport, family, religion, environment, other.
+
+`classify_document(filepath, content)` — path-based + keyword-based (PL/EN/DE) + fallback "other".
+
+Filtr Qdrant: `{"field": "meta.category", "operator": "==", "value": category}`.
+
+---
+
+## 10. Znane problemy
+
+### Otwarte
+
+| # | Priorytet | Problem | Status |
+|---|-----------|---------|--------|
+| 1 | 🔴 | Nextcloud AI Assistant — HTTP 417 (Expect header) | Do debugowania |
+| 2 | 🔴 | VLM opis obrazów — brak mmproj w llama-cli | Nierozwiązane |
+| 3 | 🔴 | `ingest_gpu.py` zabija `start_klimtech.py` | Obejście: `start_backend_gpu.py` |
+| 4 | 🟡 | Race condition w `embeddings.py` (brak threading lock) | Niezaplikowane |
+| 5 | 🟡 | File handle leak w `model_manager.py` (2 miejsca) | Niezaplikowane |
+| 6 | 🟡 | ColPali alias "colpali" nie rozwiązywany w `embedder_pool.py` | Niezaplikowane |
+| 7 | 🟡 | Deprecated `regex=` w `model_switch.py` (Pydantic v2) | Kosmetyczny |
+| 8 | 🟡 | Nextcloud na exFAT — problemy z uprawnieniami PostgreSQL | Planowana migracja serwera |
+
+### Rozwiązane (sesja 14, 2026-03-25)
+
+- Merge conflicts (11 w Python, 2 w MD) — rozwiązane
+- Frontend 401 (brak API key) — dodano wrapper `F()` z `X-API-Key`
+- DuckDuckGo pusta odpowiedź — zmiana `duckduckgo_search` → `ddgs`
+- `admin.py` duplikat parametru `req: Request` — usunięto
+- `ChatCompletionResponse` brak pola `sources` — dodano
+- Embedding na GPU (OOM) — zmieniono na `KLIMTECH_EMBEDDING_DEVICE=cpu`
+- `safe_filename` undefined w `/ingest` — zmieniono na `file.filename`
+- Qdrant bez persistent storage — dodano volume `klimtech_qdrant_data`
+- `start_klimtech_v3.py` niszczył kontenery przy każdym restarcie — dodano check "pod exists"
+- Web search za mało wyników (2-3) — zwiększono do 20
+
+---
+
+## 11. Komendy diagnostyczne
 
 ```bash
-# Na laptopie
-git add -A && git commit -m "Sync" -a || true && git push --force
-
-# Na serwerze
-git pull
-```
-
-### Diagnostyka
-
-```bash
-curl -k https://192.168.31.70:8443/health
-curl -k https://192.168.31.70:8443/v1/models
-curl -k https://192.168.31.70:8443/rag/debug
-curl -k https://192.168.31.70:8443/gpu/status
+curl http://localhost:8000/health
+curl http://localhost:8000/v1/models
+curl http://localhost:8000/rag/debug
+curl http://localhost:8000/files/stats
+curl http://localhost:8000/gpu/status
+curl http://localhost:8000/web/status
+podman ps -a --format "{{.Names}} {{.Status}}"
 ```
 
 ---
 
-## 12. Kluczowe decyzje architektoniczne
+## 12. TODO
 
-1. **Lazy loading VRAM** — embedding i pipeline RAG ładowane dopiero przy pierwszym użyciu, nie na starcie backendu. VRAM start: 14 MB zamiast 4.5 GB.
-2. **use_rag=False domyślnie** — czat nie dławi się kontekstem RAG. Użytkownik włącza RAG gdy potrzebuje.
-3. **Standalone LLM component** — `llm.py` tworzy własny `OpenAIGenerator`, nie wyciąga go z RAG pipeline.
-4. **_detect_base() priorytet** — preferuje `/media/lobo/BACKUP/KlimtechRAG` (tam są modele GGUF) nad `~/KlimtechRAG` (stary repo bez modeli).
-5. **ColPali oddzielna kolekcja** — `klimtech_colpali` (dim=128, MAX_SIM) osobno od `klimtech_docs` (dim=1024).
-6. **JavaScript w Python strings** — template literals (backticks) w JS embedded w Python powodują błędy — zawsze concatenation (+) i var zamiast const/let.
-7. **Model Manager lifecycle** — centralny zarządca przełączania LLM↔VLM z automatycznym zwalnianiem VRAM.
-8. **VLM prompt specialization** — 8 dedykowanych promptów dla różnych typów obrazów (diagramy, tabele, zdjęcia, etc.).
-9. **AMD GPU environment** — HSA_OVERRIDE_GFX_VERSION=9.0.6, GPU_MAX_ALLOC_PERCENT=100 dla Instinct 16GB.
-10. **Fish shell constraint** — heredoc (`cat << 'EOF'`) nie działa, używaj `python3 -c "..."`.
+### Wysoki priorytet
+- Re-indeksowanie dokumentów do Qdrant po resecie
+- Debug NC Assistant 417 (Expect header middleware)
+- Test Whisper STT
+- Migracja serwera na Ubuntu z ext4
 
----
+### Średni priorytet
+- UI dropdown z kategoriami + endpoint `GET /categories`
+- Podpięcie vlm_prompts do image_handler.py (krok 16d-16e)
+- Threading lock w `embeddings.py`
 
-## 12. Znane ograniczenia techniczne
-
-- **GPU: 1 duży model naraz** — 16GB VRAM wymusza sekwencyjne używanie LLM/embedding/ColPali
-- **ColPali: ~6-8GB VRAM** — wymaga zatrzymania LLM (`pkill -f llama-server`)
-- **Fish shell SSH** — heredoc nie działa, używaj `python3 -c "..."`
-- **monitoring.py GPU: 0%** — kosmetyczny problem z AMD ROCm, VRAM i temp działają OK
-- **qdrant_indexed: 0** — HNSW index wymaga wymuszenia (ensure_indexed())
+### Niski priorytet
+- `stop_klimtech.py` nie zabija wszystkich procesów
+- Auto-transkrypcja audio w n8n
+- Chunked summarization dla długich dokumentów
 
 ---
 
-*Wygenerowano: 2026-03-21*
+*Skonsolidowano: 2026-03-25 z plików PROJEKT_OPIS, PODSUMOWANIE, postep, ERRORS, AUDYT*

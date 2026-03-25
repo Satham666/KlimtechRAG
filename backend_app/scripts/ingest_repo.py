@@ -65,18 +65,19 @@ def ingest_folder(folder_path):
         f"\n🎉 Zakończono! Przetworzono {processed_count} plików. Pominięto: {skipped_count}."
     )
 
+
 if __name__ == "__main__":
     # Wybór ścieżki: argument z wiersza poleceń lub domyślna
     if len(sys.argv) > 1:
         target_folder = sys.argv[1]
     else:
         # Domyślnie indeksujemy pobrane repozytorium opencode
-        target_folder = "/home/lobo/KlimtechRAG/git_sync/zizzania"
+        target_folder = "/media/lobo/BACKUP/KlimtechRAG/git_sync/zizzania"
 
     ingest_folder(target_folder)
 #    observer = Observer()
 #    observer.start()
-#    
+#
 #    try:
 #        while True:
 #            time.sleep(1)

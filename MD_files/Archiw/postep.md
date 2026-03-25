@@ -152,6 +152,29 @@ podman logs nextcloud 2>&1 | tail -100
 
 ---
 
+## ✅ STATUS IMPLEMENTACJI v7.4 (Sesja 12) — WSZYSTKIE KROKI UKOŃCZONE
+
+| Komponent | Status |
+|-----------|--------|
+| model_selector.py | ✅ GOTOWY |
+| Dokumentacja (4 pliki) | ✅ GOTOWA |
+| **KROK 1: Integracja z ingest.py** | **✅ GOTOWY** |
+| **KROK 2: RAG optimization (chat.py)** | **✅ GOTOWY** |
+| **KROK 3: Embedder pool** | **✅ GOTOWY** |
+| **KROK 4: Testing** | **✅ GOTOWY** |
+| Audio/Video embedders | ⏳ PLACEHOLDER |
+
+---
+
+## 🔧 HOTFIX (Sesja 12 post-implementation)
+
+| Problem | Rozwiązanie | Status |
+|---------|-------------|--------|
+| embedder_pool.py używał `intfloat/e5-large-v2` (EN) zamiast multilingual | Zmieniono na `intfloat/multilingual-e5-large` | ✅ FIXED |
+| Konsystencja modelu embeddingu w całym systemie | Zweryfikowano consistency check w config/selector/pool | ✅ VERIFIED |
+
+---
+
 ## ⏳ DO ZROBIENIA
 
 ### Priorytet WYSOKI — wymaga serwera
@@ -287,6 +310,8 @@ curl -s -X POST http://localhost:8000/query \
 4. **Przy debugowaniu NC Asystenta:** Prawdopodobna przyczyna to header `Expect: 100-continue` — middleware w `main.py` usuwający ten header powinno rozwiązać problem.
 
 5. **Pliki TYLKO NA LAPTOPIE (nie zsynchronizowane z serwerem):** Wszystkie zmiany z sesji 12 i 13 — wymagają `git push` + `git pull` na serwerze.
+
+5. **WAŻNE - ŚCIEŻKA PROJEKTU:** `/media/lobo/BACKUP/KlimtechRAG` jest OSTATECZNĄ ścieżką projektu. Wszystkie pliki konfiguracyjne, model_manager.py, _detect_base() używają tej ścieżki. LD_LIBRARY_PATH dla llama-server wymaga `/media/lobo/BACKUP/KlimtechRAG/llama.cpp/build/bin`.
 
 ---
 

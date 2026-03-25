@@ -452,6 +452,8 @@ const LS_WEB_HIST = 'klimtech_web_history';
 
 // ── STATE ─────────────────────────────────────────────────────
 const B = window.location.origin;
+const API_KEY = 'sk-local';
+function F(url,opts){opts=opts||{};opts.headers=Object.assign({'X-API-Key':API_KEY},opts.headers||{});return window.fetch(url,opts);}
 let sessions = [], activeId = null, pendingImport = null;
 let currentModelType = 'llm';
 let progressOffset = 0;
@@ -608,7 +610,7 @@ function doImport(mode){
 // ── STATUS ────────────────────────────────────────────────────
 async function checkStatus(){
   try{
-    const r=await fetch(`${B}/model/status`,{signal:AbortSignal.timeout(7000)});
+    const r=await F(`${B}/model/status`,{signal:AbortSignal.timeout(7000)});
     if(!r.ok)throw 0;
     const d=await r.json();
     currentModelType = d.model_type || 'llm';
@@ -641,7 +643,7 @@ async function checkHeaderHealth(){
   async function checkSvc(id, url){
     const el=document.getElementById(id);
     try{
-      const r=await fetch(url,{signal:AbortSignal.timeout(5000)});
+      const r=await F(url,{signal:AbortSignal.timeout(5000)});
       if(r.ok||r.status===302){
         el.innerHTML=`<span class="bg-rag-accent/20 text-rag-accent px-1 rounded">[OK]</span> ${el.textContent.replace(/\[.*?\]\s*/,'')}`;
       } else throw 0;
@@ -655,7 +657,7 @@ async function checkHeaderHealth(){
   };
   // Check services via backend health
   try{
-    const r=await fetch(`${B}/health`,{signal:AbortSignal.timeout(5000)});
+    const r=await F(`${B}/health`,{signal:AbortSignal.timeout(5000)});
     const d=await r.json();
     setHeaderBadge('headerQdrant','qdrant',d.qdrant);
   }catch{
@@ -677,7 +679,7 @@ function setHeaderBadge(id,label,ok){
 async function checkSvcSimple(id,label,url){
   // For now mark as OK if backend is reachable (containers are managed by podman)
   try{
-    const r=await fetch(`${B}/health`,{signal:AbortSignal.timeout(5000)});
+    const r=await F(`${B}/health`,{signal:AbortSignal.timeout(5000)});
     const d=await r.json();
     setHeaderBadge(id,label,true);
   }catch{
@@ -688,11 +690,11 @@ async function checkSvcSimple(id,label,url){
 // ── MODEL LIST ────────────────────────────────────────────────
 async function loadModelList(){
   try{
-    const r=await fetch(`${B}/model/list`); if(!r.ok)return;
+    const r=await F(`${B}/model/list`); if(!r.ok)return;
     const d=await r.json();
     fillModelSelect('selLLM', d.llm||[], 'LLM');
     fillModelSelect('selVLM', d.vlm||[], 'VLM', true);
-    const cfg=await fetch(`${B}/model/status`).then(r=>r.json()).catch(()=>({}));
+    const cfg=await F(`${B}/model/status`).then(r=>r.json()).catch(()=>({}));
     if(cfg.llm_model){
       const sel=document.getElementById('selLLM');
       for(let o of sel.options){ if(o.value===cfg.llm_model){sel.value=cfg.llm_model;break;} }
@@ -730,7 +732,7 @@ async function loadSelectedModel(){
   startProgressPoll();
 
   try{
-    const r=await fetch(`${B}/model/start`,{
+    const r=await F(`${B}/model/start`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({model_path:modelPath, model_type:modelType})
@@ -754,7 +756,7 @@ async function switchModelType(type){
   addProgressLine('['+now()+'] Przelaczam na '+type.toUpperCase()+'...');
   startProgressPoll();
   try{
-    const r=await fetch(`${B}/model/start`,{
+    const r=await F(`${B}/model/start`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({model_path:path, model_type:type})
@@ -772,8 +774,8 @@ async function toggleModelType(){
 
 async function showSystemStatus(){
   try{
-    const r=await fetch(`${B}/model/status`); const d=await r.json();
-    const rs=await fetch(`${B}/files/stats`); const s=await rs.json();
+    const r=await F(`${B}/model/status`); const d=await r.json();
+    const rs=await F(`${B}/files/stats`); const s=await rs.json();
     clearProgressPanel();
     addProgressLine('STATUS SYSTEMU');
     addProgressLine('-'.repeat(50));
@@ -790,7 +792,7 @@ async function stopModel(){
   clearProgressPanel();
   addProgressLine('['+now()+'] Zatrzymuje model...');
   try{
-    const r=await fetch(`${B}/model/stop`,{method:'POST'});
+    const r=await F(`${B}/model/stop`,{method:'POST'});
     const d=await r.json();
     addProgressLine('Model zatrzymany');
     currentModelType=''; updateMenuHighlight('');
@@ -822,7 +824,7 @@ function startProgressPoll(){
 }
 async function pollProgress(){
   try{
-    const r=await fetch(`${B}/model/progress-log?since=${progressOffset}`);
+    const r=await F(`${B}/model/progress-log?since=${progressOffset}`);
     if(!r.ok)return;
     const d=await r.json();
     if(d.lines&&d.lines.length){
@@ -841,7 +843,7 @@ function startGpuPoll(){
 async function pollGpuStatus(){
   const panel=document.getElementById('info-panel-content');
   try{
-    const r=await fetch(`${B}/gpu/status`,{signal:AbortSignal.timeout(3000)});
+    const r=await F(`${B}/gpu/status`,{signal:AbortSignal.timeout(3000)});
     if(!r.ok) throw 0;
     const d=await r.json();
     if(d.error){ panel.innerHTML=`<div class="w-full text-[10px] text-red-400">${esc(d.error)}</div>`; return; }
@@ -883,7 +885,7 @@ async function pollGpuStatus(){
 // ── STATS ─────────────────────────────────────────────────────
 async function loadStats(){
   try{
-    const r=await fetch(`${B}/files/stats`); if(!r.ok)return;
+    const r=await F(`${B}/files/stats`); if(!r.ok)return;
     const d=await r.json();
     document.getElementById('sDocs').textContent   =d.indexed??'-';
     document.getElementById('sChunks').textContent =d.qdrant_points??d.total_chunks??'-';
@@ -896,7 +898,7 @@ async function loadStats(){
 async function loadFiles(){
   const el=document.getElementById('fileList');
   try{
-    const r=await fetch(`${B}/files/list?limit=15`); if(!r.ok)throw 0;
+    const r=await F(`${B}/files/list?limit=15`); if(!r.ok)throw 0;
     const json=await r.json();
     const list=Array.isArray(json)?json:(json.files??[]);
     if(!list.length){el.innerHTML='<div class="text-[11px] text-rag-text-muted text-center py-4">Brak plikow</div>';return;}
@@ -932,7 +934,7 @@ async function handleFiles(files){
   for(const file of files){
     progT.textContent=`Wysylam: ${file.name}`;
     const fd=new FormData(); fd.append('file',file);
-    try{ await fetch(`${B}/ingest`,{method:'POST',body:fd}); }catch{}
+    try{ await F(`${B}/ingest`,{method:'POST',body:fd}); }catch{}
     progF.style.width=(++done/files.length*100)+'%';
   }
   progT.textContent=`Gotowe (${done} plikow)`;
@@ -952,7 +954,7 @@ async function startEmbedding(){
   const txt=document.getElementById('embedTxt');
 
   let pending=0;
-  try{ const s=await fetch(B+'/files/stats').then(r=>r.json()); pending=s.pending||0; }catch{}
+  try{ const s=await F(B+'/files/stats').then(r=>r.json()); pending=s.pending||0; }catch{}
   if(pending===0){ status.textContent='Brak plikow do indeksowania'; status.style.color='#4ade80'; return; }
 
   btn.disabled=true; btn.textContent='Indeksuje...';
@@ -961,7 +963,7 @@ async function startEmbedding(){
   status.style.color='#f6c90e';
 
   let poll=null, attempts=0;
-  fetch(B+'/ingest_all?limit='+pending, {
+  F(B+'/ingest_all?limit='+pending, {
     method:'POST',
     headers:{'X-Embedding-Model': embModel}
   }).then(r=>r.json()).then(d=>{
@@ -980,7 +982,7 @@ async function startEmbedding(){
   });
   poll=setInterval(()=>{
     attempts++;
-    fetch(B+'/files/stats').then(r=>r.json()).then(s=>{
+    F(B+'/files/stats').then(r=>r.json()).then(s=>{
       const left=s.pending||0;
       fill.style.width=Math.min(95,5+((pending-left)/pending)*90)+'%';
       txt.textContent=`Przetworzono: ${pending-left}/${pending}`;
@@ -1015,7 +1017,7 @@ async function send(){
   else if(ragMode){ requestBody.use_rag = true; }
 
   try{
-    const r=await fetch(`${B}/v1/chat/completions`,{
+    const r=await F(`${B}/v1/chat/completions`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(requestBody)
@@ -1116,7 +1118,7 @@ async function webSearch(){
   btn.disabled=true; btn.textContent='Szukam...';
   resultsDiv.innerHTML='<div class="text-xs text-rag-text-muted text-center py-2">Szukam w internecie...</div>';
   try{
-    const r=await fetch(`${B}/web/search`,{
+    const r=await F(`${B}/web/search`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({query:query,num_results:5})

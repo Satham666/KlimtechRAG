@@ -16,19 +16,21 @@ from typing import List, Optional
 import fitz
 
 from ..prompts.vlm_prompts import get_full_prompt, get_vlm_params
+from ..config import settings
 
 logger = logging.getLogger("klimtechrag")
+
 
 def _find_vlm_model():
     import glob
     from pathlib import Path
-    
+
     paths_to_check = [
         os.environ.get("KLIMTECH_BASE_PATH", "").strip(),
         "/media/lobo/BACKUP/KlimtechRAG",
-        str(Path.home() / "KlimtechRAG"),
+        settings.base_path,
     ]
-    
+
     for base in paths_to_check:
         if not base:
             continue
@@ -38,8 +40,10 @@ def _find_vlm_model():
         hits = [f for f in hits if "mmproj" not in f]
         if hits:
             return hits[0]
-    
+
     return ""
+
+
 VLM_MODEL = _find_vlm_model()
 
 
@@ -55,7 +59,7 @@ def _find_llama_binary(name: str) -> str:
     for c in candidates:
         if os.path.exists(c):
             return c
-    return candidates[0]  # fallback do pierwszego (błąd ujawni się przy uruchomieniu)
+    return candidates[0]
 
 
 LLAMA_SERVER_BIN = _find_llama_binary("llama-server")
@@ -138,7 +142,9 @@ def extract_images_from_pdf(pdf_path: str, min_size: int = 100) -> List[Extracte
     return images
 
 
-def describe_image_with_vlm(image_path: str, prompt: str = None, image_type: str = "default") -> str:
+def describe_image_with_vlm(
+    image_path: str, prompt: str = None, image_type: str = "default"
+) -> str:
     """Opisuje obraz używając VLM przez llama-cli."""
 
     if not os.path.exists(LLAMA_CLI_BIN):
@@ -200,7 +206,10 @@ def describe_image_with_vlm(image_path: str, prompt: str = None, image_type: str
 
 
 def describe_image_with_vlm_server(
-    image_data: bytes, prompt: str = None, vlm_url: str = None, image_type: str = "default"
+    image_data: bytes,
+    prompt: str = None,
+    vlm_url: str = None,
+    image_type: str = "default",
 ) -> str:
     """Opisuje obraz używając VLM przez HTTP API (jeśli VLM server działa)."""
 
@@ -306,7 +315,9 @@ def process_pdf_with_images(
 
             try:
                 if use_vlm_server:
-                    desc = describe_image_with_vlm_server(img.image_data, image_type=img.image_type)
+                    desc = describe_image_with_vlm_server(
+                        img.image_data, image_type=img.image_type
+                    )
                 else:
                     desc = describe_image_with_vlm(tmp_path, image_type=img.image_type)
 

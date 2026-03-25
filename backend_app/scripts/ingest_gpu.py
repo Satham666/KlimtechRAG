@@ -19,11 +19,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-LLAMA_DIR = os.path.expanduser("~/KlimtechRAG/llama.cpp")
+LLAMA_DIR = os.path.join(str(Path(__file__).parent.parent.parent), "llama.cpp")
 LLAMA_BINARY = os.path.join(LLAMA_DIR, "build", "bin", "llama-server")
 LLAMA_PORT = 8082
 
-BASE_DIR = os.path.expanduser("~/KlimtechRAG")
+BASE_DIR = str(Path(__file__).parent.parent.parent)
 LLM_COMMAND_FILE = os.path.join(BASE_DIR, "logs", "llm_command.txt")
 BACKEND_PORT = 8000
 

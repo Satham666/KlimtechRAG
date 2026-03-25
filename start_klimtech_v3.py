@@ -88,17 +88,30 @@ def cleanup_podman():
 
 
 def start_pod():
-    """Tworzy Pod i uruchamia w nim Nextcloud + PostgreSQL."""
-    print("\n   Tworzenie Pod 'klimtech'...")
+    """Uruchamia Pod z Nextcloud + PostgreSQL. Tworzy tylko jeśli nie istnieje."""
+    print("\n   Pod 'klimtech'...")
 
-    # Usuń stare kontenery (mogą istnieć z poprzednich sesji)
-    print("   Usuwanie starych kontenerów...")
-    subprocess.run(
-        ["podman", "rm", "-f", "postgres_nextcloud", "nextcloud"], capture_output=True
+    # Sprawdź czy pod już istnieje
+    check = subprocess.run(
+        ["podman", "pod", "exists", POD_NAME],
+        capture_output=True,
+        timeout=10,
     )
 
-    # Usuń stary pod jeśli istnieje
-    subprocess.run(["podman", "pod", "rm", "-f", POD_NAME], capture_output=True)
+    if check.returncode == 0:
+        # Pod istnieje — tylko uruchom
+        print(f"   [SKIP] Pod {POD_NAME} już istnieje, uruchamiam...")
+        subprocess.run(
+            ["podman", "pod", "start", POD_NAME],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        time.sleep(5)
+        return True
+
+    # Pod nie istnieje — utwórz od zera
+    print(f"   Tworzenie nowego Pod {POD_NAME}...")
 
     # Utwórz nowy pod z mapowaniem portu 8081
     result = subprocess.run(
@@ -228,6 +241,8 @@ def create_standalone_containers():
                     "always",
                     "-p",
                     "6333:6333",
+                    "-v",
+                    "klimtech_qdrant_data:/qdrant/storage",
                     "docker.io/qdrant/qdrant:latest",
                 ],
                 capture_output=True,
@@ -316,7 +331,7 @@ def start_backend():
         {
             "HIP_VISIBLE_DEVICES": "0",
             "HSA_OVERRIDE_GFX_VERSION": "9.0.6",
-            "KLIMTECH_EMBEDDING_DEVICE": "cuda:0",
+            "KLIMTECH_EMBEDDING_DEVICE": "cpu",
             "KLIMTECH_BASE_PATH": BASE_DIR,
         }
     )

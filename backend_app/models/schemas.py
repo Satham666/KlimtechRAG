@@ -40,6 +40,7 @@ class ChatCompletionResponse(BaseModel):
     model: str = "klimtech-rag"
     choices: List[ChatCompletionChoice]
     usage: ChatCompletionUsage = ChatCompletionUsage()
+    sources: List[str] = Field(default_factory=list)
 
 
 class QueryRequest(BaseModel):

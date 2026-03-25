@@ -552,12 +552,14 @@ def start_model_with_progress(
                 _log(f"   📷 mmproj: {os.path.basename(mmp[0])}")
 
         amd_env = os.environ.copy()
+        llama_lib_path = os.path.join(BASE_DIR, "llama.cpp", "build", "bin")
         amd_env.update(
             {
                 "HIP_VISIBLE_DEVICES": "0",
                 "GPU_MAX_ALLOC_PERCENT": "100",
                 "HSA_ENABLE_SDMA": "0",
                 "HSA_OVERRIDE_GFX_VERSION": "9.0.6",
+                "LD_LIBRARY_PATH": llama_lib_path + ":" + amd_env.get("LD_LIBRARY_PATH", ""),
             }
         )
 

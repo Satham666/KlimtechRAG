@@ -5,8 +5,10 @@ import os
 import sys
 import time
 import json
+from pathlib import Path
 
-sys.path.insert(0, os.path.expanduser("~/KlimtechRAG"))
+_SCRIPT_BASE = str(Path(__file__).parent.parent.parent)
+sys.path.insert(0, _SCRIPT_BASE)
 
 import fitz  # PyMuPDF
 from haystack import Pipeline, Document
@@ -20,9 +22,9 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions, EasyOcrOption
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.base_models import InputFormat
 
-PDF_DIR = "/home/lobo/KlimtechRAG/data/uploads/pdf_RAG"
-PAGES_DIR = "/home/lobo/KlimtechRAG/data/uploads/pdf_pages"
-PROGRESS_FILE = "/home/lobo/KlimtechRAG/data/uploads/pdf_progress.json"
+PDF_DIR = os.path.join(_SCRIPT_BASE, "data", "uploads", "pdf_RAG")
+PAGES_DIR = os.path.join(_SCRIPT_BASE, "data", "uploads", "pdf_pages")
+PROGRESS_FILE = os.path.join(_SCRIPT_BASE, "data", "uploads", "pdf_progress.json")
 
 os.makedirs(PAGES_DIR, exist_ok=True)
 

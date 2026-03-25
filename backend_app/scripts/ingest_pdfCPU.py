@@ -4,8 +4,9 @@
 import os
 import sys
 import time
+from pathlib import Path
 
-sys.path.insert(0, os.path.expanduser("~/KlimtechRAG"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from haystack import Pipeline, Document
 from haystack.components.preprocessors import DocumentSplitter
@@ -18,7 +19,9 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptio
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.base_models import InputFormat
 
-PDF_DIR = "/home/lobo/KlimtechRAG/data/uploads/pdf_RAG"
+PDF_DIR = os.path.join(
+    str(Path(__file__).parent.parent.parent), "data", "uploads", "pdf_RAG"
+)
 
 print("=" * 50)
 print("  RAG PDF Ingest Script")
