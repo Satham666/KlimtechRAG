@@ -210,6 +210,7 @@ bash scripts/check_project.sh   # pełna weryfikacja składni i bezpieczeństwa 
 - Przed ryzykowną zmianą: commit najpierw, żeby móc wrócić.
 - Pliki tymczasowe, logi, `__pycache__/`, `venv/` — muszą być w `.gitignore`.
 - Nigdy nie wykonuj `git push` bez wyraźnego polecenia użytkownika.
+- `git push` wykonuje **wyłącznie użytkownik** w osobnym terminalu — wymaga ręcznego wpisania hasła SSH. Nie próbuj pushować przez Bash tool.
 
 ---
 
