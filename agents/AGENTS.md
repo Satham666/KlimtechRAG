@@ -177,7 +177,7 @@ amd_env = {
 ### Checklist przed git push
 
 ```
-[ ] python3 -c "import ast; ast.parse(open('backend_app/main.py').read())" — składnia OK?
+[ ] bash scripts/check_project.sh — wszystkie PASS/WARN przed pushem (nie pushuj gdy FAIL)
 [ ] Brak backticks (`) w JS osadzonym w Python strings (używaj +)
 [ ] Brak heredoc (cat << 'EOF') w komendach SSH — fish shell nie obsługuje
 [ ] Brak hardcoded ścieżek /home/tamiel/ — tylko przez config.py / _detect_base()
@@ -200,7 +200,7 @@ git pull
 ```fish
 cd /media/lobo/BACKUP/KlimtechRAG
 source venv/bin/activate.fish
-python3 -m py_compile backend_app/main.py   # weryfikacja składni przed startem
+bash scripts/check_project.sh   # pełna weryfikacja składni i bezpieczeństwa przed startem
 # Następnie pełny restart backendu (nie reload)
 ```
 
@@ -354,6 +354,82 @@ Traktuj użytkownika jak lidera technicznego, a siebie jak skrupulatnego program
 - **Bezpieczeństwo ponad elegancję**: Propozycje bezpieczne, proste i łatwe do cofnięcia.
 - **Gotowość do wyjaśnień**: Jeśli użytkownik poprosi o uzasadnienie — przedstaw je zwięźle.
 - **Podawaj 1, 2 lub max 3 odpowiedzi** np. kiedy podajesz kod do wklejenia lub funkcję do uruchomienia.
+
+---
+
+## 15. GitHub Releases — Archiwum Sesji i Wydań
+
+### Zasada nadrzędna
+Każda zakończona sesja pracy = nowe wydanie (Release) na GitHub. Logi, notatki i eksporty sesji trafiają **wyłącznie na GitHub**, nie do katalogu projektu na serwerze.
+
+### Numeracja wydań
+
+```
+Format:  vMAJOR.MINOR
+Przykład: v7.4, v7.5, v7.6
+
+MAJOR — zmienia się przy przebudowie architektury lub dużym milestonie
+MINOR — inkrementuj po każdej sesji, w której nastąpiły realne zmiany kodu
+```
+
+### Trigger: "na dzisiaj koniec"
+
+Gdy użytkownik napisze **„na dzisiaj koniec"** (lub podobnie: „kończymy", „zamykamy sesję"), asystent wykonuje kolejno:
+
+```
+[ ] 1. Podsumuj zmiany sesji: lista plików, co zmieniono i dlaczego
+[ ] 2. Sprawdź git status — czy wszystko jest commitowane i spushowane
+[ ] 3. Uruchom bash scripts/check_project.sh — wklej wynik do release notes
+[ ] 4. Ustal numer wersji (ostatni tag + 1 MINOR): git tag --sort=-v:refname | head -1
+[ ] 5. Stwórz GitHub Release komendą poniżej
+```
+
+### Komenda tworzenia release (Claude Code)
+
+```bash
+gh release create vX.Y \
+  --title "vX.Y — [krótki opis sesji, np. 'Dodano check_project.sh, AGENTS.md update']" \
+  --notes "$(cat <<'NOTES'
+## Zmiany w tej sesji
+
+### Pliki zmienione
+- scripts/check_project.sh — nowy skrypt weryfikacji projektu
+- agents/AGENTS.md — aktualizacja sekcji 8, nowa sekcja 15
+- (itd.)
+
+### Co zrobiono
+- ...
+
+### Nierozwiązane / następna sesja
+- ...
+
+### Wynik check_project.sh
+PASS: X | WARN: X | FAIL: X
+NOTES
+)"
+```
+
+### Eksport z OpenCode
+
+```
+/export  →  skopiuj wygenerowaną treść do pola --notes powyżej
+```
+
+### Czego NIE przechowywać w katalogu projektu
+
+```
+❌ Pliki logów sesji (.log z rozmów) — tylko GitHub Release notes
+❌ Notatki tymczasowe z analizy — tylko GitHub Release notes
+❌ Eksporty sesji jako pliki .md w root projektu
+✔  logs/ (wynik check_project.sh) — jest w .gitignore, nie trafia do repo
+```
+
+### Weryfikacja istniejących tagów / releases
+
+```bash
+git tag --sort=-v:refname | head -5        # ostatnie tagi lokalnie
+gh release list --limit 5                  # ostatnie releases na GitHub
+```
 
 ---
 
