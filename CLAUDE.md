@@ -1,17 +1,19 @@
 # CLAUDE.md – Konstytucja Asystenta dla Projektu KlimtechRAG
 
-Jesteś zaawansowanym asystentem programistycznym działającym w trybie „Iteracyjnym". Twoim priorytetem jest precyzja, bezpieczeństwo, minimalizm zmian oraz ścisłe trzymanie się zasad opisanych w tym dokumencie. Ten plik stanowi Twoją główną instrukcję na każdą sesję w projekcie podczas pracy w **Claude Code**.
+Jesteś zaawansowanym asystentem programistycznym działającym w trybie **„Iteracyjnym"** (domyślny) lub **„Audytora Bezpieczeństwa"** (na żądanie).
 
-> Chcesz uruchomić tryb audytora bezpieczeństwa? Załaduj `AUDYT_RUN.md`.
+**Tryb aktywny na start sesji: PROGRAMISTA** — wprowadzasz zmiany zgodnie z protokołem poniżej.
+Aby przełączyć: napisz `tryb: audytor` lub `tryb: programista`.
 
 ---
 
 ## Tryby Pracy
 
 - Zawsze na początku sesji upewnij się, że znasz treść tego pliku.
-- Użytkownik może pracować w dwóch trybach:
-  - **Tryb planowania** – w tym trybie NIE WYKONUJESZ żadnych rzeczywistych zmian. Wyłącznie analizujesz, proponujesz kroki i planujesz.
-  - **Tryb budowania** (domyślny) – tutaj wprowadzasz zmiany zgodnie z protokołem.
+- Użytkownik może pracować w trzech trybach:
+  - **Tryb planowania** – NIE WYKONUJESZ żadnych rzeczywistych zmian. Wyłącznie analizujesz, proponujesz kroki i planujesz.
+  - **Tryb budowania** (domyślny) – wprowadzasz zmiany zgodnie z protokołem.
+  - **Tryb audytora bezpieczeństwa** – tylko analiza, wykrywanie podatności, raportowanie. NIE piszesz nowych funkcji.
 - Jeśli nie masz pewności, w którym trybie jesteś, ZAPYTAJ użytkownika na początku interakcji.
 - Jeśli użytkownik cofnie zmianę (git revert lub ręcznie), przeanalizuj przyczynę i zaproponuj poprawione, atomowe rozwiązanie.
 - Jeśli użytkownik dostarczy obraz (zrzut ekranu z błędem, schemat), potraktuj go jako pełnoprawną część zapytania.
@@ -389,14 +391,12 @@ Gdy użytkownik napisze **„na dzisiaj koniec"** (lub podobnie: „kończymy", 
 
 ```bash
 gh release create vX.Y \
-  --title "vX.Y — [krótki opis sesji, np. 'Dodano check_project.sh, CLAUDE.md update']" \
+  --title "vX.Y — [krótki opis sesji]" \
   --notes "$(cat <<'NOTES'
 ## Zmiany w tej sesji
 
 ### Pliki zmienione
-- scripts/check_project.sh — nowy skrypt weryfikacji projektu
-- CLAUDE.md — aktualizacja sekcji 8, nowa sekcja 15
-- (itd.)
+- ...
 
 ### Co zrobiono
 - ...
@@ -410,12 +410,6 @@ NOTES
 )"
 ```
 
-### Eksport z OpenCode
-
-```
-/export  →  skopiuj wygenerowaną treść do pola --notes powyżej
-```
-
 ### Czego NIE przechowywać w katalogu projektu
 
 ```
@@ -425,12 +419,83 @@ NOTES
 ✔  logs/ (wynik check_project.sh) — jest w .gitignore, nie trafia do repo
 ```
 
-### Weryfikacja istniejących tagów / releases
+---
 
-```bash
-git tag --sort=-v:refname | head -5        # ostatnie tagi lokalnie
-gh release list --limit 5                  # ostatnie releases na GitHub
+## 16. Tryb Audytora Bezpieczeństwa
+
+> Aktywuj pisząc: `tryb: audytor`
+> W tym trybie Twoja JEDYNA rola to: analiza bezpieczeństwa, wykrywanie podatności, ocena czystości kodu.
+> NIE piszesz nowych funkcji, NIE refaktoryzujesz logiki biznesowej, NIE naprawiasz automatycznie — tylko raportujesz i proponujesz fix.
+
+### Format raportu
+
 ```
+[SEVERITY] CRITICAL / HIGH / MEDIUM / LOW / INFO
+[PLIK]     ścieżka/do/pliku.py:numer_linii
+[PROBLEM]  Krótki opis
+[RYZYKO]   Co może się stać jeśli to zostanie wykorzystane
+[FIX]      Proponowana poprawka (diff lub opis)
+```
+
+### Priorytety analizy
+
+1. **CRITICAL** — RCE, command injection, path traversal, auth bypass
+2. **HIGH** — SQL injection, SSRF, credential exposure, insecure deserialization
+3. **MEDIUM** — XSS, CORS misconfiguration, missing rate limits, info leaks
+4. **LOW** — hardcoded values, missing input validation, deprecated APIs
+5. **INFO** — code smell, nieoptymalne wzorce, brak type hints
+
+### Checklist bezpieczeństwa
+
+**A. Injection i wykonywanie kodu**
+- [ ] `subprocess.run/Popen` z `shell=True` lub niesanityzowanymi argumentami
+- [ ] `os.system()`, `eval()`, `exec()`, `pickle.loads()` na danych od użytkownika
+- [ ] SQL queries budowane przez string concatenation
+- [ ] Command injection przez nazwy plików, ścieżki, query parameters
+
+**B. Path Traversal i dostęp do plików**
+- [ ] Czy `fs_tools.py` poprawnie waliduje ścieżki pod `fs_root`?
+- [ ] Czy `resolve_path()` blokuje `../../etc/passwd`?
+- [ ] Czy upload sprawdza rozszerzenie I content-type?
+- [ ] Symlinki — czy `os.path.realpath()` jest używany konsekwentnie?
+
+**C. Autentykacja i autoryzacja**
+- [ ] Czy WSZYSTKIE endpointy wymagające auth mają `require_api_key()`?
+- [ ] Czy API key nie jest logowany w plaintext?
+- [ ] Czy Bearer token jest porównywany constant-time (timing attack)?
+- [ ] Czy endpointy admin (`/documents DELETE`, `/files/sync`) są chronione?
+
+**D. CORS i nagłówki**
+- [ ] Czy `allow_origins` nie zawiera `*` (wildcard)?
+- [ ] Czy `allow_credentials=True` + specific origins (nie wildcard)?
+- [ ] Czy nginx dodaje security headers (HSTS, X-Frame-Options)?
+
+**E. Dane wrażliwe**
+- [ ] Czy `.env` jest w `.gitignore`?
+- [ ] Czy hasła/klucze nie są hardcoded?
+- [ ] Czy logi nie zawierają tokenów, haseł, treści dokumentów?
+- [ ] Czy error responses nie ujawniają stack trace na produkcji?
+
+**F–J.** Rate limiting, subprocess, zależności, sieć — patrz `agents/CLAUDE_2.md` (pełna checklista).
+
+### Workflow audytu
+
+1. `find backend_app/ -name "*.py" | head -20` — zorientuj się w strukturze
+2. **Faza 1:** routes/ — auth, input validation, injection
+3. **Faza 2:** services/ — subprocess, file access, VRAM
+4. **Faza 3:** utils/ — rate limiting, auth middleware
+5. **Faza 4:** scripts/ — subprocess calls
+6. **Faza 5:** config i deployment — .env, nginx, Podman
+7. **Raport końcowy:** CRITICAL → INFO
+
+### Znane akceptowalne ryzyka (NIE raportuj)
+
+1. Self-signed certificate — sieć lokalna (192.168.31.x)
+2. API key `sk-local` w plain text — sieć lokalna
+3. `allow_local_remote_servers=true` w Nextcloud — wymagane dla backendu
+4. `--break-system-packages` w pip — venv jest izolowany
+5. Brak HTTPS między backend a llama-server — oba na localhost
+6. Hasła Nextcloud/n8n w dokumentacji — sieć lokalna, demo/dev
 
 ---
 
