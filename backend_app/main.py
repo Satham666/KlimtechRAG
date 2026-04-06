@@ -69,7 +69,17 @@ async def lifespan(app: FastAPI):
     logger.info("KlimtechRAG Backend shutting down")
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="KlimtechRAG API",
+    version="7.6",
+    description=(
+        "KlimtechRAG — lokalny system RAG z VLM, ColPali, streaming i zarzadzaniem dokumentow. "
+        "OpenAI-compatible chat completions, hybrid search, reranking, workspaces."
+    ),
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
 
 # ---------------------------------------------------------------------------
 # CORS — wymagane dla Nextcloud AI Assistant (cross-origin requests)
