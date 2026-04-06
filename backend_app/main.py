@@ -57,6 +57,8 @@ logger.addFilter(RequestIdFilter())
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- startup ---
+    from .config import validate_config
+    validate_config()
     init_file_registry()
     logger.info("File registry initialized")
     yield
