@@ -204,3 +204,38 @@ async def search_sessions(
         "total": len(rows),
         "sessions": [dict(r) for r in rows],
     }
+
+
+class SessionImportRequest(BaseModel):
+    title: str = ""
+    messages: list[dict]   # [{role, content, created_at?}]
+
+
+@router.post("/import", response_model=SessionResponse, status_code=201)
+async def import_session(
+    body: SessionImportRequest,
+    _: str = Depends(require_api_key),
+):
+    """Importuje sesję z listy wiadomości (np. z exportChat UI).
+
+    Akceptuje format: {title, messages: [{role, content}]}
+    """
+    from ..services.session_service import create_session, add_message
+
+    if not body.messages:
+        raise HTTPException(status_code=400, detail="messages nie może być puste")
+
+    valid_roles = {"user", "assistant", "ai", "system"}
+    session = create_session(title=body.title or "Zaimportowana sesja")
+
+    for msg in body.messages:
+        role = str(msg.get("role", "user")).lower()
+        content = str(msg.get("content", "")).strip()
+        if role == "ai":
+            role = "assistant"
+        if role not in valid_roles or not content:
+            continue
+        add_message(session["id"], role, content)
+
+    logger.info("[F4] Zaimportowano sesję: %s (%d wiadomości)", session["id"], len(body.messages))
+    return session
