@@ -77,3 +77,44 @@ class FsGrepRequest(BaseModel):
 
 class IngestPathRequest(BaseModel):
     path: str
+
+
+# ---------------------------------------------------------------------------
+# B7: /v1/chunks — Low-level retrieval bez LLM
+# ---------------------------------------------------------------------------
+
+class ChunksRequest(BaseModel):
+    text: str
+    limit: int = 10
+    context_filter: dict = Field(default_factory=dict)  # np. {"source": "raport.pdf"}
+
+
+class ChunkResult(BaseModel):
+    id: str = ""
+    content: str
+    score: float = 0.0
+    source: str = ""
+    meta: dict = Field(default_factory=dict)
+
+
+class ChunksResponse(BaseModel):
+    object: str = "list"
+    data: List[ChunkResult]
+    total: int
+
+
+# ---------------------------------------------------------------------------
+# H1: Standaryzacja IngestResponse (OpenAI-compatible)
+# ---------------------------------------------------------------------------
+
+class IngestItem(BaseModel):
+    doc_id: str
+    source: str
+    status: str       # indexed | skipped | error | duplicate | cached
+    chunks_count: int = 0
+    collection: str = "klimtech_docs"
+
+
+class IngestResponse(BaseModel):
+    object: str = "ingest.result"
+    data: List[IngestItem]
