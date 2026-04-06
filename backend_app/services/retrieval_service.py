@@ -56,17 +56,33 @@ def retrieve_rag(
             )
         return [], []
 
-    # Standardowy e5-large retrieval
+    # Standardowy e5-large retrieval z hybrid BM25 merge (B2)
     try:
+        from ..config import settings as _settings
+        from .hybrid_search_service import hybrid_merge
+
         query_embedding = get_text_embedder().run(text=query)
         retriever = get_qdrant_retriever()
-        result = retriever.run(query_embedding=query_embedding["embedding"])
-        docs = result.get("documents", [])
+        # Pobieramy więcej dokumentów (top_k_fetch) przed hybrid merge
+        fetch_k = max(top_k * 3, _settings.retrieval_top_k_fetch)
+        result = retriever.run(
+            query_embedding=query_embedding["embedding"],
+            top_k=fetch_k,
+        )
+        raw_docs = result.get("documents", [])
+
+        # Wyciągnij dense scores (haystack zwraca score w meta lub jako atrybut)
+        dense_scores = [
+            float(getattr(doc, "score", 0.0) or doc.meta.get("score", 0.0))
+            for doc in raw_docs
+        ]
+
+        # Hybrid merge: BM25 + dense → top_k
+        docs = hybrid_merge(raw_docs, dense_scores, query, top_k=top_k)
         sources = [doc.meta.get("source", "unknown") for doc in docs]
         logger.info(
-            "[RAG] %d dokumentów: %s",
-            len(docs),
-            ", ".join(sources),
+            "[RAG] %d dokumentów po hybrid merge (fetch=%d): %s",
+            len(docs), len(raw_docs), ", ".join(sources),
             extra={"request_id": request_id},
         )
         return docs, sources
