@@ -54,6 +54,15 @@ def _hash_file(file_path: str) -> str:
     return h.hexdigest()
 
 
+def compute_content_hash(text: str) -> str:
+    """Oblicza SHA-256 hash z przetworzonego tekstu dokumentu (po parsowaniu, przed chunkingiem).
+
+    Używany przez W3 Vector Cache — jeśli hash się nie zmienił,
+    embeddingi są identyczne i można pominąć re-embedding.
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 # ---------------------------------------------------------------------------
 # Mapowanie rozszerzeń → podfoldery Nextcloud / uploads
 # ---------------------------------------------------------------------------
@@ -283,6 +292,19 @@ def ingest_file_background(file_path: str) -> None:
             logger.info("[BG] Plik pusty: %s", filename)
             return
 
+        # W3 Vector Cache: sprawdź czy ten sam tekst był już zaindeksowany
+        text_hash = compute_content_hash(markdown_text)
+        with _get_registry_connection() as _c:
+            hit = _c.execute(
+                "SELECT path FROM files WHERE content_hash = ? AND status = 'indexed' LIMIT 1",
+                (text_hash,),
+            ).fetchone()
+        if hit:
+            logger.info("[BG] ✅ Vector cache hit: %s (hash=%s…)", filename, text_hash[:12])
+            mark_indexed(file_path, 0)
+            return
+
+        logger.info("[BG] Vector cache miss: %s (hash=%s…) — uruchamiam embedding", filename, text_hash[:12])
         category = classify_document(filepath=file_path, content=markdown_text)
         docs = [
             Document(content=markdown_text, meta={
@@ -295,6 +317,13 @@ def ingest_file_background(file_path: str) -> None:
         chunks = result["writer"]["documents_written"]
 
         mark_indexed(file_path, chunks)
+        # W3 Vector Cache: zapisz hash treści dla przyszłych lookupów
+        with _get_registry_connection() as _c:
+            _c.execute(
+                "UPDATE files SET content_hash = ? WHERE path = ?",
+                (text_hash, file_path),
+            )
+            _c.commit()
         ensure_indexed()
         clear_cache()
         logger.info("[BG] ✅ %s → %d chunków w Qdrant (kategoria: %s)", filename, chunks, category)
