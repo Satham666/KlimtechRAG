@@ -365,3 +365,43 @@ async def batch_enqueue(
             rejected += 1
 
     return {"added": added, "rejected": rejected, "results": results}
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/ingest/history — ostatnio zaindeksowane pliki z file_registry
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/ingest/history")
+async def ingest_history(
+    limit: int = 20,
+    status: str = "indexed",
+    _: str = Depends(require_api_key),
+):
+    """Zwraca historię ostatnio zaindeksowanych plików z file_registry.
+
+    ?limit=20  — liczba wyników (max 100)
+    ?status=indexed|error|pending|all
+    """
+    limit = min(limit, 100)
+    try:
+        with _get_registry_connection() as conn:
+            if status == "all":
+                rows = conn.execute(
+                    "SELECT filename, extension, chunks_count, indexed_at, status, error_message "
+                    "FROM files ORDER BY indexed_at DESC NULLS LAST LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT filename, extension, chunks_count, indexed_at, status, error_message "
+                    "FROM files WHERE status = ? ORDER BY indexed_at DESC NULLS LAST LIMIT ?",
+                    (status, limit),
+                ).fetchall()
+        return {
+            "status_filter": status,
+            "total": len(rows),
+            "files": [dict(r) for r in rows],
+        }
+    except Exception as e:
+        logger.exception("[ingest/history] błąd: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
