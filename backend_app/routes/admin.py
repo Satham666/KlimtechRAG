@@ -618,3 +618,167 @@ async def clear_ingest_errors(_: str = Depends(require_api_key)):
 
     logger.info("[clear-errors] Zresetowano %d plików error → pending", affected)
     return {"reset": affected, "new_status": "pending"}
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/ingest/stats — zagregowane statystyki rejestru plików
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/ingest/stats")
+async def ingest_stats(_: str = Depends(require_api_key)):
+    """Zwraca statystyki rejestru plików: total, indexed, pending, errors, chunks.
+
+    Dane z file_registry.get_stats() — gotowe do wyświetlenia w dashboardzie.
+    """
+    from ..file_registry import get_stats
+
+    try:
+        stats = get_stats()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    avg_chunks = 0
+    if stats.get("indexed", 0) > 0 and stats.get("total_chunks", 0) > 0:
+        avg_chunks = round(stats["total_chunks"] / stats["indexed"], 1)
+
+    return {
+        **stats,
+        "avg_chunks_per_file": avg_chunks,
+        "processing": stats.get("total_files", 0)
+            - stats.get("indexed", 0)
+            - stats.get("pending", 0)
+            - stats.get("errors", 0),
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/system/info — rozmiary baz danych i katalogów, wersja Pythona
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/system/info")
+async def system_info(_: str = Depends(require_api_key)):
+    """Zwraca informacje o systemie: rozmiary plików DB, katalog danych, wersja Python."""
+    import sys
+    import os
+    from pathlib import Path
+    from ..config import settings
+    from ..file_registry import get_db_path as get_registry_db_path
+
+    def _dir_size_mb(path: str) -> float:
+        """Rekurencyjnie oblicza rozmiar katalogu w MB."""
+        total = 0
+        try:
+            for entry in os.scandir(path):
+                if entry.is_file(follow_symlinks=False):
+                    total += entry.stat().st_size
+                elif entry.is_dir(follow_symlinks=False):
+                    total += int(_dir_size_mb(entry.path) * 1024 * 1024)
+        except PermissionError:
+            pass
+        return round(total / (1024 * 1024), 2)
+
+    def _file_size_kb(path: str) -> float:
+        try:
+            return round(os.path.getsize(path) / 1024, 1)
+        except FileNotFoundError:
+            return 0.0
+
+    registry_db = get_registry_db_path()
+    sessions_db = str(Path(settings.data_path) / "sessions.db")
+
+    return {
+        "python_version": sys.version.split()[0],
+        "base_path": settings.base_path,
+        "data_path": settings.data_path,
+        "upload_path": settings.upload_base,
+        "db": {
+            "file_registry_kb": _file_size_kb(registry_db),
+            "sessions_kb": _file_size_kb(sessions_db),
+        },
+        "dirs": {
+            "data_mb": _dir_size_mb(settings.data_path),
+            "uploads_mb": _dir_size_mb(settings.upload_base),
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/ingest/reindex-all — reset indexed→pending + kolejkowanie HIGH
+# ---------------------------------------------------------------------------
+
+@router.post("/v1/ingest/reindex-all")
+async def reindex_all(_: str = Depends(require_api_key)):
+    """Resetuje status wszystkich plików 'indexed' na 'pending' i dodaje do kolejki.
+
+    Przydatne po zmianie modelu embeddingowego — wymusza ponowne indeksowanie.
+    ⚠️  Operacja może być długa dla dużych kolekcji.
+    """
+    from ..services.batch_service import get_batch_queue, Priority
+
+    try:
+        with _get_registry_connection() as conn:
+            result = conn.execute(
+                "UPDATE files SET status = 'pending', error_message = NULL, "
+                "updated_at = CURRENT_TIMESTAMP WHERE status = 'indexed'"
+            )
+            conn.commit()
+            reset_count = result.rowcount
+
+            rows = conn.execute(
+                "SELECT path FROM files WHERE status = 'pending' LIMIT 500"
+            ).fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    queue = get_batch_queue()
+    enqueued = sum(1 for r in rows if queue.enqueue(r["path"], priority=Priority.HIGH))
+
+    logger.info("[reindex-all] Reset %d plików, dodano %d do kolejki", reset_count, enqueued)
+    return {
+        "reset": reset_count,
+        "enqueued": enqueued,
+        "message": f"Zresetowano {reset_count} plików — dodano {enqueued} do kolejki (HIGH)",
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/ingest/requeue-pending — dodaj wszystkie 'pending' do kolejki batch
+# ---------------------------------------------------------------------------
+
+@router.post("/v1/ingest/requeue-pending")
+async def requeue_pending(
+    limit: int = 100,
+    _: str = Depends(require_api_key),
+):
+    """Dodaje do kolejki batch wszystkie pliki ze statusem 'pending'.
+
+    ?limit=100  — max liczba plików do kolejkowania (max 500)
+    Przydatne gdy worker był zatrzymany i mamy zaległe pliki.
+    """
+    from ..services.batch_service import get_batch_queue, Priority
+
+    limit = min(limit, 500)
+    try:
+        with _get_registry_connection() as conn:
+            rows = conn.execute(
+                "SELECT path FROM files WHERE status = 'pending' "
+                "ORDER BY updated_at ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    queue = get_batch_queue()
+    added, skipped = 0, 0
+    for row in rows:
+        if queue.enqueue(row["path"], priority=Priority.NORMAL):
+            added += 1
+        else:
+            skipped += 1
+
+    logger.info("[requeue-pending] Dodano %d plików do kolejki (pominięto: %d)", added, skipped)
+    return {
+        "found_pending": len(rows),
+        "added_to_queue": added,
+        "skipped_queue_full": skipped,
+    }
