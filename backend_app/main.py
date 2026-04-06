@@ -99,6 +99,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+from fastapi.staticfiles import StaticFiles
+import os as _os
+_static_dir = _os.path.join(_os.path.dirname(__file__), "static")
+if _os.path.isdir(_static_dir):
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+
 # ---------------------------------------------------------------------------
 # CORS — wymagane dla Nextcloud AI Assistant (cross-origin requests)
 # ---------------------------------------------------------------------------
