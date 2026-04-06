@@ -1,0 +1,14 @@
+# KlimtechRAG — profil serwer (GPU, produkcja)
+# Uzycie: KLIMTECH_PROFILES=server python3 -m backend_app.main
+
+# --- LLM ---
+llm_base_url: "http://localhost:8082/v1"
+
+# --- Embedding ---
+embedding_device: "cuda:0"
+
+# --- Qdrant ---
+qdrant_url: "http://localhost:6333"
+
+# --- Logowanie ---
+log_level: "WARNING"

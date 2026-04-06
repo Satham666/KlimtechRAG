@@ -1,0 +1,12 @@
+# KlimtechRAG — profil deweloperski (laptop, CPU)
+# Uzycie: KLIMTECH_PROFILES=dev python3 -m backend_app.main
+
+# --- LLM ---
+llm_base_url: "http://localhost:8082/v1"
+llm_model_name: ""
+
+# --- Embedding ---
+embedding_device: "cpu"
+
+# --- Logowanie ---
+log_level: "DEBUG"
