@@ -307,6 +307,15 @@
 <div class="text-[11px] text-rag-text-muted text-center py-4">Kliknij odswierz...</div>
 </div>
 </article>
+<article class="bg-rag-card border border-gray-800 rounded-lg p-4 flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">&#9201; Ostatnio zaindeksowane</h3>
+<button onclick="loadIngestHistory()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
+</div>
+<div id="ingestHistoryEl" class="space-y-1 text-[11px]">
+<div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
+</div>
+</article>
 <!-- Bottom Section Grid: Indeksowanie + Historia Rozmow -->
 <div class="mt-auto grid grid-cols-2 gap-4">
 <!-- INDEKSOWANIE RAG -->
@@ -512,7 +521,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   else if(sessions.length){ setActive(sessions[0].id); renderSession(sessions[0].id); }
   else{ const s=createSess(); setActive(s.id); showWelcome(); }
   renderSidebar();
-  loadStats(); loadFiles(); checkStatus();
+  loadStats(); loadFiles(); checkStatus(); loadIngestHistory();
   loadModelList();
   startProgressPoll();
   startGpuPoll();
@@ -1027,6 +1036,30 @@ async function loadRagDocs(){
         '</div>';
     }).join('');
   }catch(e){el.innerHTML='<div class="text-[11px] text-rag-text-muted text-center py-4">Blad ladowania</div>';}
+}
+
+async function loadIngestHistory(){
+  var el=document.getElementById('ingestHistoryEl');
+  if(!el) return;
+  try{
+    var r=await F(B+'/v1/ingest/history?limit=5&status=indexed');
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    if(!d.files||!d.files.length){
+      el.innerHTML='<div class="text-rag-text-muted text-center py-2">Brak zaindeksowanych plików</div>';
+      return;
+    }
+    el.innerHTML=d.files.map(function(f){
+      var chunks=f.chunks_count?(' <span class="text-rag-accent">'+f.chunks_count+'ch</span>'):'';
+      var date=f.indexed_at?f.indexed_at.slice(0,10):'';
+      return '<div class="flex items-center justify-between p-1 hover:bg-white/5 rounded">'
+        +'<span class="truncate text-gray-300" title="'+esc(f.filename)+'">&#128196; '+esc(f.filename)+'</span>'
+        +'<span class="text-rag-text-muted shrink-0 ml-1">'+chunks+' '+date+'</span>'
+        +'</div>';
+    }).join('');
+  }catch(e){
+    el.innerHTML='<div class="text-red-400 text-center py-2">Błąd: '+e.message+'</div>';
+  }
 }
 
 async function deleteRagDoc(docId){
