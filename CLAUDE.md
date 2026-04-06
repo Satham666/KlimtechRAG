@@ -182,6 +182,7 @@ amd_env = {
 [ ] bash scripts/check_project.sh — wszystkie PASS/WARN przed pushem (nie pushuj gdy FAIL)
 [ ] Brak backticks (`) w JS osadzonym w Python strings (używaj +)
 [ ] Brak heredoc (cat << 'EOF') w komendach SSH — fish shell nie obsługuje
+[ ] Brak backslash `\` na końcu linii w komendach shell — zawsze jedna linia lub średnik (zsh i bash źle kopiują wieloliniowe komendy z `\`)
 [ ] Brak hardcoded ścieżek /home/tamiel/ — tylko przez config.py / _detect_base()
 [ ] .env nie jest w staged files (git status)
 [ ] Sensowny komunikat commita (np. "feat: dodano endpoint X" zamiast "update")
@@ -334,6 +335,7 @@ async def nowy_endpoint(
 |---|---|---|
 | GPU 1 model naraz | 16 GB VRAM | Sekwencyjne LLM/embedding/ColPali |
 | Fish shell na serwerze | Heredoc nie działa | Używaj `python3 -c "..."` |
+| Backslash `\` w komendach | Błędy przy kopiowaniu w zsh/bash | Zawsze jedna linia lub średnik `;` |
 | JS w Python strings | Backticks = błąd | Zawsze concatenation (+) i `var` |
 | Kolekcje Qdrant osobne | dim=1024 vs dim=128 | Nie mieszaj `klimtech_docs` i `klimtech_colpali` |
 | Lazy loading VRAM | VRAM start = 14 MB | NIE cofać do eager loading |
