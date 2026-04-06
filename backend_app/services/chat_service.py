@@ -110,15 +110,30 @@ def handle_chat_completions(
 ) -> Tuple[str, List[str]]:
     """Obsługuje /v1/chat/completions — opcjonalny RAG + web + LLM.
 
+    B1: jeśli use_rag nie jest wymuszony przez użytkownika (False domyślnie),
+    Smart Router automatycznie decyduje czy pytanie wymaga RAG.
     Zwraca (answer, sources).
     """
     from ..services import get_llm_component
+    from .router_service import should_use_rag, classify_query
+
+    # B1 Smart Router — auto-decyzja tylko gdy use_rag=False (domyślne)
+    # Gdy użytkownik kliknie glob/RAG przycisk → use_rag=True → pomijamy router
+    effective_rag = should_use_rag(user_message, user_forced=True if use_rag else None)
+    if effective_rag != use_rag:
+        logger.info(
+            "[Router] Auto-RAG: '%s' → %s (klasyfikacja: %s)",
+            user_message[:50],
+            "RAG" if effective_rag else "Direct",
+            classify_query(user_message),
+            extra={"request_id": request_id},
+        )
 
     rag_docs: List[HaystackDocument] = []
     sources: List[str] = []
     web_doc = None
 
-    if use_rag:
+    if effective_rag:
         rag_docs, rag_sources = retrieve_rag(
             user_message, top_k=top_k,
             embedding_model=embedding_model,
