@@ -314,3 +314,54 @@ async def batch_stats(_: str = Depends(require_api_key)):
     """Zwraca statystyki kolejki batch (W5)."""
     from ..services.batch_service import get_batch_queue
     return get_batch_queue().stats()
+
+
+# ---------------------------------------------------------------------------
+# W5: Batch enqueue — dodaj pliki do kolejki przetwarzania
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel as _BaseModel
+
+class BatchEnqueueRequest(_BaseModel):
+    paths: list[str]
+    priority: str = "normal"   # "high" | "normal" | "low"
+
+
+@router.post("/v1/batch/enqueue")
+async def batch_enqueue(
+    body: BatchEnqueueRequest,
+    _: str = Depends(require_api_key),
+):
+    """Dodaje pliki do kolejki batch processing (W5).
+
+    priority: high | normal | low
+    Zwraca liczbę dodanych i odrzuconych (kolejka pełna).
+    """
+    from ..services.batch_service import get_batch_queue, Priority
+
+    prio_map = {"high": Priority.HIGH, "normal": Priority.NORMAL, "low": Priority.LOW}
+    prio = prio_map.get(body.priority.lower(), Priority.NORMAL)
+
+    queue = get_batch_queue()
+    added, rejected = 0, 0
+    results = []
+    for path in body.paths:
+        # Sanityzacja ścieżki — tylko pliki pod base_path
+        import os as _os
+        resolved = _os.path.realpath(path)
+        if not resolved.startswith(_os.path.realpath(settings.base_path)):
+            results.append({"path": path, "status": "rejected_path"})
+            rejected += 1
+            continue
+        if not _os.path.isfile(resolved):
+            results.append({"path": path, "status": "not_found"})
+            rejected += 1
+            continue
+        ok = queue.enqueue(resolved, priority=prio)
+        results.append({"path": path, "status": "queued" if ok else "queue_full"})
+        if ok:
+            added += 1
+        else:
+            rejected += 1
+
+    return {"added": added, "rejected": rejected, "results": results}
