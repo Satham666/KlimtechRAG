@@ -94,7 +94,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="KlimtechRAG API",
-    version="7.6",
+    version="7.7",
     description=(
         "KlimtechRAG — lokalny system RAG z VLM, ColPali, streaming i zarzadzaniem dokumentow. "
         "OpenAI-compatible chat completions, hybrid search, reranking, workspaces."
