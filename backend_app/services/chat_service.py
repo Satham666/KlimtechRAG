@@ -163,6 +163,13 @@ def handle_chat_completions(
 
     llm_result = get_llm_component().run(prompt=full_prompt)
     answer = llm_result["replies"][0]
+
+    # B5: Answer Verification — drugi pass LLM (tylko gdy był kontekst RAG/web)
+    from .verification_service import VERIFICATION_ENABLED, verify_answer, maybe_append_low_confidence
+    if VERIFICATION_ENABLED and context_text:
+        confidence = verify_answer(user_message, context_text, answer)
+        answer = maybe_append_low_confidence(answer, confidence)
+
     set_semantic_cached(user_message, answer)
     return answer, sources
 
