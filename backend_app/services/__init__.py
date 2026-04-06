@@ -7,6 +7,10 @@ from .cache_service import get_cached, set_cached, clear_cache, cache_size
 from .chat_service import handle_chat_completions, handle_code_query, handle_query
 from .retrieval_service import retrieve_rag, retrieve_web
 from .prompt_service import build_rag_prompt, build_query_prompt, build_code_prompt, merge_context
+from .parser_service import clean_text, extract_pdf_text, parse_with_docling, read_text_file
+from .nextcloud_service import EXT_TO_DIR, TEXT_INDEXABLE, save_to_uploads, rescan_nextcloud
+from .dedup_service import hash_bytes, hash_file, compute_content_hash
+from .ingest_service import ingest_file_background, ingest_colpali_batch, ingest_semantic_batch
 
 __all__ = [
     "doc_store",
@@ -33,4 +37,18 @@ __all__ = [
     "build_query_prompt",
     "build_code_prompt",
     "merge_context",
+    "clean_text",
+    "extract_pdf_text",
+    "parse_with_docling",
+    "read_text_file",
+    "EXT_TO_DIR",
+    "TEXT_INDEXABLE",
+    "save_to_uploads",
+    "rescan_nextcloud",
+    "hash_bytes",
+    "hash_file",
+    "compute_content_hash",
+    "ingest_file_background",
+    "ingest_colpali_batch",
+    "ingest_semantic_batch",
 ]
