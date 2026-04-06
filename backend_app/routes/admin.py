@@ -782,3 +782,36 @@ async def requeue_pending(
         "added_to_queue": added,
         "skipped_queue_full": skipped,
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/ingest/processing — lista aktualnie przetwarzanych plików
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/ingest/processing")
+async def ingest_processing(_: str = Depends(require_api_key)):
+    """Zwraca pliki aktualnie przetwarzane (status='processing').
+
+    Przydatne do monitorowania aktywnych operacji indeksowania.
+    """
+    try:
+        with _get_registry_connection() as conn:
+            rows = conn.execute(
+                "SELECT path, filename, updated_at, chunks_count FROM files "
+                "WHERE status = 'processing' ORDER BY updated_at DESC LIMIT 100"
+            ).fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "total": len(rows),
+        "files": [
+            {
+                "path": r["path"],
+                "filename": r["filename"],
+                "updated_at": r["updated_at"],
+                "chunks_count": r["chunks_count"] or 0,
+            }
+            for r in rows
+        ],
+    }

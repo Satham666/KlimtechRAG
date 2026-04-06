@@ -307,3 +307,40 @@ async def bulk_delete_sessions(
 
     logger.info("[bulk-delete] Usunięto %d z %d sesji", deleted, len(body.ids))
     return {"requested": len(body.ids), "deleted": deleted}
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/sessions/{id}/summary — podsumowanie sesji bez pełnej historii
+# ---------------------------------------------------------------------------
+
+@router.get("/{session_id}/summary")
+async def get_session_summary(
+    session_id: str,
+    _: str = Depends(require_api_key),
+):
+    """Zwraca podsumowanie sesji: tytuł, liczba wiadomości, pierwsza/ostatnia wiadomość."""
+    from ..services.session_service import get_session, get_messages
+
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+
+    messages = get_messages(session_id, limit=1000)
+
+    first_msg = None
+    last_msg = None
+    if messages:
+        first = messages[0]
+        last = messages[-1]
+        first_msg = f"[{first['role']}] {first['content'][:100]}"
+        last_msg = f"[{last['role']}] {last['content'][:100]}"
+
+    return {
+        "session_id": session_id,
+        "title": session.get("title"),
+        "messages_count": len(messages),
+        "first_message": first_msg,
+        "last_message": last_msg,
+        "created_at": session.get("created_at"),
+        "updated_at": session.get("updated_at"),
+    }
