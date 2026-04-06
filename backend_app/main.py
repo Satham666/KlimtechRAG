@@ -22,9 +22,11 @@ from .routes.gpu_status import router as gpu_router
 from .routes.chunks import router as chunks_router
 from .routes.workspaces import router as workspaces_router
 from .routes.collections import router as collections_router
+from .routes.sessions import router as sessions_router
 
 from .services import doc_store
 from .file_registry import init_db as init_file_registry
+from .services.session_service import init_sessions_db
 
 logger = logging.getLogger("klimtechrag")
 
@@ -64,6 +66,8 @@ async def lifespan(app: FastAPI):
     validate_config()
     init_file_registry()
     logger.info("File registry initialized")
+    init_sessions_db()
+    logger.info("Sessions DB initialized")
     yield
     # --- shutdown ---
     logger.info("KlimtechRAG Backend shutting down")
@@ -119,6 +123,7 @@ app.include_router(gpu_router)
 app.include_router(chunks_router)
 app.include_router(workspaces_router)
 app.include_router(collections_router)
+app.include_router(sessions_router)
 
 
 @app.middleware("http")
