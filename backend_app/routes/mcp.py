@@ -270,6 +270,27 @@ async def _dispatch(body: dict) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# GET /mcp — discovery endpoint bez auth (MCP server info)
+# ---------------------------------------------------------------------------
+
+@router.get("")
+async def mcp_info():
+    """Discovery endpoint — zwraca info o serwerze MCP bez autoryzacji.
+
+    Używany przez klientów MCP do wykrycia serwera (nie wymaga auth).
+    """
+    return {
+        "server": _SERVER_INFO,
+        "protocol_version": _MCP_VERSION,
+        "transport": "http+json-rpc",
+        "endpoint": "/mcp",
+        "tools_count": len(_TOOLS),
+        "tools_preview": [t["name"] for t in _TOOLS],
+        "docs": "/mcp/tools",
+    }
+
+
+# ---------------------------------------------------------------------------
 # GET /mcp/tools — czysty REST (bez JSON-RPC), do podglądu i dokumentacji
 # ---------------------------------------------------------------------------
 
