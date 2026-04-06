@@ -4,6 +4,7 @@ import shutil
 import tempfile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
 from haystack import Document
 
 from ..categories.classifier import classify_document
@@ -437,6 +438,77 @@ async def ingest_pdf_with_vlm(
     finally:
         if vlm_started:
             stop_vlm_server()
+
+
+# ---------------------------------------------------------------------------
+# D2: Streaming postępu ingestu — SSE endpoint
+# POST /ingest/start → {task_id}  →  GET /ingest/progress/{task_id} → SSE
+# ---------------------------------------------------------------------------
+
+
+@router.post("/ingest/start")
+async def ingest_start(
+    file: UploadFile,
+    req: Request,
+    background_tasks: BackgroundTasks,
+    request_id: str = Depends(get_request_id),
+):
+    """Przyjmuje plik, zwraca task_id do śledzenia postępu przez SSE.
+
+    Plik jest zapisywany do uploads i indeksowany w tle z pełnym śledzeniem.
+    """
+    from ..services.progress_service import get_tracker
+
+    require_api_key(req)
+    apply_rate_limit(get_client_id(req))
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Brak nazwy pliku")
+
+    import re as _re
+    safe_filename = _re.sub(r"[^\w\-_\.]", "_", os.path.basename(file.filename))
+    ext = os.path.splitext(safe_filename)[1].lower()
+    if ext not in EXT_TO_DIR:
+        raise HTTPException(status_code=400, detail=f"Nieobsługiwane rozszerzenie: {ext}")
+
+    content = await file.read()
+    if len(content) > settings.max_file_size_bytes:
+        raise HTTPException(status_code=413, detail="Plik za duży")
+
+    target_path, subdir = save_to_uploads(content, safe_filename, ext)
+    register_file(target_path)
+
+    tracker = get_tracker()
+    task = tracker.create_task(safe_filename)
+
+    background_tasks.add_task(rescan_nextcloud, subdir)
+    if ext in TEXT_INDEXABLE:
+        background_tasks.add_task(ingest_file_background, target_path, task)
+    else:
+        task.finish(0, f"Format {ext} zapisany (nie wymaga embeddingu)")
+
+    logger.info("[D2] ingest/start: %s → task_id=%s", safe_filename, task.task_id,
+                extra={"request_id": request_id})
+    return {"task_id": task.task_id, "filename": safe_filename, "status": "started"}
+
+
+@router.get("/ingest/progress/{task_id}")
+async def ingest_progress(
+    task_id: str,
+    req: Request,
+):
+    """SSE stream postępu ingestowania dla danego task_id.
+
+    Eventy: parsing → hashing → classifying → embedding → done/error
+    """
+    require_api_key(req)
+    from ..services.progress_service import stream_progress
+
+    return StreamingResponse(
+        stream_progress(task_id),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 
 @router.get("/vlm/status")

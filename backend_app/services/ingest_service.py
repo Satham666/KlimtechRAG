@@ -15,6 +15,7 @@ from ..services.nextcloud_service import TEXT_INDEXABLE
 from ..services.enrichment_service import ENRICHMENT_ENABLED, enrich_chunks
 from ..services.metadata_service import build_chunk_meta
 from ..services.parser_service import parse_with_docling, read_text_file
+from ..services.progress_service import ProgressTask
 
 logger = logging.getLogger("klimtechrag")
 
@@ -43,13 +44,18 @@ def _run_indexing(docs: list) -> dict:
     return pipeline.run({"splitter": {"documents": docs}})
 
 
-def ingest_file_background(file_path: str) -> None:
+def ingest_file_background(file_path: str, task: "ProgressTask | None" = None) -> None:
     """Indeksuje plik do Qdrant w tle.
 
     Wywoływany przez BackgroundTasks po zapisaniu do uploads.
+    Opcjonalny parametr task — jeśli podany, emituje eventy SSE postępu (D2).
     """
     from ..services import get_indexing_pipeline
     from ..services.qdrant import ensure_indexed
+
+    def _emit(stage: str, msg: str, cur: int = 0, tot: int = 0) -> None:
+        if task:
+            task.emit(stage, msg, cur, tot)
 
     filename = os.path.basename(file_path)
     suffix = os.path.splitext(filename)[1].lower()
@@ -60,9 +66,12 @@ def ingest_file_background(file_path: str) -> None:
             filename,
             suffix,
         )
+        if task:
+            task.finish(0, f"Format {suffix} nie jest indeksowalny")
         return
 
     try:
+        _emit("parsing", f"Parsowanie {filename}…")
         if suffix == ".pdf":
             markdown_text = parse_with_docling(file_path)
         else:
@@ -71,9 +80,12 @@ def ingest_file_background(file_path: str) -> None:
         if not markdown_text or not markdown_text.strip():
             mark_indexed(file_path, 0)
             logger.info("[BG] Plik pusty: %s", filename)
+            if task:
+                task.finish(0, "Plik pusty")
             return
 
         # W3 Vector Cache: sprawdź czy ten sam tekst był już zaindeksowany
+        _emit("hashing", "Sprawdzanie cache…")
         text_hash = compute_content_hash(markdown_text)
         with _get_registry_connection() as _c:
             hit = _c.execute(
@@ -83,6 +95,8 @@ def ingest_file_background(file_path: str) -> None:
         if hit:
             logger.info("[BG] ✅ Vector cache hit: %s (hash=%s…)", filename, text_hash[:12])
             mark_indexed(file_path, 0)
+            if task:
+                task.finish(0, "Cache hit — plik już zaindeksowany")
             return
 
         logger.info(
@@ -90,6 +104,7 @@ def ingest_file_background(file_path: str) -> None:
             filename,
             text_hash[:12],
         )
+        _emit("classifying", "Klasyfikacja kategorii…")
         category = classify_document(filepath=file_path, content=markdown_text)
         # C6: rozszerzone metadane (title, author, page_count, language, indexed_at)
         meta = build_chunk_meta(
@@ -101,6 +116,7 @@ def ingest_file_background(file_path: str) -> None:
             extra={"type": suffix, "category": category},
         )
         docs = [Document(content=markdown_text, meta=meta)]
+        _emit("embedding", "Embedding i zapis do Qdrant…")
         result = _run_indexing(docs)
         chunks = result["writer"]["documents_written"]
 
@@ -117,10 +133,14 @@ def ingest_file_background(file_path: str) -> None:
         logger.info(
             "[BG] ✅ %s → %d chunków w Qdrant (kategoria: %s)", filename, chunks, category
         )
+        if task:
+            task.finish(chunks)
 
     except Exception as e:
         mark_failed(file_path, str(e)[:200])
         logger.exception("[BG] ❌ Błąd indeksowania %s: %s", filename, e)
+        if task:
+            task.finish(0, str(e)[:120])
 
 
 def ingest_text_docs(file_path: str, filename: str, suffix: str, model_name: str) -> int:
