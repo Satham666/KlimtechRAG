@@ -116,3 +116,37 @@ async def add_message_endpoint(
     if body.role not in ("user", "assistant", "system"):
         raise HTTPException(status_code=400, detail="role must be user|assistant|system")
     return add_message(session_id, body.role, body.content)
+
+
+@router.get("/{session_id}/export.md")
+async def export_session_markdown(
+    session_id: str,
+    _: str = Depends(require_api_key),
+):
+    """Eksportuje historię sesji jako plik Markdown do pobrania."""
+    from fastapi.responses import Response
+    from ..services.session_service import get_session, get_messages
+
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+
+    messages = get_messages(session_id, limit=500)
+    lines = [
+        f"# {session['title'] or 'KlimtechRAG — Historia rozmowy'}",
+        f"\n_Sesja: {session_id} | Utworzona: {session['created_at']}_\n",
+        "---\n",
+    ]
+    for msg in messages:
+        role_label = "**Użytkownik**" if msg["role"] == "user" else "**Asystent**"
+        lines.append(f"### {role_label}  \n_{msg['created_at']}_\n")
+        lines.append(msg["content"] + "\n")
+        lines.append("---\n")
+
+    content = "\n".join(lines)
+    filename = (session["title"] or "sesja").replace(" ", "_")[:40] + ".md"
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
