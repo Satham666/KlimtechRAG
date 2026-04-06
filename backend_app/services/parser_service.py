@@ -40,29 +40,8 @@ def extract_pdf_text(file_path: str) -> str:
     return ""
 
 
-def parse_with_docling(file_path: str) -> str:
-    """Parsuje PDF: najpierw pdftotext z layout analysis, fallback na Docling OCR.
-
-    Zwraca oczyszczony tekst w formacie markdown.
-    C1: Gdy PyMuPDF dostępny — filtruje nagłówki/stopki i oznacza tabele.
-    """
-    # C1: Layout analysis — filtrowanie nagłówków/stopek/tabel przez PyMuPDF
-    from .layout_service import get_layout_summary, parse_pdf_layout, regions_to_text_chunks
-
-    regions = parse_pdf_layout(file_path)
-    if regions:
-        layout_text = regions_to_text_chunks(regions)
-        if layout_text and len(layout_text) > 100:
-            summary = get_layout_summary(regions)
-            logger.info("[PDF] Layout analysis OK: %s", summary)
-            return clean_text(layout_text)
-        logger.debug("[PDF] Layout analysis zwróciło za mało tekstu — fallback pdftotext")
-
-    text = extract_pdf_text(file_path)
-    if text:
-        logger.info("[PDF] Użyto pdftotext (szybkie)")
-        return clean_text(text)
-
+def _fallback_docling_ocr(file_path: str) -> str:
+    """Docling OCR fallback gdy pdftotext zwraca pusty tekst."""
     from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
     from docling.document_converter import PdfFormatOption
     from docling.datamodel.base_models import InputFormat
@@ -83,7 +62,40 @@ def parse_with_docling(file_path: str) -> str:
         }
     )
     result = converter.convert(file_path)
-    return clean_text(result.document.export_to_markdown())
+    return result.document.export_to_markdown()
+
+
+def parse_with_docling(file_path: str) -> str:
+    """Parsuje PDF: najpierw pdftotext z layout analysis, fallback na Docling OCR.
+
+    Zwraca oczyszczony tekst w formacie markdown.
+    C1: Gdy PyMuPDF dostępny — filtruje nagłówki/stopki i oznacza tabele.
+    """
+    # C1: Layout analysis — filtrowanie nagłówków/stopek/tabel przez PyMuPDF
+    from .layout_service import get_layout_summary, parse_pdf_layout, regions_to_text_chunks
+
+    regions = parse_pdf_layout(file_path)
+    layout_result = ""
+    if regions:
+        layout_text = regions_to_text_chunks(regions)
+        if layout_text and len(layout_text) > 100:
+            summary = get_layout_summary(regions)
+            logger.info("[PDF] Layout analysis OK: %s", summary)
+            layout_result = clean_text(layout_text)
+        else:
+            logger.debug("[PDF] Layout analysis zwróciło za mało tekstu — fallback pdftotext")
+
+    text = layout_result or extract_pdf_text(file_path)
+    if not text:
+        text = _fallback_docling_ocr(file_path)
+
+    # C3: Table Structure Recognition — dolacz tabele jako Markdown
+    from .table_service import extract_tables_as_text
+    tables_md = extract_tables_as_text(file_path)
+    if tables_md:
+        text = text + tables_md
+
+    return clean_text(text)
 
 
 def read_text_file(file_path: str, suffix: str) -> str:
