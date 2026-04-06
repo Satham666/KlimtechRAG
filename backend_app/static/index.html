@@ -347,6 +347,7 @@
 <button class="expand-icon opacity-0 transition-opacity text-rag-text-muted hover:text-white"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
 </div>
 </div>
+<div id="sessionsStatsEl" class="text-[10px] text-rag-text-muted mb-1 px-1"></div>
 <div id="sessionsEl" class="overflow-y-auto custom-scrollbar flex-1 space-y-1">
 <div class="text-[11px] text-rag-text-muted text-center py-2">Ladowanie...</div>
 </div>
@@ -954,6 +955,15 @@ async function loadStats(){
     document.getElementById('sPending').textContent=d.pending??'-';
     document.getElementById('sToday').textContent  =d.indexed_today??'-';
   }catch{}
+  // F4: statystyki sesji
+  try{
+    var sr=await F(B+'/v1/sessions/stats');
+    if(sr.ok){
+      var sd=await sr.json();
+      var sel=document.getElementById('sessionsStatsEl');
+      if(sel) sel.textContent=sd.total_sessions+' sesji / '+sd.total_messages+' wiad.';
+    }
+  }catch(e){}
 }
 
 // ── FILES ─────────────────────────────────────────────────────
