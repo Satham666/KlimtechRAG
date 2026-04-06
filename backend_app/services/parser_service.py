@@ -41,10 +41,23 @@ def extract_pdf_text(file_path: str) -> str:
 
 
 def parse_with_docling(file_path: str) -> str:
-    """Parsuje PDF: najpierw pdftotext, fallback na Docling OCR.
+    """Parsuje PDF: najpierw pdftotext z layout analysis, fallback na Docling OCR.
 
     Zwraca oczyszczony tekst w formacie markdown.
+    C1: Gdy PyMuPDF dostępny — filtruje nagłówki/stopki i oznacza tabele.
     """
+    # C1: Layout analysis — filtrowanie nagłówków/stopek/tabel przez PyMuPDF
+    from .layout_service import get_layout_summary, parse_pdf_layout, regions_to_text_chunks
+
+    regions = parse_pdf_layout(file_path)
+    if regions:
+        layout_text = regions_to_text_chunks(regions)
+        if layout_text and len(layout_text) > 100:
+            summary = get_layout_summary(regions)
+            logger.info("[PDF] Layout analysis OK: %s", summary)
+            return clean_text(layout_text)
+        logger.debug("[PDF] Layout analysis zwróciło za mało tekstu — fallback pdftotext")
+
     text = extract_pdf_text(file_path)
     if text:
         logger.info("[PDF] Użyto pdftotext (szybkie)")
