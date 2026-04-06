@@ -23,6 +23,7 @@ from .routes.chunks import router as chunks_router
 from .routes.workspaces import router as workspaces_router
 from .routes.collections import router as collections_router
 from .routes.sessions import router as sessions_router
+from .routes.mcp import router as mcp_router
 
 from .services import doc_store
 from .file_registry import init_db as init_file_registry
@@ -124,6 +125,7 @@ app.include_router(chunks_router)
 app.include_router(workspaces_router)
 app.include_router(collections_router)
 app.include_router(sessions_router)
+app.include_router(mcp_router)
 
 
 @app.middleware("http")
