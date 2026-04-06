@@ -221,6 +221,39 @@ if [ -n "$MODEL_RESP" ]; then
 fi
 
 # ════════════════════════════════════════
+section "7b. SPRINT 6 — NOWE PLIKI"
+# ════════════════════════════════════════
+
+S6_FILES=(
+  "backend_app/services/session_service.py"
+  "backend_app/services/verification_service.py"
+  "backend_app/services/watcher_service.py"
+  "backend_app/services/batch_service.py"
+  "backend_app/services/progress_service.py"
+  "backend_app/routes/sessions.py"
+  "backend_app/routes/mcp.py"
+  "backend_app/static/klimtech-widget.js"
+)
+
+for f in "${S6_FILES[@]}"; do
+  if [ -f "$PROJECT_DIR/$f" ]; then
+    pass "Sprint 6 plik istnieje: $f"
+  else
+    fail "Sprint 6 plik BRAKUJE: $f"
+  fi
+done
+
+# backtick check w widget.js
+if [ -f "$PROJECT_DIR/backend_app/static/klimtech-widget.js" ]; then
+  if grep -q '`' "$PROJECT_DIR/backend_app/static/klimtech-widget.js" 2>/dev/null; then
+    warn "klimtech-widget.js zawiera backticki (mogą być OK w czystym JS)"
+  else
+    pass "klimtech-widget.js: brak backtików"
+  fi
+fi
+
+
+# ════════════════════════════════════════
 section "7. PORTY (lokalne)"
 # ════════════════════════════════════════
 
