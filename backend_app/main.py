@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import time
@@ -69,8 +70,20 @@ async def lifespan(app: FastAPI):
     logger.info("File registry initialized")
     init_sessions_db()
     logger.info("Sessions DB initialized")
+    # H2: opcjonalny watcher jako asyncio background task
+    _watcher_task = None
+    from .services.watcher_service import WATCHER_ENABLED, watch_loop
+    if WATCHER_ENABLED:
+        _watcher_task = asyncio.create_task(watch_loop())
+        logger.info("[H2] Watcher task uruchomiony")
     yield
     # --- shutdown ---
+    if _watcher_task and not _watcher_task.done():
+        _watcher_task.cancel()
+        try:
+            await _watcher_task
+        except asyncio.CancelledError:
+            pass
     logger.info("KlimtechRAG Backend shutting down")
 
 
