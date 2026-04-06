@@ -1012,7 +1012,7 @@ async function send(){
   document.getElementById('typing').classList.add('show');
   document.getElementById('msgs').scrollTop=document.getElementById('msgs').scrollHeight;
 
-  const requestBody = {messages:[{role:'user',content:text}],stream:false};
+  const requestBody = {messages:[{role:'user',content:text}],stream:true};
   if(webMode){ requestBody.web_search = true; requestBody.use_rag = true; }
   else if(ragMode){ requestBody.use_rag = true; }
 
@@ -1022,16 +1022,47 @@ async function send(){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(requestBody)
     });
-    const d=await r.json();
-    document.getElementById('typing').classList.remove('show');
-    document.getElementById('sendBtn').disabled=false;
-    const answer=d.choices?.[0]?.message?.content??'Brak odpowiedzi';
-    const sources=d.sources??null;
+
+    if(!r.ok){ throw new Error('HTTP '+r.status); }
+    if(!r.body){ throw new Error('Streaming niedostepny'); }
+
+    // F1: SSE streaming — renderuj tokeny na bieżąco
     const aiTs=Date.now();
-    sess.messages.push({role:'ai',content:answer,sources,ts:aiTs});
+    const bubbleEl=appendStreamingMsgEl(aiTs);
+    document.getElementById('typing').classList.remove('show');
+
+    const reader=r.body.getReader();
+    const decoder=new TextDecoder();
+    var accumulated='';
+
+    while(true){
+      const {done,value}=await reader.read();
+      if(done) break;
+      const text_chunk=decoder.decode(value,{stream:true});
+      const lines=text_chunk.split('\n');
+      for(var i=0;i<lines.length;i++){
+        var line=lines[i].trim();
+        if(!line||line==='data: [DONE]') continue;
+        if(line.startsWith('data: ')){
+          try{
+            var json=JSON.parse(line.slice(6));
+            var delta=json.choices?.[0]?.delta?.content;
+            if(delta){
+              accumulated+=delta;
+              updateStreamingBubble(bubbleEl,accumulated);
+              document.getElementById('msgs').scrollTop=document.getElementById('msgs').scrollHeight;
+            }
+          }catch(e){}
+        }
+      }
+    }
+
+    document.getElementById('sendBtn').disabled=false;
+    const finalAnswer=accumulated||'Brak odpowiedzi';
+    sess.messages.push({role:'ai',content:finalAnswer,sources:null,ts:aiTs});
     saveSessions(); renderSidebar();
-    appendMsgEl('ai',answer,sources,aiTs,true);
-  }catch{
+
+  }catch(e){
     document.getElementById('typing').classList.remove('show');
     document.getElementById('sendBtn').disabled=false;
     const err='Blad polaczenia z backendem.';
@@ -1070,6 +1101,28 @@ function appendMsgEl(role,content,sources,ts,animate){
       <div class="text-[9px] text-rag-text-muted mt-1 ${isUser?'text-right':''}">${fmtTime(ts)}</div>
     </div>`;
   msgsEl.appendChild(d);
+}
+
+// F1: Tworzy bańkę AI z kursorem animowanym — zwraca referencję do elementu treści
+function appendStreamingMsgEl(ts){
+  var msgsEl=document.getElementById('msgs');
+  var d=document.createElement('div');
+  d.className='flex gap-3 items-start self-start max-w-[80%] animate-slide-up';
+  var avatar='<div class="w-8 h-8 rounded-full bg-rag-card border border-gray-700 flex items-center justify-center text-xs shrink-0">&#129302;</div>';
+  d.innerHTML=avatar+'<div><div class="bg-rag-bubble-ai border border-gray-700 rounded-2xl rounded-tl-none p-3 text-sm" id="streaming-bubble"><span class="streaming-cursor">&#9646;</span></div><div class="text-[9px] text-rag-text-muted mt-1">'+fmtTime(ts)+'</div></div>';
+  msgsEl.appendChild(d);
+  return document.getElementById('streaming-bubble');
+}
+
+// F1: Aktualizuje treść bańki streamingowej z renderowaniem markdown
+function updateStreamingBubble(el,content){
+  var safe=content
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/```[\w]*\n?([\s\S]*?)```/g,function(_,c){return '<pre class="bg-[#05070a] rounded-lg p-3 my-2 overflow-x-auto text-[11px] font-mono">'+c.trim()+'</pre>';})
+    .replace(/`([^`]+)`/g,function(_,c){return '<code class="bg-[#05070a] px-1 rounded text-[11px] font-mono">'+c+'</code>';})
+    .replace(/\*\*([^*]+)\*\*/g,'<strong class="text-rag-accent">$1</strong>')
+    .replace(/\n/g,'<br>');
+  el.innerHTML=safe+'<span class="streaming-cursor animate-pulse">&#9646;</span>';
 }
 
 // ── RAG ONLY ────────────────────────────────────────────────
