@@ -273,9 +273,25 @@
 </article>
 <!-- 7. OSTATNIE PLIKI -->
 <article class="bg-rag-card border border-gray-800 rounded-lg p-4 h-40 flex flex-col card-hover" data-purpose="recent-files-card">
-<div class="flex justify-between items-center mb-2">
+<div class="flex justify-between items-center mb-1">
 <h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">Ostatnie pliki</h3>
 <button class="expand-icon opacity-0 transition-opacity text-rag-text-muted hover:text-white"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+</div>
+<div class="flex gap-1 mb-1">
+  <select id="fileStatusFilter" onchange="loadFiles()" class="flex-1 text-[10px] bg-rag-bg border border-gray-700 rounded px-1 py-0.5 text-rag-text-muted cursor-pointer">
+    <option value="">Wszystkie</option>
+    <option value="indexed">Zaindeksowane</option>
+    <option value="pending">Oczekujące</option>
+    <option value="error">Błędy</option>
+  </select>
+</div>
+<div class="flex gap-1 mb-1">
+  <select id="fileStatusFilter" onchange="loadFiles()" class="flex-1 text-[10px] bg-rag-bg border border-gray-700 rounded px-1 py-0.5 text-rag-text-muted cursor-pointer">
+    <option value="">Wszystkie</option>
+    <option value="indexed">Zaindeksowane</option>
+    <option value="pending">Oczekujące</option>
+    <option value="error">Błędy</option>
+  </select>
 </div>
 <div id="fileList" class="overflow-y-auto custom-scrollbar flex-1 space-y-1 pr-1">
 <div class="text-[11px] text-rag-text-muted text-center py-4">Ladowanie...</div>
@@ -358,6 +374,24 @@
     <div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
   </div>
 </article>
+<article class="bg-rag-card border border-gray-800 rounded-lg p-4 flex flex-col gap-2">
+  <div class="flex items-center justify-between">
+    <h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">&#128202; Statystyki indeksowania</h3>
+    <button onclick="loadIngestStats()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
+  </div>
+  <div id="ingestStatsEl" class="space-y-1 text-[11px]">
+    <div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
+  </div>
+</article>
+<article class="bg-rag-card border border-gray-800 rounded-lg p-4 flex flex-col gap-2">
+  <div class="flex items-center justify-between">
+    <h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">&#128190; System</h3>
+    <button onclick="loadSystemInfo()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
+  </div>
+  <div id="systemInfoEl" class="space-y-1 text-[11px]">
+    <div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
+  </div>
+</article>
 <!-- Bottom Section Grid: Indeksowanie + Historia Rozmow -->
 <div class="mt-auto grid grid-cols-2 gap-4">
 <!-- INDEKSOWANIE RAG -->
@@ -385,6 +419,11 @@
 <button id="embedBtn" onclick="startEmbedding()" class="w-full bg-rag-accent/10 text-rag-accent border border-rag-accent/30 py-2.5 rounded-lg text-xs font-bold hover:bg-rag-accent/20 transition-all flex items-center justify-center gap-2">
 <span>&#129504;</span> Indeksuj pliki w RAG
 </button>
+<div class="flex gap-1">
+  <button onclick="reindexAll()" class="flex-1 bg-yellow-900/20 text-yellow-400 border border-yellow-800/40 py-1.5 rounded text-[10px] font-bold hover:bg-yellow-900/40 transition-all" title="Reset indexed→pending + kolejkuj HIGH">&#8635; Reindeksuj wszystko</button>
+  <button onclick="requeuePending()" class="flex-1 bg-gray-800 text-rag-text-muted border border-gray-700 py-1.5 rounded text-[10px] font-bold hover:text-white transition-all" title="Dodaj pending do kolejki">&#9654; Kolejkuj pending</button>
+</div>
+</div>
 </div>
 </article>
 <!-- HISTORIA ROZMOW -->
@@ -572,7 +611,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   else if(sessions.length){ setActive(sessions[0].id); renderSession(sessions[0].id); }
   else{ const s=createSess(); setActive(s.id); showWelcome(); }
   renderSidebar();
-  loadStats(); loadFiles(); checkStatus(); loadIngestHistory(); loadMcpInfo(); loadServerConfig(); loadIngestErrors(); loadBatchStats(); refreshSessCountBadge();
+  loadStats(); loadFiles(); checkStatus(); loadIngestHistory(); loadMcpInfo(); loadServerConfig(); loadIngestErrors(); loadBatchStats(); refreshSessCountBadge(); loadIngestStats(); loadSystemInfo(); loadIngestStats(); loadSystemInfo();
   loadModelList();
   startProgressPoll();
   startGpuPoll();
@@ -1281,6 +1320,158 @@ async function clearBatchQueue(){
     loadBatchStats();
   }catch(e){ alert('Błąd: '+e.message); }
 }
+async function loadIngestStats(){
+  var el=document.getElementById('ingestStatsEl');
+  if(!el) return;
+  try{
+    var r=await F(B+'/v1/ingest/stats');
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    var statusRows=[
+      ['Indeksowane',String(d.indexed||0),'text-green-400'],
+      ['Oczekujące',String(d.pending||0),'text-yellow-400'],
+      ['Błędy',String(d.errors||0),'text-red-400'],
+      ['Przetwarzane',String(d.processing||0),'text-blue-400'],
+    ];
+    var html='<div class="space-y-0.5">'
+      +'<div class="flex justify-between text-rag-text-muted mb-1"><span>Łącznie plików</span><span class="text-white font-bold">'+esc(String(d.total_files||0))+'</span></div>'
+      +'<div class="flex justify-between text-rag-text-muted"><span>Chunki (avg)</span><span class="text-rag-accent">'+esc(String(d.total_chunks||0))+' ('+esc(String(d.avg_chunks_per_file||0))+')</span></div>'
+      +'<div class="border-t border-gray-800 my-1"></div>'
+      +statusRows.map(function(row){
+        return '<div class="flex justify-between"><span class="text-rag-text-muted">'+esc(row[0])+'</span><span class="'+row[2]+' font-mono">'+esc(row[1])+'</span></div>';
+      }).join('')
+      +'</div>';
+    if(d.by_extension&&d.by_extension.length){
+      html+='<div class="border-t border-gray-800 mt-1 pt-1 text-[10px] text-rag-text-muted">';
+      html+=d.by_extension.slice(0,5).map(function(e){
+        return '<span class="mr-2">'+esc(e.ext||'?')+': '+esc(String(e.count))+'</span>';
+      }).join('');
+      html+='</div>';
+    }
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML='<div class="text-red-400 text-center py-2">Błąd: '+e.message+'</div>';
+  }
+}
+async function loadSystemInfo(){
+  var el=document.getElementById('systemInfoEl');
+  if(!el) return;
+  try{
+    var r=await F(B+'/v1/system/info');
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    var rows=[
+      ['Python', d.python_version||'?'],
+      ['Dane', (d.dirs&&d.dirs.data_mb!=null?d.dirs.data_mb+' MB':'?')],
+      ['Uploady', (d.dirs&&d.dirs.uploads_mb!=null?d.dirs.uploads_mb+' MB':'?')],
+      ['DB rejestru', (d.db&&d.db.file_registry_kb!=null?d.db.file_registry_kb+' KB':'?')],
+      ['DB sesji', (d.db&&d.db.sessions_kb!=null?d.db.sessions_kb+' KB':'?')],
+    ];
+    el.innerHTML='<div class="space-y-0.5">'+rows.map(function(row){
+      return '<div class="flex justify-between gap-2">'
+        +'<span class="text-rag-text-muted">'+esc(row[0])+'</span>'
+        +'<span class="text-gray-300 font-mono text-[10px]">'+esc(row[1])+'</span>'
+        +'</div>';
+    }).join('')+'</div>';
+  }catch(e){
+    el.innerHTML='<div class="text-red-400 text-center py-2">Błąd: '+e.message+'</div>';
+  }
+}
+async function reindexAll(){
+  if(!confirm('Zresetować wszystkie zaindeksowane pliki i wymusić ponowne indeksowanie?\n\nMoże to potrwać długo dla dużych kolekcji.')) return;
+  try{
+    var r=await F(B+'/v1/ingest/reindex-all',{method:'POST'});
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    alert(d.message||('Reset: '+d.reset+', kolejka: '+d.enqueued));
+    loadIngestStats(); loadBatchStats();
+  }catch(e){ alert('Błąd: '+e.message); }
+}
+async function requeuePending(){
+  try{
+    var r=await F(B+'/v1/ingest/requeue-pending?limit=200',{method:'POST'});
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    alert('Dodano do kolejki: '+d.added_to_queue+' z '+d.found_pending+' oczekujących');
+    loadBatchStats();
+  }catch(e){ alert('Błąd: '+e.message); }
+}
+async function loadIngestStats(){
+  var el=document.getElementById('ingestStatsEl');
+  if(!el) return;
+  try{
+    var r=await F(B+'/v1/ingest/stats');
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    var statusRows=[
+      ['Indeksowane',String(d.indexed||0),'text-green-400'],
+      ['Oczekujące',String(d.pending||0),'text-yellow-400'],
+      ['Błędy',String(d.errors||0),'text-red-400'],
+      ['Przetwarzane',String(d.processing||0),'text-blue-400'],
+    ];
+    var html='<div class="space-y-0.5">'
+      +'<div class="flex justify-between text-rag-text-muted mb-1"><span>Łącznie plików</span><span class="text-white font-bold">'+esc(String(d.total_files||0))+'</span></div>'
+      +'<div class="flex justify-between text-rag-text-muted"><span>Chunki (avg)</span><span class="text-rag-accent">'+esc(String(d.total_chunks||0))+' ('+esc(String(d.avg_chunks_per_file||0))+')</span></div>'
+      +'<div class="border-t border-gray-800 my-1"></div>'
+      +statusRows.map(function(row){
+        return '<div class="flex justify-between"><span class="text-rag-text-muted">'+esc(row[0])+'</span><span class="'+row[2]+' font-mono">'+esc(row[1])+'</span></div>';
+      }).join('')
+      +'</div>';
+    if(d.by_extension&&d.by_extension.length){
+      html+='<div class="border-t border-gray-800 mt-1 pt-1 text-[10px] text-rag-text-muted">';
+      html+=d.by_extension.slice(0,5).map(function(e){
+        return '<span class="mr-2">'+esc(e.ext||'?')+': '+esc(String(e.count))+'</span>';
+      }).join('');
+      html+='</div>';
+    }
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML='<div class="text-red-400 text-center py-2">Błąd: '+e.message+'</div>';
+  }
+}
+async function loadSystemInfo(){
+  var el=document.getElementById('systemInfoEl');
+  if(!el) return;
+  try{
+    var r=await F(B+'/v1/system/info');
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    var rows=[
+      ['Python', d.python_version||'?'],
+      ['Dane', (d.dirs&&d.dirs.data_mb!=null?d.dirs.data_mb+' MB':'?')],
+      ['Uploady', (d.dirs&&d.dirs.uploads_mb!=null?d.dirs.uploads_mb+' MB':'?')],
+      ['DB rejestru', (d.db&&d.db.file_registry_kb!=null?d.db.file_registry_kb+' KB':'?')],
+      ['DB sesji', (d.db&&d.db.sessions_kb!=null?d.db.sessions_kb+' KB':'?')],
+    ];
+    el.innerHTML='<div class="space-y-0.5">'+rows.map(function(row){
+      return '<div class="flex justify-between gap-2">'
+        +'<span class="text-rag-text-muted">'+esc(row[0])+'</span>'
+        +'<span class="text-gray-300 font-mono text-[10px]">'+esc(row[1])+'</span>'
+        +'</div>';
+    }).join('')+'</div>';
+  }catch(e){
+    el.innerHTML='<div class="text-red-400 text-center py-2">Błąd: '+e.message+'</div>';
+  }
+}
+async function reindexAll(){
+  if(!confirm('Zresetować wszystkie zaindeksowane pliki i wymusić ponowne indeksowanie?\n\nMoże to potrwać długo dla dużych kolekcji.')) return;
+  try{
+    var r=await F(B+'/v1/ingest/reindex-all',{method:'POST'});
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    alert(d.message||('Reset: '+d.reset+', kolejka: '+d.enqueued));
+    loadIngestStats(); loadBatchStats();
+  }catch(e){ alert('Błąd: '+e.message); }
+}
+async function requeuePending(){
+  try{
+    var r=await F(B+'/v1/ingest/requeue-pending?limit=200',{method:'POST'});
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    alert('Dodano do kolejki: '+d.added_to_queue+' z '+d.found_pending+' oczekujących');
+    loadBatchStats();
+  }catch(e){ alert('Błąd: '+e.message); }
+}
 async function deleteRagDoc(docId){
   if(!confirm('Usunac "'+docId+'" z RAG?'))return;
   try{
@@ -1294,7 +1485,9 @@ async function deleteRagDoc(docId){
 async function loadFiles(){
   const el=document.getElementById('fileList');
   try{
-    const r=await F(`${B}/files/list?limit=15`); if(!r.ok)throw 0;
+    var sel=document.getElementById('fileStatusFilter');
+    var statusQ=sel&&sel.value?'&status='+sel.value:'';
+    const r=await F(`${B}/files/list?limit=15`+statusQ); if(!r.ok)throw 0;
     const json=await r.json();
     const list=Array.isArray(json)?json:(json.files??[]);
     if(!list.length){el.innerHTML='<div class="text-[11px] text-rag-text-muted text-center py-4">Brak plikow</div>';return;}
