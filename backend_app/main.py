@@ -21,6 +21,7 @@ from .routes.whisper_stt import router as whisper_router
 from .routes.gpu_status import router as gpu_router
 from .routes.chunks import router as chunks_router
 from .routes.workspaces import router as workspaces_router
+from .routes.collections import router as collections_router
 
 from .services import doc_store
 from .file_registry import init_db as init_file_registry
@@ -107,6 +108,7 @@ app.include_router(whisper_router)
 app.include_router(gpu_router)
 app.include_router(chunks_router)
 app.include_router(workspaces_router)
+app.include_router(collections_router)
 
 
 @app.middleware("http")
