@@ -12,6 +12,7 @@ from ..file_registry import (
 from ..services.cache_service import clear_cache
 from ..services.dedup_service import compute_content_hash
 from ..services.nextcloud_service import TEXT_INDEXABLE
+from ..services.metadata_service import build_chunk_meta
 from ..services.parser_service import parse_with_docling, read_text_file
 
 logger = logging.getLogger("klimtechrag")
@@ -70,12 +71,16 @@ def ingest_file_background(file_path: str) -> None:
             text_hash[:12],
         )
         category = classify_document(filepath=file_path, content=markdown_text)
-        docs = [
-            Document(
-                content=markdown_text,
-                meta={"source": filename, "type": suffix, "category": category},
-            )
-        ]
+        # C6: rozszerzone metadane (title, author, page_count, language, indexed_at)
+        meta = build_chunk_meta(
+            source=filename,
+            chunk_index=0,
+            total_chunks=0,
+            text=markdown_text,
+            file_path=file_path,
+            extra={"type": suffix, "category": category},
+        )
+        docs = [Document(content=markdown_text, meta=meta)]
         result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
         chunks = result["writer"]["documents_written"]
 
@@ -115,12 +120,16 @@ def ingest_text_docs(file_path: str, filename: str, suffix: str, model_name: str
         logger.info("⚪ Empty: %s", filename)
         return 0
 
-    docs = [
-        Document(
-            content=markdown_text,
-            meta={"source": filename, "type": suffix, "embedding_model": model_name},
-        )
-    ]
+    # C6: rozszerzone metadane (title, author, page_count, language, indexed_at)
+    meta = build_chunk_meta(
+        source=filename,
+        chunk_index=0,
+        total_chunks=0,
+        text=markdown_text,
+        file_path=file_path,
+        extra={"type": suffix, "embedding_model": model_name},
+    )
+    docs = [Document(content=markdown_text, meta=meta)]
     result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
     chunks = result["writer"]["documents_written"]
     mark_indexed(file_path, chunks)
