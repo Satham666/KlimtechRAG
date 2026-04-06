@@ -537,7 +537,7 @@ function renderSidebar(){
     <div class="flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${s.id===activeId?'bg-rag-accent/10 border border-rag-accent/20':'bg-rag-bg/50 border border-transparent hover:bg-white/5'}" onclick="switchSess('${s.id}')">
       <div class="w-8 h-8 rounded-full bg-rag-accent/20 flex items-center justify-center text-rag-accent text-xs shrink-0">${s.messages.length?'&#128172;':'&#10024;'}</div>
       <div class="flex-1 overflow-hidden">
-        <div class="text-[11px] font-bold truncate">${esc(s.title)}</div>
+        <div class="text-[11px] font-bold truncate" ondblclick="renameSess(event,'${s.id}')" title="Dwuklik = zmień nazwę">${esc(s.title)}</div>
         <div class="text-[9px] text-rag-text-muted">${fmtDate(s.ts)} / ${s.messages.length} wiad.</div>
       </div>
       <span class="text-[10px] text-rag-text-muted hover:text-red-400 cursor-pointer opacity-0 group-hover:opacity-100" onclick="event.stopPropagation();delSess(event,'${s.id}')">&#10005;</span>
@@ -601,6 +601,22 @@ function delSess(e,id){
     else{ const s=createSess(); setActive(s.id); showWelcome(); }
   }
   renderSidebar(); toast('Rozmowa usunieta');
+}
+async function renameSess(e, id){
+  e.stopPropagation();
+  var sess=getSess(id); if(!sess) return;
+  var newTitle=prompt('Nowa nazwa rozmowy:', sess.title||'');
+  if(newTitle===null) return;
+  newTitle=newTitle.trim()||sess.title;
+  sess.title=newTitle; saveSessions(); renderSidebar();
+  if(sess.backendId){
+    F(B+'/v1/sessions/'+sess.backendId, {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({title:newTitle})
+    }).catch(function(){});
+  }
+  toast('Nazwa zmieniona');
 }
 function clearAll(){
   if(!confirm('Usunac WSZYSTKIE rozmowy?'))return;
