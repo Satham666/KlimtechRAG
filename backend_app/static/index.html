@@ -316,6 +316,15 @@
 <div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
 </div>
 </article>
+<article class="bg-rag-card border border-gray-800 rounded-lg p-4 flex flex-col gap-2">
+  <div class="flex items-center justify-between">
+    <h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">&#9881; Serwer MCP</h3>
+    <button onclick="loadMcpInfo()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
+  </div>
+  <div id="mcpInfoEl" class="space-y-1 text-[11px]">
+    <div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
+  </div>
+</article>
 <!-- Bottom Section Grid: Indeksowanie + Historia Rozmow -->
 <div class="mt-auto grid grid-cols-2 gap-4">
 <!-- INDEKSOWANIE RAG -->
@@ -530,7 +539,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   else if(sessions.length){ setActive(sessions[0].id); renderSession(sessions[0].id); }
   else{ const s=createSess(); setActive(s.id); showWelcome(); }
   renderSidebar();
-  loadStats(); loadFiles(); checkStatus(); loadIngestHistory();
+  loadStats(); loadFiles(); checkStatus(); loadIngestHistory(); loadMcpInfo();
   loadModelList();
   startProgressPoll();
   startGpuPoll();
@@ -1117,6 +1126,24 @@ async function loadIngestHistory(){
     }).join('');
   }catch(e){
     el.innerHTML='<div class="text-red-400 text-center py-2">Błąd: '+e.message+'</div>';
+  }
+}
+
+async function loadMcpInfo(){
+  var el=document.getElementById('mcpInfoEl');
+  if(!el) return;
+  try{
+    var r=await F(B+'/mcp');
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    el.innerHTML='<div class="space-y-1">'
+      +'<div class="flex justify-between"><span class="text-rag-text-muted">Endpoint</span><span class="text-gray-300 font-mono text-[10px]">'+esc(d.endpoint||'/mcp')+'</span></div>'
+      +'<div class="flex justify-between"><span class="text-rag-text-muted">Protokół</span><span class="text-gray-300">'+esc(d.protocol_version||'')+'</span></div>'
+      +'<div class="flex justify-between"><span class="text-rag-text-muted">Narzędzia</span><span class="text-rag-accent font-bold">'+esc(String(d.tools_count||0))+'</span></div>'
+      +'<div class="text-[10px] text-rag-text-muted truncate" title="'+esc((d.tools_preview||[]).join(', '))+'">'+esc((d.tools_preview||[]).join(', '))+'</div>'
+      +'</div>';
+  }catch(e){
+    el.innerHTML='<div class="text-red-400 text-center py-2">MCP niedostępny</div>';
   }
 }
 
