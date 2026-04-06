@@ -10,6 +10,7 @@ from ..categories.classifier import classify_document
 from ..config import settings
 from ..fs_tools import resolve_path, FsSecurityError
 from ..models import IngestPathRequest
+from ..models.schemas import IngestItem, IngestResponse
 from ..services import get_indexing_pipeline, doc_store, get_text_embedder
 from ..services.cache_service import clear_cache
 from ..services.dedup_service import hash_bytes, hash_file, compute_content_hash
@@ -103,16 +104,21 @@ async def upload_file_to_rag(
 
         if ext in TEXT_INDEXABLE:
             background_tasks.add_task(ingest_file_background, target_path)
-            index_msg = "Indeksowanie do RAG w tle..."
+            status_val = "pending"
         else:
-            index_msg = f"Format {ext} zapisany (indeksowanie audio/video/obrazów wymaga dedykowanego pipeline)"
+            status_val = "skipped"
 
         logger.info(
-            "[Upload] %s → Nextcloud/%s (%.1f KB) | %s",
-            file.filename, subdir, file_size / 1024, index_msg,
+            "[Upload] %s → Nextcloud/%s (%.1f KB) | status=%s",
+            file.filename, subdir, file_size / 1024, status_val,
             extra={"request_id": request_id},
         )
-        return {"message": "Plik zapisany", "filename": file.filename, "duplicate": False, "size_bytes": file_size}
+        return IngestResponse(data=[IngestItem(
+            doc_id=safe_filename,
+            source=file.filename,
+            status=status_val,
+            chunks_count=0,
+        )])
 
     except HTTPException:
         raise
@@ -268,7 +274,12 @@ async def ingest_by_path(
         ensure_indexed()
         clear_cache()
         logger.info("[ingest_path] %s → %d chunks (kategoria: %s)", filename, chunks, category)
-        return {"message": "OK", "chunks_processed": chunks, "filename": filename}
+        return IngestResponse(data=[IngestItem(
+            doc_id=filename,
+            source=filename,
+            status="indexed",
+            chunks_count=chunks,
+        )])
 
     except Exception as e:
         mark_failed(file_path, str(e)[:200])
@@ -351,7 +362,15 @@ async def ingest_all_pending(req: Request, limit: int = 10):
 
     indexed_count = len([r for r in results if "ok" in r.get("status", "")])
     logger.info("🎯 Indeksowanie skończone: %d/%d sukces", indexed_count, len(results))
-    return {"indexed": indexed_count, "results": results}
+    return IngestResponse(data=[
+        IngestItem(
+            doc_id=r.get("filename", "unknown"),
+            source=r.get("filename", "unknown"),
+            status="indexed" if "ok" in r.get("status", "") else r.get("status", "error"),
+            chunks_count=r.get("chunks", 0),
+        )
+        for r in results
+    ])
 
 
 # ---------------------------------------------------------------------------
