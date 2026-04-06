@@ -102,6 +102,12 @@ class Settings(BaseSettings):
         ".txt",
     }
 
+    # --- Hybrid Search (B2) ---
+    # Weight BM25 w hybrid scoring: final = (1-bm25_weight)*dense + bm25_weight*bm25
+    bm25_weight: float = float(os.getenv("KLIMTECH_BM25_WEIGHT", "0.3"))
+    # Ile dokumentów pobierać przed merge/rerankiem
+    retrieval_top_k_fetch: int = 20
+
     # --- Bezpieczeństwo / API ---
     api_key: str | None = None  # None = auth wyłączone (dev)
     rate_limit_window_seconds: int = 60
