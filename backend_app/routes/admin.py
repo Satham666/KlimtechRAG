@@ -417,3 +417,32 @@ async def batch_clear(_: str = Depends(require_api_key)):
     from ..services.batch_service import get_batch_queue
     cleared = get_batch_queue().clear()
     return {"cleared": cleared, "status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/ingest/duplicates — pliki z tym samym content_hash (W3 cache)
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/ingest/duplicates")
+async def ingest_duplicates(_: str = Depends(require_api_key)):
+    """Zwraca grupy plików o tym samym content_hash (potencjalne duplikaty).
+
+    Przydatne do czyszczenia bazy przed reindeksowaniem.
+    """
+    try:
+        with _get_registry_connection() as conn:
+            rows = conn.execute(
+                "SELECT content_hash, COUNT(*) as count, "
+                "GROUP_CONCAT(filename, ' | ') as filenames, "
+                "SUM(chunks_count) as total_chunks "
+                "FROM files "
+                "WHERE content_hash IS NOT NULL AND status = 'indexed' "
+                "GROUP BY content_hash HAVING count > 1 "
+                "ORDER BY count DESC LIMIT 50",
+            ).fetchall()
+        return {
+            "total_groups": len(rows),
+            "duplicates": [dict(r) for r in rows],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
