@@ -174,3 +174,33 @@ async def cleanup_sessions(
         raise HTTPException(status_code=400, detail="max_age_days musi być >= 1")
     deleted = cleanup_old_sessions(max_age_days=body.max_age_days)
     return {"deleted": deleted, "max_age_days": body.max_age_days}
+
+
+@router.get("/search")
+async def search_sessions(
+    q: str,
+    limit: int = 20,
+    _: str = Depends(require_api_key),
+):
+    """Przeszukuje tytuły i treść wiadomości sesji.
+
+    ?q=zapytanie  — fraza do wyszukania (min 2 znaki)
+    ?limit=20     — max wyników
+    """
+    if len(q.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Parametr 'q' musi mieć min. 2 znaki")
+    pattern = f"%{q.strip()}%"
+    from ..services.session_service import _conn
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT s.id, s.title, s.created_at, s.updated_at "
+            "FROM sessions s LEFT JOIN messages m ON s.id = m.session_id "
+            "WHERE s.title LIKE ? OR m.content LIKE ? "
+            "ORDER BY s.updated_at DESC LIMIT ?",
+            (pattern, pattern, min(limit, 100)),
+        ).fetchall()
+    return {
+        "query": q,
+        "total": len(rows),
+        "sessions": [dict(r) for r in rows],
+    }
