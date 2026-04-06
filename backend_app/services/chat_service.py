@@ -6,6 +6,7 @@ from haystack import Document as HaystackDocument
 
 from .cache_service import get_cached, set_cached, get_semantic_cached, set_semantic_cached
 from .retrieval_service import retrieve_rag, retrieve_web
+from .query_decomposition_service import retrieve_with_decomposition
 from .prompt_service import build_rag_prompt, build_query_prompt, build_code_prompt, merge_context
 
 logger = logging.getLogger("klimtechrag")
@@ -146,7 +147,7 @@ def handle_chat_completions(
     web_doc = None
 
     if effective_rag:
-        rag_docs, rag_sources = retrieve_rag(
+        rag_docs, rag_sources = retrieve_with_decomposition(
             user_message, top_k=top_k,
             embedding_model=embedding_model,
             request_id=request_id,
@@ -188,7 +189,7 @@ async def handle_chat_completions_stream(
     sources: List[str] = []
 
     if use_rag:
-        rag_docs, rag_sources = retrieve_rag(
+        rag_docs, rag_sources = retrieve_with_decomposition(
             user_message, top_k=top_k,
             embedding_model=embedding_model,
             request_id=request_id,
