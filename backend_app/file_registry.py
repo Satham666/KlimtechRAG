@@ -76,6 +76,15 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_files_status ON files(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_files_ext ON files(extension)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_files_dir ON files(directory)")
+        # Migracja: dodaj content_hash jeśli baza istniała przed tą wersją
+        try:
+            conn.execute("ALTER TABLE files ADD COLUMN content_hash TEXT")
+        except Exception:
+            pass  # Kolumna już istnieje — ignoruj
+        # Indeks na content_hash dla szybkiego cache lookup (W3 Vector Cache)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_files_hash ON files(content_hash)"
+        )
         conn.commit()
 
 
