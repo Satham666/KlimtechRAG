@@ -969,7 +969,7 @@ async function startEmbedding(){
   }).then(r=>r.json()).then(d=>{
     if(poll)clearInterval(poll);
     fill.style.width='100%';
-    status.textContent=`Zaindeksowano ${d.indexed||0} plikow`;
+    status.textContent=`Zaindeksowano ${d.data ? d.data.filter(x=>x.status==='indexed').length : (d.indexed||0)} plikow`;
     status.style.color='#4ade80';
     btn.innerHTML='&#129504; Indeksuj pliki w RAG'; btn.disabled=false;
     setTimeout(()=>{prog.classList.remove('show');},3000);
