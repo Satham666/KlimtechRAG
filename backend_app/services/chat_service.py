@@ -138,6 +138,42 @@ def handle_chat_completions(
     return answer, sources
 
 
+async def handle_chat_completions_stream(
+    user_message: str,
+    use_rag: bool,
+    web_search: bool,
+    top_k: int,
+    embedding_model: str,
+    model: str = "",
+    request_id: str = "-",
+):
+    """Obsługuje /v1/chat/completions z stream=True — SSE token-by-token.
+
+    Async generator yielding SSE event strings.
+    RAG/web retrieval odbywa się synchronicznie przed streamingiem LLM.
+    """
+    from .streaming_service import stream_llm_response
+
+    rag_docs: List[HaystackDocument] = []
+    web_doc = None
+
+    if use_rag:
+        rag_docs, _ = retrieve_rag(
+            user_message, top_k=top_k,
+            embedding_model=embedding_model,
+            request_id=request_id,
+        )
+
+    if web_search:
+        web_doc, _ = retrieve_web(user_message, request_id=request_id)
+
+    context_text = merge_context(rag_docs, web_doc)
+    full_prompt = build_rag_prompt(user_message, context_text)
+
+    async for chunk in stream_llm_response(full_prompt, model=model, request_id=request_id):
+        yield chunk
+
+
 def handle_code_query(
     query: str,
     request_id: str = "-",
