@@ -148,3 +148,31 @@ async def collection_info(
         }
     except Exception:
         raise HTTPException(status_code=404, detail="Kolekcja nie istnieje")
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/collections/stats — statystyki wszystkich kolekcji Qdrant
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/collections/stats")
+async def collections_stats(_: str = Depends(require_api_key)):
+    """Zwraca statystyki kolekcji Qdrant: liczba wektorów, status, wymiar."""
+    from ..services import doc_store
+    from ..config import settings
+
+    collection_names = [settings.qdrant_collection, "klimtech_colpali"]
+    results = []
+    for name in collection_names:
+        try:
+            client = _get_qdrant_client() or doc_store.client
+            info = client.get_collection(name)
+            results.append({
+                "name": name,
+                "vectors_count": info.vectors_count or 0,
+                "status": str(info.status),
+                "dimension": info.config.params.vectors.size if hasattr(info.config.params.vectors, "size") else None,
+            })
+        except Exception as e:
+            results.append({"name": name, "error": str(e)})
+
+    return {"collections": results, "total": len(results)}
