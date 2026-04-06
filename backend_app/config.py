@@ -1,6 +1,7 @@
 import logging
 import os
-from typing import Set
+from pathlib import Path
+from typing import Any, Dict, Set
 
 from pydantic import AnyHttpUrl
 
@@ -231,5 +232,65 @@ def validate_config() -> None:
             logging.getLogger("klimtechrag").critical("❌ STARTUP ERROR: %s", e)
         sys.exit(1)
 
+
+def load_yaml_profile(profile_name: str) -> Dict[str, Any]:
+    """A2: Laduje profil YAML i nadpisuje zmienne srodowiskowe.
+
+    Uzywanie: KLIMTECH_PROFILES=server python3 -m backend_app.main
+    Priorytet nadpisywan (najwyzszy wygrywa):
+      1. Zmienne srodowiskowe (KLIMTECH_*)
+      2. Profil YAML (settings-{profile}.yaml)
+      3. Plik .env
+      4. Domsilne wartosci Settings
+    """
+    if not profile_name:
+        return {}
+
+    candidates = [
+        Path(BASE) / f"settings-{profile_name}.yaml",
+        Path.cwd() / f"settings-{profile_name}.yaml",
+    ]
+
+    yaml_path = None
+    for c in candidates:
+        if c.exists():
+            yaml_path = c
+            break
+
+    if yaml_path is None:
+        logging.getLogger("klimtechrag").warning(
+            "[A2] Profil YAML nie znaleziony: settings-%s.yaml (szukano w %s, cwd)",
+            profile_name, BASE,
+        )
+        return {}
+
+    try:
+        import yaml
+
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+
+        if not isinstance(data, dict):
+            logging.getLogger("klimtechrag").warning(
+                "[A2] Profil YAML pusty lub zly format: %s", yaml_path,
+            )
+            return {}
+
+        logging.getLogger("klimtechrag").info("[A2] Wczytano profil: %s", yaml_path)
+        flat: Dict[str, Any] = {}
+        for key, value in data.items():
+            flat[key.upper()] = value
+            os.environ.setdefault(f"KLIMTECH_{key.upper()}", str(value))
+        return flat
+    except ImportError:
+        logging.getLogger("klimtechrag").debug("[A2] PyYAML niedostepny — profil ignorowany")
+        return {}
+    except Exception as e:
+        logging.getLogger("klimtechrag").warning("[A2] Blad wczytywania profilu: %s", e)
+        return {}
+
+
+_PROFILE = os.getenv("KLIMTECH_PROFILES", "").strip()
+_yaml_overrides = load_yaml_profile(_PROFILE) if _PROFILE else {}
 
 settings = Settings()

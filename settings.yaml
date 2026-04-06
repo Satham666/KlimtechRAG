@@ -1,0 +1,28 @@
+# KlimtechRAG — domyslna konfiguracja
+# Kopiuj i modyfikuj dla srodowisk: settings-server.yaml, settings-dev.yaml
+
+# --- LLM ---
+llm_base_url: "http://localhost:8082/v1"
+llm_api_key: "sk-dummy"
+llm_model_name: ""
+
+# --- Embedding ---
+embedding_model: "intfloat/multilingual-e5-large"
+embedding_device: "cpu"
+
+# --- Qdrant ---
+qdrant_url: "http://localhost:6333"
+qdrant_collection: "klimtech_docs"
+
+# --- Hybrid Search (B2) ---
+bm25_weight: 0.3
+retrieval_top_k_fetch: 20
+
+# --- Logowanie ---
+log_level: "INFO"
+log_json: false
+
+# --- Bezpieczenstwo ---
+rate_limit_window_seconds: 60
+rate_limit_max_requests: 60
+max_file_size_bytes: 209715200
