@@ -270,3 +270,40 @@ async def session_llm_context(
         "messages_count": len(messages),
         "context": messages,
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/sessions/bulk-delete — usuwanie wielu sesji naraz
+# ---------------------------------------------------------------------------
+
+class BulkDeleteRequest(BaseModel):
+    ids: list[str]
+
+
+@router.post("/bulk-delete", status_code=200)
+async def bulk_delete_sessions(
+    body: BulkDeleteRequest,
+    _: str = Depends(require_api_key),
+):
+    """Usuwa wiele sesji naraz po liście ID.
+
+    Body: {"ids": ["id1", "id2", ...]}
+    Zwraca liczbę faktycznie usuniętych sesji.
+    """
+    from ..services.session_service import delete_session
+
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="ids nie może być puste")
+    if len(body.ids) > 100:
+        raise HTTPException(status_code=400, detail="Maksymalnie 100 sesji naraz")
+
+    deleted = 0
+    for session_id in body.ids:
+        try:
+            delete_session(session_id)
+            deleted += 1
+        except Exception:
+            pass
+
+    logger.info("[bulk-delete] Usunięto %d z %d sesji", deleted, len(body.ids))
+    return {"requested": len(body.ids), "deleted": deleted}
