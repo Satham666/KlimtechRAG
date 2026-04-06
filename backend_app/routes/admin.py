@@ -446,3 +446,13 @@ async def ingest_duplicates(_: str = Depends(require_api_key)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/v1/batch/history")
+async def batch_history(limit: int = 50, _: str = Depends(require_api_key)):
+    """Zwraca log ostatnich operacji batch processing."""
+    from ..services.batch_service import get_batch_queue
+    return {
+        "history": get_batch_queue().history(limit=min(limit, 100)),
+        "total": len(get_batch_queue().history(limit=10000)),
+    }

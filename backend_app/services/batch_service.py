@@ -37,10 +37,12 @@ class BatchQueue:
     """Asyncio priority queue do przetwarzania plików w tle."""
 
     def __init__(self) -> None:
+        from collections import deque
         self._queue: asyncio.PriorityQueue = asyncio.PriorityQueue(maxsize=_QUEUE_MAX)
         self._running = False
         self._worker_task: Optional[asyncio.Task] = None
         self._stats = {"processed": 0, "errors": 0, "retried": 0}
+        self._log: deque = deque(maxlen=100)   # log ostatnich 100 operacji
 
     def enqueue(self, file_path: str, priority: Priority = Priority.NORMAL, task_id: Optional[str] = None) -> bool:
         """Dodaje plik do kolejki. Zwraca False gdy kolejka pełna."""
@@ -93,6 +95,7 @@ class BatchQueue:
             logger.info("[W5] Processing: %s (retry=%d)", item.file_path, item.retries)
             await asyncio.get_event_loop().run_in_executor(None, ingest_fn, item.file_path)
             self._stats["processed"] += 1
+            self._log.append({"path": item.file_path, "status": "ok", "ts": time.time()})
         except Exception as e:
             logger.warning("[W5] Błąd przetwarzania %s: %s", item.file_path, e)
             self._stats["errors"] += 1
@@ -108,6 +111,7 @@ class BatchQueue:
                     logger.error("[W5] Kolejka pełna przy retry: %s", item.file_path)
             else:
                 logger.error("[W5] Wyczerpano retries dla: %s", item.file_path)
+                self._log.append({"path": item.file_path, "status": "failed", "ts": time.time()})
 
     def clear(self) -> int:
         """Czyści wszystkie oczekujące elementy z kolejki. Zwraca liczbę usuniętych."""
@@ -121,6 +125,11 @@ class BatchQueue:
                 break
         logger.info("[W5] Kolejka wyczyszczona: %d elementów", cleared)
         return cleared
+
+    def history(self, limit: int = 50) -> list:
+        """Zwraca ostatnie N operacji batch z logiem."""
+        items = list(self._log)
+        return items[-limit:]
 
     def stats(self) -> dict:
         """Zwraca statystyki kolejki."""
