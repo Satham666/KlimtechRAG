@@ -342,6 +342,7 @@
 <h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">Historia rozmow</h3>
 <div class="flex gap-2">
 <button onclick="newSession()" class="text-rag-accent hover:text-white" title="Nowa rozmowa"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<button onclick="syncSessionsFromBackend()" class="text-rag-text-muted hover:text-rag-accent ml-1" title="Synchronizuj sesje z backendem">&#9729;</button>
 <button onclick="exportChat()" class="text-rag-text-muted hover:text-white" title="Eksportuj"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
 <button class="expand-icon opacity-0 transition-opacity text-rag-text-muted hover:text-white"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
 </div>
@@ -568,6 +569,29 @@ function newSession(){
   const s=createSess(); setActive(s.id);
   renderSession(s.id); renderSidebar();
   document.getElementById('ibox').focus();
+}
+async function syncSessionsFromBackend(){
+  try{
+    var r=await F(B+'/v1/sessions?limit=100');
+    if(!r.ok){ toast('Sync nieudany: '+r.status); return; }
+    var data=await r.json();
+    if(!Array.isArray(data)||!data.length){ toast('Backend: brak sesji'); return; }
+    var merged=0;
+    data.forEach(function(bs){
+      // Sprawdź czy sesja z tym backendId już istnieje lokalnie
+      var existing=sessions.find(function(s){ return s.backendId===bs.id; });
+      if(!existing){
+        // Nowa sesja z backendu — dodaj do localStorage
+        var ns={id:'sess_be_'+bs.id, title:bs.title||'Sesja z backendu', ts:new Date(bs.updated_at).getTime()||Date.now(), messages:[], backendId:bs.id};
+        sessions.push(ns);
+        merged++;
+      }
+    });
+    sessions.sort(function(a,b){return b.ts-a.ts;});
+    saveSessions();
+    renderSidebar();
+    toast('Sync: +'+merged+' nowych sesji z backendu');
+  }catch(e){ toast('Sync error: '+e.message); }
 }
 function delSess(e,id){
   e.stopPropagation(); sessions=sessions.filter(s=>s.id!==id); saveSessions();
