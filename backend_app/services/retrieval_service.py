@@ -77,12 +77,18 @@ def retrieve_rag(
             for doc in raw_docs
         ]
 
-        # Hybrid merge: BM25 + dense → top_k
-        docs = hybrid_merge(raw_docs, dense_scores, query, top_k=top_k)
+        # Hybrid merge: BM25 + dense → top_k*4 (przed rerankiem)
+        pre_rerank_k = top_k * 4
+        docs_pre = hybrid_merge(raw_docs, dense_scores, query, top_k=pre_rerank_k)
+
+        # B3 Reranking: cross-encoder → final top_k
+        from .reranker_service import rerank
+        docs = rerank(query, docs_pre, top_k=top_k)
+
         sources = [doc.meta.get("source", "unknown") for doc in docs]
         logger.info(
-            "[RAG] %d dokumentów po hybrid merge (fetch=%d): %s",
-            len(docs), len(raw_docs), ", ".join(sources),
+            "[RAG] %d dokumentów po hybrid+rerank (fetch=%d, pre_rerank=%d): %s",
+            len(docs), len(raw_docs), len(docs_pre), ", ".join(sources),
             extra={"request_id": request_id},
         )
         return docs, sources
