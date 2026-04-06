@@ -172,21 +172,32 @@ async def handle_chat_completions_stream(
     rag_docs: List[HaystackDocument] = []
     web_doc = None
 
+    sources: List[str] = []
+
     if use_rag:
-        rag_docs, _ = retrieve_rag(
+        rag_docs, rag_sources = retrieve_rag(
             user_message, top_k=top_k,
             embedding_model=embedding_model,
             request_id=request_id,
         )
+        sources.extend(rag_sources)
 
     if web_search:
-        web_doc, _ = retrieve_web(user_message, request_id=request_id)
+        web_doc, web_sources = retrieve_web(user_message, request_id=request_id)
+        sources.extend(web_sources)
 
     context_text = merge_context(rag_docs, web_doc)
     full_prompt = build_rag_prompt(user_message, context_text)
 
     async for chunk in stream_llm_response(full_prompt, model=model, request_id=request_id):
         yield chunk
+
+    # F2: Wyślij sources jako ostatni event SSE (po [DONE])
+    if sources:
+        import json as _json
+        # Deduplikacja i limit 10 źródeł
+        unique_sources = list(dict.fromkeys(sources))[:10]
+        yield "data: " + _json.dumps({"type": "sources", "sources": unique_sources}) + "\n\n"
 
 
 def handle_code_query(

@@ -292,6 +292,21 @@
 </div>
 </article>
 </div>
+<!-- F3: PANEL DOKUMENTOW RAG -->
+<article class="bg-rag-card border border-gray-800 rounded-lg p-4 flex flex-col" data-purpose="rag-docs-panel">
+<div class="flex justify-between items-center mb-3">
+<h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">&#128196; Dokumenty RAG</h3>
+<div class="flex gap-2 items-center">
+<select id="ragDocFilter" onchange="loadRagDocs()" class="text-[10px] bg-rag-bg border border-gray-700 rounded px-1 py-0.5 text-rag-text-muted">
+<option value="">Wszystkie</option><option value="indexed">Zaindeksowane</option><option value="pending">Oczekujace</option><option value="error">Bledy</option>
+</select>
+<button onclick="loadRagDocs()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
+</div>
+</div>
+<div id="ragDocsList" class="overflow-y-auto custom-scrollbar space-y-1 pr-1" style="max-height:160px">
+<div class="text-[11px] text-rag-text-muted text-center py-4">Kliknij odswierz...</div>
+</div>
+</article>
 <!-- Bottom Section Grid: Indeksowanie + Historia Rozmow -->
 <div class="mt-auto grid grid-cols-2 gap-4">
 <!-- INDEKSOWANIE RAG -->
@@ -895,6 +910,42 @@ async function loadStats(){
 }
 
 // ── FILES ─────────────────────────────────────────────────────
+// F3: Panel dokumentow RAG — loadRagDocs() + deleteRagDoc()
+async function loadRagDocs(){
+  var el=document.getElementById('ragDocsList');
+  var status=document.getElementById('ragDocFilter').value;
+  var url=B+'/v1/ingest/list?limit=50'+(status?'&status='+encodeURIComponent(status):'');
+  try{
+    var r=await F(url); if(!r.ok)throw 0;
+    var json=await r.json();
+    var list=Array.isArray(json)?json:(json.data??[]);
+    if(!list.length){el.innerHTML='<div class="text-[11px] text-rag-text-muted text-center py-4">Brak dokumentow</div>';return;}
+    el.innerHTML=list.map(function(f){
+      var statusCls=f.status==='indexed'?'text-rag-accent':f.status==='error'?'text-red-400':'text-yellow-400';
+      var statusIcon=f.status==='indexed'?'&#10003;':f.status==='error'?'!':'&#8987;';
+      var chunks=f.chunks_count||0;
+      var kb=f.size_kb?f.size_kb+'KB':'-';
+      var docId=f.doc_id||f.source||'';
+      return '<div class="flex items-center justify-between p-1.5 hover:bg-white/5 rounded transition-colors text-[11px] gap-1">'+
+        '<span class="truncate text-gray-300 flex-1" title="'+esc(docId)+' | '+chunks+' chunks | '+kb+'">&#128196; '+esc(docId.slice(0,35))+'</span>'+
+        '<span class="text-[10px] text-rag-text-muted shrink-0">'+chunks+'ch</span>'+
+        '<span class="'+statusCls+' shrink-0 w-4 text-center">'+statusIcon+'</span>'+
+        '<button onclick="deleteRagDoc(\''+esc(docId)+'\')" class="shrink-0 text-[10px] text-red-400 hover:text-red-300 px-1 rounded hover:bg-red-400/10 transition-colors" title="Usun z RAG">&#10005;</button>'+
+        '</div>';
+    }).join('');
+  }catch(e){el.innerHTML='<div class="text-[11px] text-rag-text-muted text-center py-4">Blad ladowania</div>';}
+}
+
+async function deleteRagDoc(docId){
+  if(!confirm('Usunac "'+docId+'" z RAG?'))return;
+  try{
+    var r=await F(B+'/v1/ingest/'+encodeURIComponent(docId),{method:'DELETE'});
+    var json=await r.json();
+    if(json.status==='ok'){toast('Usunieto: '+docId); loadRagDocs(); loadStats(); loadFiles();}
+    else{toast('Blad usuwania'); }
+  }catch(e){toast('Blad: '+e.message);}
+}
+
 async function loadFiles(){
   const el=document.getElementById('fileList');
   try{
@@ -1034,6 +1085,7 @@ async function send(){
     const reader=r.body.getReader();
     const decoder=new TextDecoder();
     var accumulated='';
+    var streamSources=[];
 
     while(true){
       const {done,value}=await reader.read();
@@ -1046,6 +1098,11 @@ async function send(){
         if(line.startsWith('data: ')){
           try{
             var json=JSON.parse(line.slice(6));
+            // F2: event ze zrodlami
+            if(json.type==='sources' && json.sources){
+              streamSources=json.sources;
+              continue;
+            }
             var delta=json.choices?.[0]?.delta?.content;
             if(delta){
               accumulated+=delta;
@@ -1057,9 +1114,17 @@ async function send(){
       }
     }
 
+    // F2: Dodaj źródła pod bańką AI
+    if(streamSources.length>0){
+      var srcDiv=document.createElement('div');
+      srcDiv.className='mt-2 pt-2 border-t border-gray-700 text-[10px] text-rag-text-muted';
+      srcDiv.innerHTML='<span class="text-rag-accent">&#128206; '+streamSources.length+'</span> ' + streamSources.map(function(s){return '<span class="bg-rag-bg px-1 rounded cursor-pointer hover:text-rag-accent" title="'+s+'">'+s.slice(0,40)+(s.length>40?'...':'')+'</span>';}).join(' ');
+      bubbleEl.appendChild(srcDiv);
+    }
+
     document.getElementById('sendBtn').disabled=false;
     const finalAnswer=accumulated||'Brak odpowiedzi';
-    sess.messages.push({role:'ai',content:finalAnswer,sources:null,ts:aiTs});
+    sess.messages.push({role:'ai',content:finalAnswer,sources:streamSources.length?streamSources:null,ts:aiTs});
     saveSessions(); renderSidebar();
 
   }catch(e){
