@@ -2,6 +2,7 @@ import logging
 
 import requests as _requests
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from haystack_integrations.components.retrievers.qdrant import QdrantEmbeddingRetriever
 
 from ..config import settings
@@ -16,7 +17,7 @@ from ..models import (
 )
 from ..services import doc_store, get_text_embedder
 from ..services.cache_service import cache_size, clear_cache, CACHE_TTL
-from ..services.chat_service import handle_chat_completions, handle_code_query, handle_query
+from ..services.chat_service import handle_chat_completions, handle_chat_completions_stream, handle_code_query, handle_query
 from ..utils.rate_limit import apply_rate_limit, get_client_id
 from ..utils.dependencies import require_api_key, get_request_id
 from ..monitoring import log_stats
@@ -146,6 +147,25 @@ async def openai_chat_completions(
     embedding_model = req.headers.get(
         "X-Embedding-Model", settings.embedding_model
     ).strip()
+
+    # D1: SSE streaming — branch na request.stream
+    if request.stream:
+        return StreamingResponse(
+            handle_chat_completions_stream(
+                user_message=user_message,
+                use_rag=request.use_rag,
+                web_search=request.web_search,
+                top_k=request.top_k,
+                embedding_model=embedding_model,
+                model=request.model,
+                request_id=request_id,
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",  # wyłącza buforowanie nginx
+            },
+        )
 
     try:
         answer, sources = handle_chat_completions(
