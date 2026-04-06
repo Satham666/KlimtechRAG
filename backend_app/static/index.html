@@ -645,7 +645,7 @@ function renderSidebar(){
     return;
   }
   el.innerHTML=sessions.map(s=>`
-    <div class="flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${s.id===activeId?'bg-rag-accent/10 border border-rag-accent/20':'bg-rag-bg/50 border border-transparent hover:bg-white/5'}" onclick="switchSess('${s.id}')">
+    <div class="flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${s.id===activeId?'bg-rag-accent/10 border border-rag-accent/20':'bg-rag-bg/50 border border-transparent hover:bg-white/5'}" onclick="switchSess('${s.id}')" title="Utworzono: ${s.ts?fmtDate(s.ts):'?'} | Wiadomości: ${s.messages.length}">
       <div class="w-8 h-8 rounded-full bg-rag-accent/20 flex items-center justify-center text-rag-accent text-xs shrink-0">${s.messages.length?'&#128172;':'&#10024;'}</div>
       <div class="flex-1 overflow-hidden">
         <div class="text-[11px] font-bold truncate" ondblclick="renameSess(event,'${s.id}')" title="Dwuklik = zmień nazwę">${esc(s.title)}</div>
@@ -692,13 +692,14 @@ async function importSessionFromFile(input){
   reader.onload=async function(e){
     try{
       var data=JSON.parse(e.target.result);
-      var body={title:data.title||file.name.replace('.json',''),messages:data.messages||[]};
+      if(!data.messages||!Array.isArray(data.messages)||!data.messages.length){ alert('Plik nie zawiera wiadomości'); return; }
+      var body={title:data.title||file.name.replace('.json',''),messages:data.messages};
       var r=await F(B+'/v1/sessions/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       if(!r.ok){ var err=await r.json(); alert('Błąd importu: '+(err.detail||r.status)); return; }
       var sess=await r.json();
       alert('Zaimportowano sesję: '+(sess.title||sess.id));
       await syncSessionsFromBackend();
-    }catch(ex){ alert('Błąd: '+ex.message); }
+    }catch(ex){ alert('Plik nie jest poprawnym JSON: '+ex.message); }
   };
   reader.readAsText(file);
   input.value='';
