@@ -254,6 +254,43 @@ fi
 
 
 # ════════════════════════════════════════
+section "7c. SPRINT 7 — NOWE PLIKI I SKRYPTY"
+# ════════════════════════════════════════
+
+S7_FILES=(
+  "scripts/backup.sh"
+  "scripts/restore.sh"
+  "PROJEKT_OPIS.md"
+)
+
+for f in "${S7_FILES[@]}"; do
+  if [ -f "$PROJECT_DIR/$f" ]; then
+    pass "Sprint 7 plik istnieje: $f"
+  else
+    warn "Sprint 7 plik BRAKUJE: $f"
+  fi
+done
+
+# Sprawdź czy backup.sh jest wykonywalny
+if [ -x "$PROJECT_DIR/scripts/backup.sh" ]; then
+    pass "backup.sh jest wykonywalny"
+else
+    warn "backup.sh nie jest wykonywalny (chmod +x scripts/backup.sh)"
+fi
+
+# Sprawdź składnię skryptów
+for script in backup.sh restore.sh; do
+  if [ -f "$PROJECT_DIR/scripts/$script" ]; then
+    if bash -n "$PROJECT_DIR/scripts/$script" 2>/dev/null; then
+      pass "$script — składnia bash OK"
+    else
+      fail "$script — błąd składni bash"
+    fi
+  fi
+done
+
+
+# ════════════════════════════════════════
 section "7. PORTY (lokalne)"
 # ════════════════════════════════════════
 
