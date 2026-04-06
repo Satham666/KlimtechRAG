@@ -520,3 +520,29 @@ async def vlm_status():
         return {"vlm_running": r.status_code == 200, "port": VLM_PORT}
     except Exception:
         return {"vlm_running": False, "port": 8083}
+
+
+# ---------------------------------------------------------------------------
+# GET /ingest/active — lista aktywnych zadań ingestowania (D2 monitoring)
+# ---------------------------------------------------------------------------
+
+@router.get("/ingest/active")
+async def list_active_ingest_tasks(_: str = Depends(require_api_key)):
+    """Zwraca listę aktywnych zadań ingestowania z ProgressTracker."""
+    import time as _time
+    from ..services.progress_service import get_tracker
+    tracker = get_tracker()
+    tasks = []
+    for task_id, task in list(tracker._tasks.items()):
+        tasks.append({
+            "task_id": task_id,
+            "filename": task.filename,
+            "done": task.done,
+            "age_seconds": int(_time.monotonic() - task.created_at),
+        })
+    running = [t for t in tasks if not t["done"]]
+    return {
+        "tasks": tasks,
+        "running": len(running),
+        "total": len(tasks),
+    }
