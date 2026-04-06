@@ -395,6 +395,7 @@
 <div class="text-center text-[10px] text-rag-text-muted uppercase tracking-widest">
           Enter -- wyslij / Shift+Enter -- nowa linia
         </div>
+<div class="text-[9px] text-rag-text-muted text-right px-6 pb-1 opacity-50">Ctrl+K — focus &nbsp;|&nbsp; Ctrl+N — nowa sesja &nbsp;|&nbsp; Esc — zamknij modal</div>
 <div id="ragModeIndicator" class="text-[9px] font-bold text-rag-green flex items-center gap-1 uppercase tracking-wider" style="display:none">
 <span>&#128206;</span> RAG
         </div>
@@ -524,6 +525,25 @@ document.addEventListener('DOMContentLoaded',()=>{
     this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,140)+'px';
   });
   ibox.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+  // Skróty klawiszowe globalne
+  document.addEventListener('keydown',function(e){
+    // Ctrl+K lub / — focus na input czatu
+    if((e.ctrlKey&&e.key==='k')||(e.key==='/'&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='TEXTAREA')){
+      e.preventDefault();
+      var ib=document.getElementById('ibox');
+      if(ib){ib.focus();ib.select();}
+    }
+    // Ctrl+N — nowa sesja
+    if(e.ctrlKey&&e.key==='n'&&!e.shiftKey){
+      e.preventDefault();
+      newSession();
+    }
+    // Escape — zamknij modalne okno jeśli otwarte
+    if(e.key==='Escape'){
+      var modal=document.getElementById('modalBg');
+      if(modal&&modal.classList.contains('show')) closeModal();
+    }
+  });
 });
 
 // ── SESSIONS RAIL ────────────────────────────────────────────
