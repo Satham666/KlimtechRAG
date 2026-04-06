@@ -413,6 +413,7 @@
 <div class="bg-rag-sidebar px-4 h-8 border-b border-gray-800 flex items-center justify-between shrink-0">
 <div class="flex items-center gap-3">
 <span class="text-[10px] font-bold uppercase text-rag-text-muted tracking-[0.2em]">Terminal Systemowy (POSTEP)</span>
+<span id="activeIngestBadge" class="hidden ml-2 text-[10px] bg-rag-accent/20 text-rag-accent px-1.5 py-0.5 rounded-full">0</span>
 <div class="flex gap-1.5 items-center ml-4">
 <span class="w-2 h-2 rounded-full bg-rag-accent animate-pulse"></span>
 <span class="text-[9px] text-rag-accent/80 font-mono">LIVE_FEED</span>
@@ -842,6 +843,22 @@ function addProgressLine(line){
 function startProgressPoll(){
   if(progressTimer) clearInterval(progressTimer);
   progressTimer=setInterval(pollProgress, 600);
+  setInterval(pollActiveIngest, 5000);
+}
+async function pollActiveIngest(){
+  try{
+    var r=await F(B+'/ingest/active');
+    if(!r.ok) return;
+    var d=await r.json();
+    var badge=document.getElementById('activeIngestBadge');
+    if(!badge) return;
+    if(d.running>0){
+      badge.textContent=d.running+' aktywnych';
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }catch(e){}
 }
 async function pollProgress(){
   try{
