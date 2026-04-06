@@ -267,3 +267,23 @@ async def _dispatch(body: dict) -> dict | None:
     except Exception as e:
         logger.exception("[MCP] Internal error for method %s: %s", method, e)
         return _err(req_id, -32603, f"Internal error: {e}")
+
+
+# ---------------------------------------------------------------------------
+# GET /mcp/tools — czysty REST (bez JSON-RPC), do podglądu i dokumentacji
+# ---------------------------------------------------------------------------
+
+@router.get("/tools")
+async def mcp_tools_rest(_: str = Depends(require_api_key)):
+    """Zwraca listę narzędzi MCP w formacie REST (bez JSON-RPC wrappera).
+
+    Przydatne do dokumentacji i testów bez klienta MCP.
+    """
+    return {
+        "protocol_version": _MCP_VERSION,
+        "server": _SERVER_INFO,
+        "tools": _TOOLS,
+        "total": len(_TOOLS),
+        "endpoint": "/mcp",
+        "usage": "POST /mcp z body: {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"rag_query\",\"arguments\":{\"query\":\"...\"}}}",
+    }
