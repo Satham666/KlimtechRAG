@@ -357,8 +357,13 @@
 </div>
 </div>
 <div id="sessionsStatsEl" class="text-[10px] text-rag-text-muted mb-1 px-1"></div>
-<div class="flex items-center gap-1 mb-1">
-  <input id="sessSearchInput" type="text" placeholder="Szukaj sesji..." oninput="onSessSearch(this.value)" class="flex-1 text-[11px] bg-rag-bg border border-gray-700 rounded px-2 py-1 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-rag-accent"/>
+<div class="flex items-center justify-between mb-1">
+  <span class="text-[10px] text-rag-text-muted uppercase tracking-wider">Sesje</span>
+  <label title="Importuj sesję z pliku JSON" class="text-[10px] text-rag-text-muted hover:text-white cursor-pointer px-1">
+    &#8613; import
+    <input type="file" accept=".json" class="hidden" onchange="importSessionFromFile(this)"/>
+  </label>
+</div> type="text" placeholder="Szukaj sesji..." oninput="onSessSearch(this.value)" class="flex-1 text-[11px] bg-rag-bg border border-gray-700 rounded px-2 py-1 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-rag-accent"/>
   <button onclick="sessSearchClear()" class="text-[10px] text-rag-text-muted hover:text-white px-1" title="Wyczyść">✕</button>
 </div>
 <div id="sessionsEl" class="overflow-y-auto custom-scrollbar flex-1 space-y-1">
@@ -606,6 +611,24 @@ function sessSearchClear(){
   var inp=document.getElementById('sessSearchInput');
   if(inp) inp.value='';
   renderSidebar();
+}
+async function importSessionFromFile(input){
+  if(!input.files||!input.files[0]) return;
+  var file=input.files[0];
+  var reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      var data=JSON.parse(e.target.result);
+      var body={title:data.title||file.name.replace('.json',''),messages:data.messages||[]};
+      var r=await F(B+'/v1/sessions/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(!r.ok){ var err=await r.json(); alert('Błąd importu: '+(err.detail||r.status)); return; }
+      var sess=await r.json();
+      alert('Zaimportowano sesję: '+(sess.title||sess.id));
+      await syncSessionsFromBackend();
+    }catch(ex){ alert('Błąd: '+ex.message); }
+  };
+  reader.readAsText(file);
+  input.value='';
 }
 function switchSess(id){ if(id===activeId)return; setActive(id); renderSession(id); renderSidebar(); }
 function renderSession(id){
