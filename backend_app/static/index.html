@@ -987,15 +987,50 @@ async function handleFiles(files){
   const progW=document.getElementById('progWrap');
   const progF=document.getElementById('progFill');
   const progT=document.getElementById('progTxt');
-  progW.classList.add('show'); let done=0;
-  for(const file of files){
-    progT.textContent=`Wysylam: ${file.name}`;
-    const fd=new FormData(); fd.append('file',file);
-    try{ await F(`${B}/ingest`,{method:'POST',body:fd}); }catch{}
-    progF.style.width=(++done/files.length*100)+'%';
+  progW.classList.add('show'); var done=0;
+  for(var fi=0;fi<files.length;fi++){
+    var file=files[fi];
+    progT.textContent='Wysylam: '+file.name;
+    var fd=new FormData(); fd.append('file',file);
+    try{
+      // D2: uzyj /ingest/start zeby dostac task_id do SSE progress
+      var r=await F(B+'/ingest/start',{method:'POST',body:fd});
+      if(r.ok){
+        var d=await r.json();
+        var taskId=d.task_id||null;
+        addProgressLine('Ingest: '+file.name+(taskId?' ['+taskId.slice(0,8)+']':''));
+        if(taskId){ await _watchIngestProgress(taskId, file.name); }
+      } else {
+        // fallback: stary endpoint
+        await F(B+'/ingest',{method:'POST',body:new FormData(fd)}).catch(function(){});
+        addProgressLine('Ingest (fallback): '+file.name);
+      }
+    }catch(e){
+      addProgressLine('Blad uploadu: '+file.name+' — '+e.message);
+    }
+    progF.style.width=((++done/files.length)*100)+'%';
   }
-  progT.textContent=`Gotowe (${done} plikow)`;
-  setTimeout(()=>{progW.classList.remove('show');progF.style.width='0';loadStats();loadFiles();},2500);
+  progT.textContent='Gotowe ('+done+' plikow)';
+  setTimeout(function(){progW.classList.remove('show');progF.style.width='0';loadStats();loadFiles();},2500);
+}
+
+function _watchIngestProgress(taskId, filename){
+  return new Promise(function(resolve){
+    var es=new EventSource(B+'/ingest/progress/'+taskId+'?api_key='+API_KEY);
+    var timeout=setTimeout(function(){es.close();resolve();},60000);
+    es.onmessage=function(ev){
+      if(!ev.data||ev.data==='[DONE]'){clearTimeout(timeout);es.close();resolve();return;}
+      try{
+        var e=JSON.parse(ev.data);
+        if(e.stage){
+          var pct=e.pct?(' '+e.pct+'%'):'';
+          addProgressLine(filename+' ['+e.stage+']'+pct+' '+( e.message||''));
+        }
+        if(e.stage==='done'||e.stage==='error'){clearTimeout(timeout);es.close();resolve();}
+      }catch(ex){}
+    };
+    es.onerror=function(){clearTimeout(timeout);es.close();resolve();};
+  });
 }
 
 // ── EMBEDDING ─────────────────────────────────────────────────
