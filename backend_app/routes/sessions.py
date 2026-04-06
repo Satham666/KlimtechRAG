@@ -1,6 +1,9 @@
 import logging
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from ..models.schemas import (
     SessionCreateRequest,
@@ -9,6 +12,7 @@ from ..models.schemas import (
     SessionResponse,
 )
 from ..services.session_service import (
+    add_message,
     create_session,
     delete_session,
     get_messages,
@@ -92,3 +96,23 @@ async def get_session_messages(
         data=[SessionMessage(**m) for m in messages],
         total=len(messages),
     )
+
+
+class MessageCreateRequest(BaseModel):
+    role: str   # "user" | "assistant"
+    content: str
+
+
+@router.post("/{session_id}/messages", status_code=201)
+async def add_message_endpoint(
+    session_id: str,
+    body: MessageCreateRequest,
+    _: str = Depends(require_api_key),
+):
+    """Dodaje wiadomość do sesji (używane przez UI po zakończeniu streamu)."""
+    from ..services.session_service import add_message, get_session
+    if not get_session(session_id):
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+    if body.role not in ("user", "assistant", "system"):
+        raise HTTPException(status_code=400, detail="role must be user|assistant|system")
+    return add_message(session_id, body.role, body.content)

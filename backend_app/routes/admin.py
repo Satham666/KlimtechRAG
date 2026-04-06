@@ -42,11 +42,29 @@ async def health_check():
 
     llm_ok = True
 
+    # F4: liczba sesji
+    sessions_count = 0
+    try:
+        from ..services.session_service import list_sessions
+        sessions_count = len(list_sessions(limit=1000))
+    except Exception:
+        pass
+
+    # W5: batch queue stats
+    batch_stats = {}
+    try:
+        from ..services.batch_service import get_batch_queue
+        batch_stats = get_batch_queue().stats()
+    except Exception:
+        pass
+
     status = qdrant_ok and llm_ok
     return {
         "status": "ok" if status else "degraded",
         "qdrant": qdrant_ok,
         "llm": llm_ok,
+        "sessions": sessions_count,
+        "batch": batch_stats,
     }
 
 

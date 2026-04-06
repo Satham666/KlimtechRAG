@@ -76,6 +76,9 @@ async def lifespan(app: FastAPI):
     if WATCHER_ENABLED:
         _watcher_task = asyncio.create_task(watch_loop())
         logger.info("[H2] Watcher task uruchomiony")
+    # W5: batch worker start
+    from .services.batch_service import get_batch_queue
+    await get_batch_queue().start_worker()
     yield
     # --- shutdown ---
     if _watcher_task and not _watcher_task.done():
@@ -84,6 +87,8 @@ async def lifespan(app: FastAPI):
             await _watcher_task
         except asyncio.CancelledError:
             pass
+    # W5: batch worker stop
+    await get_batch_queue().stop_worker()
     logger.info("KlimtechRAG Backend shutting down")
 
 

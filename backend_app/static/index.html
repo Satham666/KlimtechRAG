@@ -489,8 +489,14 @@ function getSess(id){ return sessions.find(s=>s.id===id)||null; }
 function getActive(){ return getSess(activeId); }
 function createSess(title){
   const id='sess_'+Date.now();
-  const s={id, title:title||'Nowa rozmowa', ts:Date.now(), messages:[]};
-  sessions.unshift(s); saveSessions(); return s;
+  const s={id, title:title||'Nowa rozmowa', ts:Date.now(), messages:[], backendId:null};
+  sessions.unshift(s); saveSessions();
+  // F4: utwórz sesję w backendzie (fire-and-forget)
+  F(B+'/v1/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:title||''})})
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(data){if(data&&data.id){s.backendId=data.id;saveSessions();}})
+    .catch(function(){});
+  return s;
 }
 function setActive(id){ activeId=id; localStorage.setItem(LS_ACTIVE,id); }
 
@@ -1126,6 +1132,14 @@ async function send(){
     const finalAnswer=accumulated||'Brak odpowiedzi';
     sess.messages.push({role:'ai',content:finalAnswer,sources:streamSources.length?streamSources:null,ts:aiTs});
     saveSessions(); renderSidebar();
+    // F4: zapisz wiadomości do backendu jeśli sesja ma backendId
+    if(sess.backendId){
+      var bid=sess.backendId;
+      var uMsg=JSON.stringify({role:'user',content:text});
+      var aMsg=JSON.stringify({role:'assistant',content:finalAnswer});
+      F(B+'/v1/sessions/'+bid+'/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:uMsg}).catch(function(){});
+      F(B+'/v1/sessions/'+bid+'/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:aMsg}).catch(function(){});
+    }
 
   }catch(e){
     document.getElementById('typing').classList.remove('show');
