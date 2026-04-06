@@ -511,3 +511,107 @@ async def watcher_status(_: str = Depends(require_api_key)):
         "env_flag": "KLIMTECH_WATCHER_ENABLED",
         "env_interval": "KLIMTECH_WATCHER_INTERVAL",
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/config — bezpieczny podgląd ustawień (bez kluczy API)
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/config")
+async def get_config(_: str = Depends(require_api_key)):
+    """Zwraca nieczułe ustawienia serwera (bez kluczy API, haseł).
+
+    Przydatne do debugowania konfiguracji deploymentu.
+    """
+    from ..config import settings
+    from ..services.watcher_service import WATCHER_ENABLED, WATCHER_INTERVAL
+    from ..services.verification_service import VERIFICATION_ENABLED
+
+    return {
+        "base_path": settings.base_path,
+        "data_path": settings.data_path,
+        "llm_base_url": str(settings.llm_base_url),
+        "llm_model_name": settings.llm_model_name or "(auto-detect)",
+        "embedding_model": settings.embedding_model,
+        "embedding_device": settings.embedding_device,
+        "qdrant_url": str(settings.qdrant_url),
+        "qdrant_collection": settings.qdrant_collection,
+        "bm25_weight": settings.bm25_weight,
+        "retrieval_top_k": settings.retrieval_top_k_fetch,
+        "max_file_size_mb": settings.max_file_size_bytes // (1024 * 1024),
+        "rate_limit": {
+            "window_seconds": settings.rate_limit_window_seconds,
+            "max_requests": settings.rate_limit_max_requests,
+        },
+        "watcher_enabled": WATCHER_ENABLED,
+        "watcher_interval_seconds": WATCHER_INTERVAL,
+        "verification_enabled": VERIFICATION_ENABLED,
+        "auth_enabled": settings.api_key is not None,
+        "log_level": settings.log_level,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/ingest/errors — lista plików z błędem indeksowania
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/ingest/errors")
+async def ingest_errors(
+    limit: int = 50,
+    _: str = Depends(require_api_key),
+):
+    """Zwraca pliki ze statusem 'error' z pełną treścią komunikatu błędu.
+
+    ?limit=50  — max liczba plików (max 200)
+    """
+    limit = min(limit, 200)
+    try:
+        with _get_registry_connection() as conn:
+            rows = conn.execute(
+                "SELECT path, filename, error_message, updated_at, chunks_count "
+                "FROM files WHERE status = 'error' "
+                "ORDER BY updated_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "total": len(rows),
+        "files": [
+            {
+                "path": r["path"],
+                "filename": r["filename"],
+                "error": r["error_message"],
+                "updated_at": r["updated_at"],
+                "chunks_count": r["chunks_count"] or 0,
+            }
+            for r in rows
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/ingest/clear-errors — reset statusu 'error' → 'pending'
+# ---------------------------------------------------------------------------
+
+@router.post("/v1/ingest/clear-errors")
+async def clear_ingest_errors(_: str = Depends(require_api_key)):
+    """Resetuje status wszystkich plików z 'error' na 'pending'.
+
+    Przydatne gdy błędy są przemijające (np. brak VRAM) i chcemy
+    zresetować pliki bez ponownego kolejkowania.
+    """
+    try:
+        with _get_registry_connection() as conn:
+            result = conn.execute(
+                "UPDATE files SET status = 'pending', error_message = NULL, "
+                "updated_at = CURRENT_TIMESTAMP WHERE status = 'error'"
+            )
+            conn.commit()
+            affected = result.rowcount
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    logger.info("[clear-errors] Zresetowano %d plików error → pending", affected)
+    return {"reset": affected, "new_status": "pending"}
