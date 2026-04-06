@@ -21,6 +21,12 @@ from ..services.chat_service import handle_chat_completions, handle_chat_complet
 from ..utils.rate_limit import apply_rate_limit, get_client_id
 from ..utils.dependencies import require_api_key, get_request_id
 from ..monitoring import log_stats
+from ..services.session_service import (
+    add_message as session_add_message,
+    auto_title_from_message,
+    get_session,
+    update_session_title,
+)
 
 router = APIRouter(tags=["chat"])
 logger = logging.getLogger("klimtechrag")
@@ -176,6 +182,24 @@ async def openai_chat_completions(
             embedding_model=embedding_model,
             request_id=request_id,
         )
+
+        # F4: zapisz wiadomości do sesji jeśli podano session_id
+        if request.session_id:
+            try:
+                session = get_session(request.session_id)
+                if session:
+                    session_add_message(request.session_id, "user", user_message)
+                    session_add_message(request.session_id, "assistant", answer)
+                    # Auto-tytuł sesji z pierwszej wiadomości
+                    if not session["title"]:
+                        update_session_title(
+                            request.session_id,
+                            auto_title_from_message(user_message),
+                        )
+                    logger.debug("[F4] Zapisano wiadomości do sesji %s", request.session_id)
+            except Exception as _se:
+                logger.warning("[F4] Błąd zapisu do sesji %s: %s", request.session_id, _se)
+
         return ChatCompletionResponse(
             model=request.model,
             choices=[ChatCompletionChoice(message=ChatMessage(role="assistant", content=answer))],

@@ -1,0 +1,94 @@
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from ..models.schemas import (
+    SessionCreateRequest,
+    SessionMessage,
+    SessionMessagesResponse,
+    SessionResponse,
+)
+from ..services.session_service import (
+    create_session,
+    delete_session,
+    get_messages,
+    get_session,
+    list_sessions,
+    update_session_title,
+)
+from ..utils.dependencies import require_api_key
+
+router = APIRouter(prefix="/v1/sessions", tags=["sessions"])
+logger = logging.getLogger("klimtechrag")
+
+
+@router.get("", response_model=list[SessionResponse])
+async def list_sessions_endpoint(
+    limit: int = 50,
+    offset: int = 0,
+    _: str = Depends(require_api_key),
+):
+    """Zwraca listę sesji posortowanych od najnowszej."""
+    return list_sessions(limit=limit, offset=offset)
+
+
+@router.post("", response_model=SessionResponse, status_code=201)
+async def create_session_endpoint(
+    body: SessionCreateRequest,
+    _: str = Depends(require_api_key),
+):
+    """Tworzy nową sesję. Zwraca {id, title, created_at, updated_at}."""
+    return create_session(title=body.title)
+
+
+@router.get("/{session_id}", response_model=SessionResponse)
+async def get_session_endpoint(
+    session_id: str,
+    _: str = Depends(require_api_key),
+):
+    """Zwraca metadane sesji."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+    return session
+
+
+@router.patch("/{session_id}", response_model=SessionResponse)
+async def rename_session_endpoint(
+    session_id: str,
+    body: SessionCreateRequest,
+    _: str = Depends(require_api_key),
+):
+    """Zmienia tytuł sesji."""
+    if not update_session_title(session_id, body.title):
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+    session = get_session(session_id)
+    return session
+
+
+@router.delete("/{session_id}", status_code=204)
+async def delete_session_endpoint(
+    session_id: str,
+    _: str = Depends(require_api_key),
+):
+    """Usuwa sesję wraz ze wszystkimi wiadomościami."""
+    if not delete_session(session_id):
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+
+
+@router.get("/{session_id}/messages", response_model=SessionMessagesResponse)
+async def get_session_messages(
+    session_id: str,
+    limit: int = 100,
+    offset: int = 0,
+    _: str = Depends(require_api_key),
+):
+    """Zwraca historię wiadomości sesji w kolejności chronologicznej."""
+    if not get_session(session_id):
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+    messages = get_messages(session_id, limit=limit, offset=offset)
+    return SessionMessagesResponse(
+        session_id=session_id,
+        data=[SessionMessage(**m) for m in messages],
+        total=len(messages),
+    )

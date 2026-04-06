@@ -19,6 +19,7 @@ class ChatCompletionRequest(BaseModel):
     use_rag: bool = False
     top_k: int = 5
     web_search: bool = False
+    session_id: str | None = None  # F4: opcjonalne ID sesji do zapisu historii
 
 
 class ChatCompletionChoice(BaseModel):
@@ -118,3 +119,33 @@ class IngestItem(BaseModel):
 class IngestResponse(BaseModel):
     object: str = "ingest.result"
     data: List[IngestItem]
+
+
+# ---------------------------------------------------------------------------
+# F4: Session History — persistentna historia czatu (SQLite)
+# ---------------------------------------------------------------------------
+
+class SessionCreateRequest(BaseModel):
+    title: str = ""
+
+
+class SessionResponse(BaseModel):
+    id: str
+    title: str
+    created_at: str
+    updated_at: str
+
+
+class SessionMessage(BaseModel):
+    id: int
+    session_id: str
+    role: str
+    content: str
+    created_at: str
+
+
+class SessionMessagesResponse(BaseModel):
+    object: str = "list"
+    session_id: str
+    data: List[SessionMessage]
+    total: int
