@@ -1,19 +1,21 @@
 import logging
+import os
 import secrets
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
 from fastapi.responses import JSONResponse
 
 from ..utils.dependencies import require_api_key
 from ..config import settings
 from ..services import doc_store
 from ..file_registry import (
+    get_connection as _get_registry_connection,
     init_db as init_file_registry,
-    sync_with_filesystem,
-    get_stats as get_file_stats,
     list_files,
     get_pending_files,
+    get_stats as get_file_stats,
+    sync_with_filesystem,
 )
 from ..utils.dependencies import require_api_key
 
@@ -171,4 +173,115 @@ async def files_pending(req: Request = None):
             }
             for f in files
         ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# E1: DELETE /v1/ingest/{doc_id} — usuwanie dokumentu z RAG
+# ---------------------------------------------------------------------------
+
+@router.delete("/v1/ingest/{doc_id}")
+async def delete_ingest(
+    doc_id: str,
+    delete_file: bool = Query(False, description="Usuń też plik źródłowy"),
+    _: str = Depends(require_api_key),
+):
+    """Usuwa dokument z Qdrant (po meta.source) i file_registry.
+
+    ?delete_file=true → usuwa też plik fizyczny.
+    """
+    if not doc_id or not doc_id.strip():
+        raise HTTPException(status_code=422, detail="doc_id nie może być pusty")
+
+    deleted_qdrant = 0
+    deleted_registry = 0
+    deleted_file = False
+    file_path_to_delete: Optional[str] = None
+
+    # Usuń z Qdrant (filtr po meta.source == doc_id)
+    try:
+        doc_store.delete_by_filter(
+            {"field": "meta.source", "operator": "==", "value": doc_id}
+        )
+        deleted_qdrant = 1
+        logger.info("[E1] Usunięto z Qdrant: %s", doc_id)
+    except Exception as e:
+        logger.warning("[E1] Błąd Qdrant delete: %s", e)
+
+    # Usuń z file_registry
+    try:
+        with _get_registry_connection() as conn:
+            row = conn.execute(
+                "SELECT path FROM files WHERE filename = ? LIMIT 1", (doc_id,)
+            ).fetchone()
+            if row:
+                file_path_to_delete = row["path"]
+            result = conn.execute("DELETE FROM files WHERE filename = ?", (doc_id,))
+            deleted_registry = result.rowcount
+            conn.commit()
+        logger.info("[E1] Usunięto z registry: %s (%d wierszy)", doc_id, deleted_registry)
+    except Exception as e:
+        logger.warning("[E1] Błąd registry delete: %s", e)
+
+    # Opcjonalnie usuń plik fizyczny
+    if delete_file and file_path_to_delete and os.path.isfile(file_path_to_delete):
+        try:
+            os.remove(file_path_to_delete)
+            deleted_file = True
+            logger.info("[E1] Usunięto plik: %s", file_path_to_delete)
+        except Exception as e:
+            logger.warning("[E1] Błąd usuwania pliku: %s", e)
+
+    return {
+        "status": "ok",
+        "doc_id": doc_id,
+        "deleted_from_qdrant": deleted_qdrant > 0,
+        "deleted_from_registry": deleted_registry > 0,
+        "file_deleted": deleted_file,
+    }
+
+
+# ---------------------------------------------------------------------------
+# E2: GET /v1/ingest/list — lista zaindeksowanych dokumentów
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/ingest/list")
+async def ingest_list(
+    status: Optional[str] = Query(None, description="indexed | pending | error | failed"),
+    source: Optional[str] = Query(None, description="Nazwa pliku (częściowe dopasowanie)"),
+    extension: Optional[str] = Query(None, description="Rozszerzenie, np. .pdf"),
+    limit: int = Query(100, ge=1, le=1000),
+    _: str = Depends(require_api_key),
+):
+    """Zwraca listę dokumentów z file_registry z metadanymi.
+
+    Zgodny z formatem OpenAI-style.
+    """
+    files = list_files(extension=extension, status=status, limit=limit)
+
+    # Filtr po source (częściowe dopasowanie nazwy)
+    if source:
+        source_lower = source.lower()
+        files = [f for f in files if source_lower in f.filename.lower()]
+
+    data = [
+        {
+            "doc_id": f.filename,
+            "source": f.filename,
+            "path": f.path,
+            "status": f.status,
+            "chunks_count": f.chunks_count,
+            "extension": f.extension,
+            "size_kb": round(f.size_bytes / 1024, 1),
+            "indexed_at": f.indexed_at,
+            "content_hash": f.content_hash or "",
+            "collection": "klimtech_docs",
+        }
+        for f in files
+    ]
+
+    return {
+        "object": "list",
+        "total": len(data),
+        "data": data,
     }
