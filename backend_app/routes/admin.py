@@ -405,3 +405,15 @@ async def ingest_history(
     except Exception as e:
         logger.exception("[ingest/history] błąd: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/batch/clear — czyszczenie kolejki batch (W5)
+# ---------------------------------------------------------------------------
+
+@router.post("/v1/batch/clear")
+async def batch_clear(_: str = Depends(require_api_key)):
+    """Usuwa wszystkie oczekujące elementy z kolejki batch processing."""
+    from ..services.batch_service import get_batch_queue
+    cleared = get_batch_queue().clear()
+    return {"cleared": cleared, "status": "ok"}

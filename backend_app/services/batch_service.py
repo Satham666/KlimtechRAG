@@ -109,6 +109,19 @@ class BatchQueue:
             else:
                 logger.error("[W5] Wyczerpano retries dla: %s", item.file_path)
 
+    def clear(self) -> int:
+        """Czyści wszystkie oczekujące elementy z kolejki. Zwraca liczbę usuniętych."""
+        cleared = 0
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+                self._queue.task_done()
+                cleared += 1
+            except Exception:
+                break
+        logger.info("[W5] Kolejka wyczyszczona: %d elementów", cleared)
+        return cleared
+
     def stats(self) -> dict:
         """Zwraca statystyki kolejki."""
         return {
