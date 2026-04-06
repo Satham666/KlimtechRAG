@@ -6,6 +6,7 @@ Używa PyMuPDF do ekstrakcji i VLM (LFM2.5-VL) do opisu.
 import base64
 import io
 import logging
+import math
 import os
 import subprocess
 import tempfile
@@ -79,6 +80,93 @@ class ExtractedImage:
     image_type: str = "unknown"
 
 
+def classify_image_type(
+    image_data: bytes,
+    width: int,
+    height: int,
+    ext: str = "png",
+) -> str:
+    """C2: Klasyfikacja typu obrazu na podstawie heurystyki.
+
+    Uzywa: OCR text density, color variance, aspect ratio, ext.
+    Zwraca jeden z: diagram, chart, table, screenshot, photo, default.
+    """
+    try:
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(image_data))
+        pixels = img.convert("RGB")
+        img_size = width * height
+
+        text_density = 0.0
+        color_variance = 0.0
+
+        if img_size > 0 and img_size < 20_000_000:
+            sampled = pixels.resize((min(width, 200), min(height, 200)))
+            data = list(sampled.getdata())
+            total_pixels = len(data)
+
+            r_vals = [p[0] for p in data]
+            g_vals = [p[1] for p in data]
+            b_vals = [p[2] for p in data]
+            color_variance = (
+                (sum(x * x for x in r_vals) / total_pixels)
+                - (sum(r_vals) / total_pixels) ** 2
+            )
+            color_variance = max(0.0, math.sqrt(color_variance))
+
+            gray_count = sum(1 for p in data if abs(p[0] - p[1]) < 10 and abs(p[1] - p[2]) < 10)
+            bright_count = sum(1 for p in data if max(p) > 240)
+            dark_count = sum(1 for p in data if min(p) < 20)
+            text_density = (gray_count + bright_count + dark_count) / total_pixels
+
+            unique_colors = len(set(data))
+        else:
+            unique_colors = 0
+
+        aspect = width / max(height, 1)
+
+        rules: List[tuple] = []
+
+        if text_density > 0.65 and unique_colors < 64:
+            rules.append(("screenshot", 3.0))
+        elif text_density > 0.50 and unique_colors < 100:
+            rules.append(("screenshot", 2.0))
+
+        if text_density > 0.40 and unique_colors < 32 and aspect > 0.8 and aspect < 1.5:
+            rules.append(("table", 2.5))
+
+        if aspect > 1.8 or aspect < 0.55:
+            rules.append(("diagram", 2.0))
+        elif ext in ["svg", "eps"]:
+            rules.append(("diagram", 2.5))
+
+        if 0.6 < aspect < 1.6 and unique_colors < 200 and color_variance < 30:
+            rules.append(("chart", 1.5))
+
+        if text_density < 0.25 and color_variance > 50 and unique_colors > 5000:
+            rules.append(("photo", 2.0))
+
+        if ext in ["png", "svg"]:
+            for i, r in enumerate(rules):
+                if r[0] in ("photo",):
+                    rules[i] = (r[0], r[1] * 0.5)
+
+        if not rules:
+            return "photo" if unique_colors > 1000 else "diagram"
+
+        rules.sort(key=lambda x: x[1], reverse=True)
+        return rules[0][0]
+
+    except Exception as e:
+        logger.debug("[C2] classify_image_type fallback: %s", e)
+        if width > height * 2 or height > width * 2:
+            return "diagram"
+        if ext in ["png", "svg"]:
+            return "diagram"
+        return "photo"
+
+
 def extract_images_from_pdf(pdf_path: str, min_size: int = 100) -> List[ExtractedImage]:
     """Ekstrahuje obrazy z PDF."""
     images = []
@@ -107,11 +195,12 @@ def extract_images_from_pdf(pdf_path: str, min_size: int = 100) -> List[Extracte
 
                     ext = base_image.get("ext", "png")
 
-                    image_type = "photo"
-                    if width > height * 2 or height > width * 2:
-                        image_type = "diagram"
-                    if ext in ["png", "svg"]:
-                        image_type = "diagram"
+                    image_type = classify_image_type(
+                        image_data=image_data,
+                        width=width,
+                        height=height,
+                        ext=ext,
+                    )
 
                     images.append(
                         ExtractedImage(
