@@ -239,3 +239,34 @@ async def import_session(
 
     logger.info("[F4] Zaimportowano sesję: %s (%d wiadomości)", session["id"], len(body.messages))
     return session
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/sessions/{session_id}/context — kontekst dla LLM
+# ---------------------------------------------------------------------------
+
+@router.get("/{session_id}/context")
+async def session_llm_context(
+    session_id: str,
+    max_messages: int = 20,
+    _: str = Depends(require_api_key),
+):
+    """Zwraca historię sesji w formacie [{role, content}] gotowym dla LLM.
+
+    ?max_messages=20  — ile ostatnich wiadomości zwrócić (max 100)
+    """
+    from ..services.session_service import get_session, get_history_for_llm
+
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesja nie istnieje")
+
+    max_messages = min(max_messages, 100)
+    messages = get_history_for_llm(session_id, max_messages=max_messages)
+
+    return {
+        "session_id": session_id,
+        "title": session.get("title", ""),
+        "messages_count": len(messages),
+        "context": messages,
+    }
