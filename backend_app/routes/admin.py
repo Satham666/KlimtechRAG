@@ -492,6 +492,9 @@ async def retry_failed_ingest(
         else:
             skipped += 1
 
+    logger.info("[retry-failed] Dodano %d, pominięto %d plików", added, skipped)
+    return {"added": added, "skipped": skipped}
+
 
 # ---------------------------------------------------------------------------
 # GET /v1/watcher/status — status usługi watcher (H2)
