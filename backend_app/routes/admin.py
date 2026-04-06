@@ -456,3 +456,46 @@ async def batch_history(limit: int = 50, _: str = Depends(require_api_key)):
         "history": get_batch_queue().history(limit=min(limit, 100)),
         "total": len(get_batch_queue().history(limit=10000)),
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/ingest/retry-failed — ponowne kolejkowanie plików z błędem
+# ---------------------------------------------------------------------------
+
+@router.post("/v1/ingest/retry-failed")
+async def retry_failed_ingest(
+    limit: int = 10,
+    _: str = Depends(require_api_key),
+):
+    """Dodaje pliki ze statusem 'error' z powrotem do kolejki batch (priorytet HIGH).
+
+    ?limit=10  — max plików do ponowienia (max 50)
+    """
+    from ..services.batch_service import get_batch_queue, Priority
+
+    limit = min(limit, 50)
+    try:
+        with _get_registry_connection() as conn:
+            rows = conn.execute(
+                "SELECT path, filename, error_message FROM files "
+                "WHERE status = 'error' ORDER BY updated_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    queue = get_batch_queue()
+    added, skipped = 0, 0
+    for row in rows:
+        if queue.enqueue(row["path"], priority=Priority.HIGH):
+            added += 1
+        else:
+            skipped += 1
+
+    logger.info("[retry-failed] Dodano %d plików do kolejki (pominięto: %d)", added, skipped)
+    return {
+        "total_failed": len(rows),
+        "added_to_queue": added,
+        "skipped_queue_full": skipped,
+        "files": [{"filename": r["filename"], "error": r["error_message"]} for r in rows],
+    }
