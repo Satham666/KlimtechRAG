@@ -325,6 +325,15 @@
     <div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
   </div>
 </article>
+<article class="bg-rag-card border border-gray-800 rounded-lg p-4 flex flex-col gap-2">
+  <div class="flex items-center justify-between">
+    <h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">&#9881; Konfiguracja</h3>
+    <button onclick="loadServerConfig()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
+  </div>
+  <div id="serverConfigEl" class="space-y-1 text-[11px]">
+    <div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
+  </div>
+</article>
 <!-- Bottom Section Grid: Indeksowanie + Historia Rozmow -->
 <div class="mt-auto grid grid-cols-2 gap-4">
 <!-- INDEKSOWANIE RAG -->
@@ -539,7 +548,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   else if(sessions.length){ setActive(sessions[0].id); renderSession(sessions[0].id); }
   else{ const s=createSess(); setActive(s.id); showWelcome(); }
   renderSidebar();
-  loadStats(); loadFiles(); checkStatus(); loadIngestHistory(); loadMcpInfo();
+  loadStats(); loadFiles(); checkStatus(); loadIngestHistory(); loadMcpInfo(); loadServerConfig();
   loadModelList();
   startProgressPoll();
   startGpuPoll();
@@ -1144,6 +1153,34 @@ async function loadMcpInfo(){
       +'</div>';
   }catch(e){
     el.innerHTML='<div class="text-red-400 text-center py-2">MCP niedostępny</div>';
+  }
+}
+
+async function loadServerConfig(){
+  var el=document.getElementById('serverConfigEl');
+  if(!el) return;
+  try{
+    var r=await F(B+'/v1/config');
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    var rows=[
+      ['Model LLM', d.llm_model_name||'(auto)'],
+      ['Embedding', (d.embedding_model||'').split('/').pop()],
+      ['Urządzenie', d.embedding_device||'cpu'],
+      ['Kolekcja', d.qdrant_collection||''],
+      ['BM25 waga', String(d.bm25_weight||0)],
+      ['Watcher', d.watcher_enabled?'ON ('+d.watcher_interval_seconds+'s)':'OFF'],
+      ['Weryfikacja', d.verification_enabled?'ON':'OFF'],
+      ['Auth', d.auth_enabled?'ON':'OFF'],
+    ];
+    el.innerHTML='<div class="space-y-0.5">'+rows.map(function(row){
+      return '<div class="flex justify-between gap-2">'
+        +'<span class="text-rag-text-muted shrink-0">'+esc(row[0])+'</span>'
+        +'<span class="text-gray-300 truncate text-right font-mono text-[10px]" title="'+esc(row[1])+'">'+esc(row[1])+'</span>'
+        +'</div>';
+    }).join('')+'</div>';
+  }catch(e){
+    el.innerHTML='<div class="text-red-400 text-center py-2">Błąd: '+e.message+'</div>';
   }
 }
 
