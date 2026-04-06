@@ -4,7 +4,7 @@ from typing import List, Tuple
 
 from haystack import Document as HaystackDocument
 
-from .cache_service import get_cached, set_cached
+from .cache_service import get_cached, set_cached, get_semantic_cached, set_semantic_cached
 from .retrieval_service import retrieve_rag, retrieve_web
 from .prompt_service import build_rag_prompt, build_query_prompt, build_code_prompt, merge_context
 
@@ -74,6 +74,12 @@ def handle_query(
     if cached:
         return cached, True
 
+    # B6 Semantic Cache — cosine similarity matching
+    semantic_hit = get_semantic_cached(query)
+    if semantic_hit:
+        set_cached(query, semantic_hit)
+        return semantic_hit, True
+
     # Retrieve z Qdrant
     from ..services.retrieval_service import retrieve_rag as _retrieve_rag
     query_embedding = get_text_embedder().run(text=query)
@@ -97,6 +103,7 @@ def handle_query(
     answer = run_tool_loop(get_llm_component(), prompt, request_id=request_id, label="Query")
 
     set_cached(query, answer)
+    set_semantic_cached(query, answer)
     return answer, False
 
 
@@ -116,6 +123,11 @@ def handle_chat_completions(
     """
     from ..services import get_llm_component
     from .router_service import should_use_rag, classify_query
+
+    # B6 Semantic Cache — cosine similarity matching
+    semantic_hit = get_semantic_cached(user_message)
+    if semantic_hit:
+        return semantic_hit, []
 
     # B1 Smart Router — auto-decyzja tylko gdy use_rag=False (domyślne)
     # Gdy użytkownik kliknie glob/RAG przycisk → use_rag=True → pomijamy router
@@ -150,6 +162,7 @@ def handle_chat_completions(
 
     llm_result = get_llm_component().run(prompt=full_prompt)
     answer = llm_result["replies"][0]
+    set_semantic_cached(user_message, answer)
     return answer, sources
 
 
