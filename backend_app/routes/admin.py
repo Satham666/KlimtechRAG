@@ -285,3 +285,14 @@ async def ingest_list(
         "total": len(data),
         "data": data,
     }
+
+
+# ---------------------------------------------------------------------------
+# W5: Batch queue stats
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/batch/stats")
+async def batch_stats(_: str = Depends(require_api_key)):
+    """Zwraca statystyki kolejki batch (W5)."""
+    from ..services.batch_service import get_batch_queue
+    return get_batch_queue().stats()
