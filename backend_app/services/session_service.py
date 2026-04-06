@@ -157,3 +157,35 @@ def auto_title_from_message(content: str) -> str:
     """Generuje auto-tytuł z pierwszej wiadomości użytkownika."""
     short = content.strip().replace("\n", " ")
     return short[:_TITLE_MAX_LEN] if len(short) <= _TITLE_MAX_LEN else short[:_TITLE_MAX_LEN - 1] + "…"
+
+
+def get_sessions_stats() -> dict:
+    """Zwraca statystyki: liczba sesji, wiadomości, ostatnia aktywność."""
+    with _conn() as conn:
+        total_sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+        total_messages = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+        last_activity = conn.execute(
+            "SELECT MAX(updated_at) FROM sessions"
+        ).fetchone()[0]
+        active_today = conn.execute(
+            "SELECT COUNT(*) FROM sessions WHERE updated_at >= date('now')"
+        ).fetchone()[0]
+    return {
+        "total_sessions": total_sessions,
+        "total_messages": total_messages,
+        "last_activity": last_activity,
+        "active_today": active_today,
+    }
+
+
+def cleanup_old_sessions(max_age_days: int = 30) -> int:
+    """Usuwa sesje starsze niż max_age_days. Zwraca liczbę usuniętych."""
+    from datetime import timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+    with _conn() as conn:
+        cur = conn.execute("DELETE FROM sessions WHERE updated_at < ?", (cutoff,))
+        conn.commit()
+    count = cur.rowcount
+    if count:
+        logger.info("[F4] Cleanup: usunięto %d starych sesji (> %dd)", count, max_age_days)
+    return count

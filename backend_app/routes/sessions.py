@@ -150,3 +150,27 @@ async def export_session_markdown(
         media_type="text/markdown",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/stats")
+async def sessions_stats(_: str = Depends(require_api_key)):
+    """Zwraca statystyki sesji: liczba sesji, wiadomości, ostatnia aktywność."""
+    from ..services.session_service import get_sessions_stats
+    return get_sessions_stats()
+
+
+class CleanupRequest(BaseModel):
+    max_age_days: int = 30
+
+
+@router.post("/cleanup")
+async def cleanup_sessions(
+    body: CleanupRequest,
+    _: str = Depends(require_api_key),
+):
+    """Usuwa sesje starsze niż max_age_days (domyślnie 30 dni)."""
+    from ..services.session_service import cleanup_old_sessions
+    if body.max_age_days < 1:
+        raise HTTPException(status_code=400, detail="max_age_days musi być >= 1")
+    deleted = cleanup_old_sessions(max_age_days=body.max_age_days)
+    return {"deleted": deleted, "max_age_days": body.max_age_days}
