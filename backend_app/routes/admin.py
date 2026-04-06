@@ -492,10 +492,22 @@ async def retry_failed_ingest(
         else:
             skipped += 1
 
-    logger.info("[retry-failed] Dodano %d plików do kolejki (pominięto: %d)", added, skipped)
+
+# ---------------------------------------------------------------------------
+# GET /v1/watcher/status — status usługi watcher (H2)
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/watcher/status")
+async def watcher_status(_: str = Depends(require_api_key)):
+    """Zwraca status usługi watcher: czy włączona, interwał, katalogi."""
+    from ..services.watcher_service import WATCHER_ENABLED, WATCHER_INTERVAL
+    from ..file_registry import WATCH_DIRS
+
     return {
-        "total_failed": len(rows),
-        "added_to_queue": added,
-        "skipped_queue_full": skipped,
-        "files": [{"filename": r["filename"], "error": r["error_message"]} for r in rows],
+        "enabled": WATCHER_ENABLED,
+        "interval_seconds": WATCHER_INTERVAL,
+        "watch_dirs": list(WATCH_DIRS),
+        "dirs_count": len(WATCH_DIRS),
+        "env_flag": "KLIMTECH_WATCHER_ENABLED",
+        "env_interval": "KLIMTECH_WATCHER_INTERVAL",
     }
