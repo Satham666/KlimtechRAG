@@ -174,4 +174,56 @@ def get_logger(name: str = "klimtechrag"):
     return logging.getLogger(name)
 
 
+def validate_config() -> None:
+    """Weryfikuje środowisko przed startem backendu. Pada szybko z czytelnym komunikatem.
+
+    Sprawdza: katalog bazowy, plik .env, Qdrant, llama-server (port 8082).
+    Błędy krytyczne → sys.exit(1). Ostrzeżenia → log WARN, kontynuuj.
+    """
+    import socket
+    import sys
+    import urllib.request
+    from pathlib import Path
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    # 1. Katalog bazowy
+    if not Path(BASE).exists():
+        errors.append(f"Katalog bazowy nie istnieje: {BASE}")
+
+    # 2. Plik .env
+    env_file = Path(BASE) / ".env"
+    if not env_file.exists():
+        warnings.append(
+            f"Brak pliku .env: {env_file} (kontynuuję z domyślnymi wartościami)"
+        )
+
+    # 3. Qdrant ping
+    try:
+        urllib.request.urlopen("http://localhost:6333/healthz", timeout=3)
+    except Exception:
+        errors.append(
+            "Qdrant niedostępny na localhost:6333 — uruchom: podman start qdrant"
+        )
+
+    # 4. Port 8082 (llama-server) — tylko ostrzeżenie, LLM jest opcjonalny na starcie
+    try:
+        with socket.create_connection(("localhost", 8082), timeout=2):
+            pass
+    except OSError:
+        warnings.append(
+            "llama-server niedostępny na porcie 8082 — modele LLM nie będą działać"
+            " do czasu uruchomienia serwera"
+        )
+
+    for w in warnings:
+        logging.getLogger("klimtechrag").warning("⚠️  %s", w)
+
+    if errors:
+        for e in errors:
+            logging.getLogger("klimtechrag").critical("❌ STARTUP ERROR: %s", e)
+        sys.exit(1)
+
+
 settings = Settings()
