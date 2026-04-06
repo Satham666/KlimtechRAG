@@ -12,6 +12,7 @@ from ..file_registry import (
 from ..services.cache_service import clear_cache
 from ..services.dedup_service import compute_content_hash
 from ..services.nextcloud_service import TEXT_INDEXABLE
+from ..services.enrichment_service import ENRICHMENT_ENABLED, enrich_chunks
 from ..services.metadata_service import build_chunk_meta
 from ..services.parser_service import parse_with_docling, read_text_file
 
@@ -21,6 +22,25 @@ logger = logging.getLogger("klimtechrag")
 # Ingest Service — orkiestracja: parse → chunk → embed → store
 # Wydzielony z routes/ingest.py (A1b refaktoryzacja)
 # ---------------------------------------------------------------------------
+
+
+def _run_indexing(docs: list) -> dict:
+    """Uruchamia indexing pipeline, opcjonalnie z C4 Contextual Enrichment.
+
+    Jeśli KLIMTECH_CONTEXTUAL_ENRICHMENT=true:
+        split ręcznie → enrich → embedder → writer
+    Normalnie:
+        splitter → embedder → writer (cały pipeline)
+    """
+    pipeline = get_indexing_pipeline()
+    if ENRICHMENT_ENABLED:
+        from haystack.components.preprocessors import DocumentSplitter as _DS
+
+        splitter = _DS(split_by="word", split_length=200, split_overlap=30)
+        split_result = splitter.run(documents=docs)
+        enriched = enrich_chunks(split_result["documents"])
+        return pipeline.run({"embedder": {"documents": enriched}})
+    return pipeline.run({"splitter": {"documents": docs}})
 
 
 def ingest_file_background(file_path: str) -> None:
@@ -81,7 +101,7 @@ def ingest_file_background(file_path: str) -> None:
             extra={"type": suffix, "category": category},
         )
         docs = [Document(content=markdown_text, meta=meta)]
-        result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
+        result = _run_indexing(docs)
         chunks = result["writer"]["documents_written"]
 
         mark_indexed(file_path, chunks)
@@ -130,7 +150,7 @@ def ingest_text_docs(file_path: str, filename: str, suffix: str, model_name: str
         extra={"type": suffix, "embedding_model": model_name},
     )
     docs = [Document(content=markdown_text, meta=meta)]
-    result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
+    result = _run_indexing(docs)
     chunks = result["writer"]["documents_written"]
     mark_indexed(file_path, chunks)
     logger.info("✅ %s: %s (%d chunks)", model_name, filename, chunks)
