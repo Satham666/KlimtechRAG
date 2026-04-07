@@ -84,16 +84,29 @@ async def get_session_messages(
     session_id: str,
     limit: int = 100,
     offset: int = 0,
+    page: int = Query(1, ge=1, description="Numer strony"),
+    page_size: int = Query(50, ge=1, le=200, description="Liczba wyników na stronę"),
     _: str = Depends(require_api_key),
 ):
     """Zwraca historię wiadomości sesji w kolejności chronologicznej."""
+    import math
     if not get_session(session_id):
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
-    messages = get_messages(session_id, limit=limit, offset=offset)
+
+    all_messages = get_messages(session_id, limit=9999, offset=0)
+    total = len(all_messages)
+    total_pages = math.ceil(total / page_size) if total > 0 else 1
+
+    offset_calc = (page - 1) * page_size
+    paginated_messages = all_messages[offset_calc : offset_calc + page_size]
+
     return SessionMessagesResponse(
         session_id=session_id,
-        data=[SessionMessage(**m) for m in messages],
-        total=len(messages),
+        data=[SessionMessage(**m) for m in paginated_messages],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
     )
 
 
@@ -115,6 +128,26 @@ async def add_message_endpoint(
     if body.role not in ("user", "assistant", "system"):
         raise HTTPException(status_code=400, detail="role must be user|assistant|system")
     return add_message(session_id, body.role, body.content)
+
+
+@router.delete("/{session_id}/messages")
+async def clear_session_messages(
+    session_id: str,
+    _: str = Depends(require_api_key),
+):
+    """Usuwa wszystkie wiadomości sesji, zachowuje samą sesję."""
+    from ..services.session_service import get_session, _conn
+
+    if not get_session(session_id):
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+
+    with _conn() as conn:
+        cur = conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+        conn.commit()
+        deleted = cur.rowcount
+
+    logger.info("[clear-messages] Usunięto %d wiadomości z sesji %s", deleted, session_id)
+    return {"session_id": session_id, "deleted_messages": deleted}
 
 
 @router.get("/{session_id}/export.md")

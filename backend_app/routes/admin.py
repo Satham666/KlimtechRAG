@@ -317,6 +317,42 @@ async def ingest_list(
 
 
 # ---------------------------------------------------------------------------
+# E3: GET /v1/ingest/search — wyszukiwanie plików w rejestrze
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/ingest/search", tags=["ingest"])
+async def ingest_search(
+    q: str = Query(..., min_length=1, description="Szukany tekst"),
+    limit: int = Query(20, ge=1, le=100, description="Max wyników"),
+    _: str = Depends(require_api_key),
+):
+    """Wyszukuje pliki w file_registry po nazwie i ścieżce (case-insensitive)."""
+    import math
+    pattern = f"%{q}%"
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT filename, path, status, chunks_count, extension, updated_at "
+            "FROM file_registry WHERE filename LIKE ? OR path LIKE ? "
+            "ORDER BY updated_at DESC LIMIT ?",
+            (pattern, pattern, limit),
+        ).fetchall()
+
+    files = [
+        {
+            "filename": r[0],
+            "path": r[1],
+            "status": r[2],
+            "chunks_count": r[3],
+            "extension": r[4],
+            "updated_at": r[5],
+        }
+        for r in rows
+    ]
+
+    return {"query": q, "total": len(files), "files": files}
+
+
+# ---------------------------------------------------------------------------
 # W5: Batch queue stats
 # ---------------------------------------------------------------------------
 

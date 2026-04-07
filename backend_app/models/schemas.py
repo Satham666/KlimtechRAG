@@ -149,3 +149,6 @@ class SessionMessagesResponse(BaseModel):
     session_id: str
     data: List[SessionMessage]
     total: int
+    page: int = 1
+    page_size: int = 50
+    total_pages: int = 1
