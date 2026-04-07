@@ -189,6 +189,44 @@ async def export_session_json(
     )
 
 
+@router.get("/export-all")
+async def export_all_sessions(
+    limit: int = 500,
+    _: str = Depends(require_api_key),
+):
+    """Eksportuje wszystkie sesje z wiadomościami jako JSON (backup)."""
+    import json
+    from fastapi.responses import Response
+    from ..services.session_service import list_sessions, get_messages
+
+    limit = min(limit, 500)
+    sessions = list_sessions(limit=limit, offset=0)
+
+    export_data = []
+    for session in sessions:
+        messages = get_messages(session["id"], limit=500)
+        export_data.append({
+            "id": session["id"],
+            "title": session["title"],
+            "created_at": session["created_at"],
+            "messages": [
+                {
+                    "role": msg["role"],
+                    "content": msg["content"],
+                    "created_at": msg["created_at"],
+                }
+                for msg in messages
+            ],
+        })
+
+    content = json.dumps(export_data, ensure_ascii=False, indent=2)
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="sessions_backup.json"'},
+    )
+
+
 @router.get("/stats")
 async def sessions_stats(_: str = Depends(require_api_key)):
     """Zwraca statystyki sesji: liczba sesji, wiadomości, ostatnia aktywność."""

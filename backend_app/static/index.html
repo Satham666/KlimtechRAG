@@ -131,6 +131,7 @@
 <header class="h-14 border-b border-gray-800 flex items-center justify-between px-6 bg-rag-sidebar z-20 shrink-0">
 <div class="flex items-center gap-8">
 <h1 class="text-xl font-bold tracking-tight text-white">Klimtech<span class="text-rag-accent">RAG</span></h1>
+<button onclick="toggleSidebarFocus()" class="text-rag-text-muted hover:text-white text-lg" title="Tryb skupienia (Alt+Z)">&#8596;</button>
 <div class="flex items-center gap-6 border-l border-gray-700 pl-6 py-1">
 <div class="flex flex-col">
 <div class="flex items-center gap-2" id="headerServices">
@@ -141,6 +142,7 @@
 </div>
 <div class="text-[9px] font-mono text-rag-text-muted mt-0.5">
           Baza: <span class="text-gray-400">/media/lobo/BACKUP/KlimtechRAG</span>    IP: <span class="text-gray-400">192.168.31.70</span>
+          <span id="modelBadge" class="ml-2 px-1.5 py-0.5 rounded text-[9px] font-mono bg-gray-700 text-gray-400 hidden">brak modelu</span>
 </div>
 </div>
 </div>
@@ -150,7 +152,7 @@
 <!-- BEGIN: Main Content Area -->
 <main class="flex-1 flex overflow-hidden">
 <!-- BEGIN: Left Sidebar (approx 45%) -->
-<aside class="w-[45%] min-w-[580px] bg-rag-sidebar border-r border-gray-800 flex flex-col p-4 gap-4 overflow-y-auto custom-scrollbar">
+<aside id="sidebarEl" class="w-[45%] min-w-[580px] bg-rag-sidebar border-r border-gray-800 flex flex-col p-4 gap-4 overflow-y-auto custom-scrollbar">
 <!-- Sidebar Tiles Grid -->
 <div class="grid grid-cols-2 gap-4">
 <!-- 1. WGRAJ PLIKI (Upload files) -->
@@ -288,6 +290,11 @@
 <div id="fileList" class="overflow-y-auto custom-scrollbar flex-1 space-y-1 pr-1">
 <div class="text-[11px] text-rag-text-muted text-center py-4">Ladowanie...</div>
 </div>
+<div id="filePagination" class="flex items-center justify-between text-[10px] text-rag-text-muted mt-1 pt-1 border-t border-gray-700">
+<button onclick="changeFilePage(-1)" id="filePrevBtn" class="text-rag-text-muted hover:text-white disabled:opacity-30" disabled>&lt; Poprzednia</button>
+<span id="filePageInfo">Strona 1 / 1</span>
+<button onclick="changeFilePage(1)" id="fileNextBtn" class="text-rag-text-muted hover:text-white disabled:opacity-30" disabled>Następna &gt;</button>
+</div>
 </article>
 <!-- 6. PANEL INFORMACYJNY (GPU Dashboard) -->
 <article class="bg-rag-card border border-gray-800 rounded-lg p-4 card-hover flex flex-col" data-purpose="placeholder-card">
@@ -330,6 +337,15 @@
     <button onclick="loadCollections()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
   </div>
   <div id="collectionsEl" class="space-y-1 text-[11px]">
+    <div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
+  </div>
+</article>
+<article class="bg-rag-card border border-gray-800 rounded-lg p-4 flex flex-col gap-2">
+  <div class="flex items-center justify-between">
+    <h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">&#128193; Workspaces</h3>
+    <button onclick="loadWorkspaces()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
+  </div>
+  <div id="workspacesEl" class="space-y-1 text-[11px]">
     <div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
   </div>
 </article>
@@ -440,12 +456,18 @@
 </div>
 <div id="sessionsStatsEl" class="text-[10px] text-rag-text-muted mb-1 px-1"></div>
 <div class="flex items-center justify-between mb-1">
-  <span class="text-[10px] text-rag-text-muted uppercase tracking-wider">Sesje <span id="sessCountBadge" class="text-rag-accent"></span></span>
+  <div class="flex items-center gap-2">
+    <span class="text-[10px] text-rag-text-muted uppercase tracking-wider">Sesje <span id="sessCountBadge" class="text-rag-accent"></span></span>
+    <button onclick="toggleAllSessCheckboxes()" class="text-[10px] text-rag-text-muted hover:text-rag-accent" title="Zaznacz wszystkie">&#9745; Zaznacz</button>
+    <button onclick="bulkDeleteSelected()" id="bulkDeleteBtn" class="text-[10px] text-red-400 hover:text-white hidden" title="Usuń zaznaczone">&#128465; Usuń zaznaczone</button>
+  </div>
   <label title="Importuj sesję z pliku JSON" class="text-[10px] text-rag-text-muted hover:text-white cursor-pointer px-1">
     &#8613; import
     <input type="file" accept=".json" class="hidden" onchange="importSessionFromFile(this)"/>
   </label>
-</div> type="text" placeholder="Szukaj sesji..." oninput="onSessSearch(this.value)" class="flex-1 text-[11px] bg-rag-bg border border-gray-700 rounded px-2 py-1 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-rag-accent"/>
+</div>
+<div class="flex gap-1 mb-1">
+  <input id="sessSearchInput" type="text" placeholder="Szukaj sesji..." oninput="onSessSearch(this.value)" class="flex-1 text-[11px] bg-rag-bg border border-gray-700 rounded px-2 py-1 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-rag-accent"/>
   <button onclick="sessSearchClear()" class="text-[10px] text-rag-text-muted hover:text-white px-1" title="Wyczyść">✕</button>
 </div>
 <div id="sessionsEl" class="overflow-y-auto custom-scrollbar flex-1 space-y-1">
@@ -460,7 +482,7 @@
 </aside>
 <!-- END: Left Sidebar -->
 <!-- BEGIN: Main Chat Area -->
-<section class="flex-1 flex flex-col bg-rag-bg relative" data-purpose="chat-main">
+<section id="chatMainEl" class="flex-1 flex flex-col bg-rag-bg relative" data-purpose="chat-main">
 <!-- BEGIN: Chat Messages Container -->
 <div id="msgs" class="flex-1 overflow-y-auto p-6 flex flex-col gap-6 custom-scrollbar">
 <!-- Messages will be rendered here by JS -->
@@ -601,6 +623,9 @@ let webMode = false;
 let ragMode = false;
 let webContext = null;
 let gpuTimer = null;
+var filePage = 1;
+var filePageSize = 20;
+var fileTotalPages = 1;
 
 // ── SESSIONS ─────────────────────────────────────────────────
 function loadSessions(){
@@ -632,12 +657,12 @@ document.addEventListener('DOMContentLoaded',()=>{
   else if(sessions.length){ setActive(sessions[0].id); renderSession(sessions[0].id); }
   else{ const s=createSess(); setActive(s.id); showWelcome(); }
   renderSidebar();
-  loadStats(); loadFiles(); checkStatus(); loadIngestHistory(); loadMcpInfo(); loadServerConfig(); loadIngestErrors(); loadBatchStats(); refreshSessCountBadge(); loadIngestStats(); loadProcessing(); loadCollections(); loadSystemInfo();
-  loadModelList();
+  loadStats(); loadFiles(); checkStatus(); loadIngestHistory(); loadMcpInfo(); loadServerConfig(); loadIngestErrors(); loadBatchStats(); refreshSessCountBadge(); loadIngestStats(); loadProcessing(); loadCollections(); loadWorkspaces(); loadSystemInfo();
+  loadModelList(); loadModelBadge();
   startProgressPoll();
   startGpuPoll();
   checkHeaderHealth();
-  setInterval(()=>{ loadStats(); checkStatus(); checkHeaderHealth(); loadBatchStats(); loadProcessing(); }, 30000);
+  setInterval(()=>{ loadStats(); checkStatus(); checkHeaderHealth(); loadBatchStats(); loadProcessing(); loadModelBadge(); }, 30000);
   setInterval(()=>{ var p=document.getElementById('processingEl'); if(p) loadProcessing(); }, 10000);
 
   // Textarea auto-resize
@@ -672,6 +697,11 @@ document.addEventListener('DOMContentLoaded',()=>{
       var help=document.getElementById('helpOverlay');
       if(help) help.classList.toggle('hidden');
     }
+    // Alt+Z — toggle sidebar focus mode
+    if(e.altKey&&e.key==='z'){
+      e.preventDefault();
+      toggleSidebarFocus();
+    }
   });
 });
 
@@ -684,6 +714,7 @@ function renderSidebar(){
   }
   el.innerHTML=sessions.map(s=>`
     <div class="flex items-center gap-3 p-2 rounded cursor-pointer transition-colors group ${s.id===activeId?'bg-rag-accent/10 border border-rag-accent/20':'bg-rag-bg/50 border border-transparent hover:bg-white/5'}" onclick="switchSess('${s.id}')" title="Utworzono: ${s.ts?fmtDate(s.ts):'?'} | Wiadomości: ${s.messages.length}">
+      <input type="checkbox" class="sessCheckbox shrink-0" data-id="${s.id}" onclick="event.stopPropagation();updateBulkDeleteBtn()"/>
       <div class="w-8 h-8 rounded-full bg-rag-accent/20 flex items-center justify-center text-rag-accent text-xs shrink-0">${s.messages.length?'&#128172;':'&#10024;'}</div>
       <div class="flex-1 overflow-hidden">
         <div class="text-[11px] font-bold truncate" ondblclick="renameSess(event,'${s.id}')" title="Dwuklik = zmień nazwę">${esc(s.title)}</div>
@@ -695,6 +726,42 @@ function renderSidebar(){
       </div>
       <span class="text-[10px] text-rag-text-muted hover:text-red-400 cursor-pointer opacity-0 group-hover:opacity-100" onclick="event.stopPropagation();delSess(event,'${s.id}')">&#10005;</span>
     </div>`).join('');
+}
+var _allChecked=false;
+function toggleAllSessCheckboxes(){
+  _allChecked=!_allChecked;
+  document.querySelectorAll('.sessCheckbox').forEach(function(cb){cb.checked=_allChecked;});
+  updateBulkDeleteBtn();
+}
+function updateBulkDeleteBtn(){
+  var checked=document.querySelectorAll('.sessCheckbox:checked').length;
+  var btn=document.getElementById('bulkDeleteBtn');
+  if(checked>0){
+    btn.classList.remove('hidden');
+    btn.textContent='\u{1F5D1} Usuń zaznaczone ('+checked+')';
+  } else {
+    btn.classList.add('hidden');
+  }
+}
+async function bulkDeleteSelected(){
+  var checked=document.querySelectorAll('.sessCheckbox:checked');
+  if(!checked.length) return;
+  var count=checked.length;
+  if(!confirm('Usunąć '+count+' sesji?')) return;
+  var ids=Array.from(checked).map(function(cb){return cb.getAttribute('data-id');});
+  try{
+    var r=await F(B+'/v1/sessions/bulk-delete',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({session_ids:ids})
+    });
+    if(!r.ok) throw new Error(r.status);
+    sessions=sessions.filter(function(s){return !ids.includes(s.id);});
+    saveSessions();
+    renderSidebar();
+    refreshSessCountBadge();
+    toast('Usunięto '+count+' sesji');
+  }catch(e){toast('Błąd: '+e.message);}
 }
 var _sessSearchTimer=null;
 function onSessSearch(val){
@@ -1297,6 +1364,25 @@ async function loadServerConfig(){
     el.innerHTML='<div class="text-red-400 text-center py-2">Błąd: '+e.message+'</div>';
   }
 }
+async function loadModelBadge(){
+  var el=document.getElementById('modelBadge');
+  if(!el) return;
+  try{
+    var r=await F(B+'/model/status');
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    if(d.model_loaded&&d.model_name){
+      el.className='ml-2 px-1.5 py-0.5 rounded text-[9px] font-mono bg-rag-accent/20 text-rag-accent';
+      el.textContent=d.model_name.split('/').pop();
+    } else {
+      el.className='ml-2 px-1.5 py-0.5 rounded text-[9px] font-mono bg-gray-700 text-gray-400';
+      el.textContent='brak modelu';
+    }
+  }catch(e){
+    el.className='ml-2 px-1.5 py-0.5 rounded text-[9px] font-mono bg-gray-700 text-gray-400';
+    el.textContent='brak modelu';
+  }
+}
 async function loadIngestErrors(){
   var el=document.getElementById('ingestErrorsEl');
   if(!el) return;
@@ -1447,6 +1533,25 @@ async function loadCollections(){
     el.innerHTML='<div class="text-rag-text-muted text-center py-2">Niedostępne</div>';
   }
 }
+async function loadWorkspaces(){
+  var el=document.getElementById('workspacesEl');
+  if(!el) return;
+  try{
+    var r=await F(B+'/workspaces');
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    var list=Array.isArray(d)?d:(d.workspaces||[]);
+    if(!list.length){el.innerHTML='<div class="text-rag-text-muted text-center py-2">Brak workspaces</div>';return;}
+    el.innerHTML=list.map(function(w){
+      var name=esc(w.name||w.workspace_name||'?');
+      var coll=esc(w.collection||w.collection_name||'-');
+      var files=w.files_count!=null?String(w.files_count):(w.document_count||'-');
+      return '<div class="flex justify-between p-1 rounded hover:bg-white/5"><span class="text-gray-300">'+name+'</span><span class="text-rag-text-muted"><span class="text-rag-accent">'+files+'</span> | '+coll+'</span></div>';
+    }).join('');
+  }catch(e){
+    el.innerHTML='<div class="text-rag-text-muted text-center py-2">Niedostępne</div>';
+  }
+}
 async function loadSystemInfo(){
   var el=document.getElementById('systemInfoEl');
   if(!el) return;
@@ -1505,9 +1610,11 @@ async function loadFiles(){
   try{
     var sel=document.getElementById('fileStatusFilter');
     var statusQ=sel&&sel.value?'&status='+sel.value:'';
-    const r=await F(`${B}/files/list?limit=15`+statusQ); if(!r.ok)throw 0;
+    const r=await F(`${B}/files/list?page=${filePage}&page_size=${filePageSize}`+statusQ); if(!r.ok)throw 0;
     const json=await r.json();
     const list=Array.isArray(json)?json:(json.files??[]);
+    fileTotalPages=json.total_pages||(json.total?Math.ceil(json.total/filePageSize):1)||1;
+    updateFilePagination();
     if(!list.length){el.innerHTML='<div class="text-[11px] text-rag-text-muted text-center py-4">Brak plikow</div>';return;}
     el.innerHTML=list.map(f=>{
       const hash=f.content_hash?f.content_hash.slice(0,8):'-';
@@ -1520,6 +1627,17 @@ async function loadFiles(){
       </div>`;
     }).join('');
   }catch{el.innerHTML='<div class="text-[11px] text-rag-text-muted text-center py-4">Blad ladowania</div>';}
+}
+function updateFilePagination(){
+  document.getElementById('filePageInfo').textContent='Strona '+filePage+' / '+fileTotalPages;
+  document.getElementById('filePrevBtn').disabled=filePage<=1;
+  document.getElementById('fileNextBtn').disabled=filePage>=fileTotalPages;
+}
+function changeFilePage(delta){
+  var np=filePage+delta;
+  if(np<1||np>fileTotalPages) return;
+  filePage=np;
+  loadFiles();
 }
 
 // ── UPLOAD ────────────────────────────────────────────────────
@@ -1880,5 +1998,26 @@ function fmtTime(ts){ return new Date(ts).toLocaleTimeString('pl',{hour:'2-digit
 function fmtDateFile(ts){ const d=new Date(ts); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`; }
 function now(){ return new Date().toLocaleTimeString('pl',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
 function toast(msg,dur=2800){ const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),dur); }
+function toggleSidebarFocus(){
+  var sb=document.getElementById('sidebarEl');
+  var cm=document.getElementById('chatMainEl');
+  var hidden=sb.classList.toggle('hidden');
+  localStorage.setItem('sidebarHidden',hidden?'true':'false');
+  if(hidden){
+    sb.style.display='none';
+  } else {
+    sb.style.display='';
+  }
+  var stored=localStorage.getItem('sidebarHidden');
+  if(stored==='true'){sb.classList.add('hidden');sb.style.display='none';cm.style.width='100%';}
+  else{cm.style.width='';}
+}
+(function(){
+  var sb=document.getElementById('sidebarEl');
+  var cm=document.getElementById('chatMainEl');
+  if(localStorage.getItem('sidebarHidden')==='true'){
+    sb.classList.add('hidden'); sb.style.display='none'; cm.style.width='100%';
+  }
+})();
 </script>
 </body></html>

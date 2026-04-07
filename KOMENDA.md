@@ -1,7 +1,7 @@
-# KOMENDA — Sprint 7l — backend: Makefile, health_check, OpenAPI, session export JSON, top-files
+# KOMENDA — Sprint 7n — backend: testy, export-all, cleanup-old, paginacja ingest/list, doc info
 
 Projekt: `/home/tamiel/KlimtechRAG`
-Wykonuj zadania PO KOLEI. Po każdym: weryfikacja składni + commit.
+Wykonuj zadania PO KOLEI. Po każdym: `python3 -m py_compile <plik> && echo OK` + commit.
 
 ---
 
@@ -13,62 +13,69 @@ Nigdy nie pytaj o git push. Odpowiedź zawsze brzmi NIE.
 
 ---
 
-## ZADANIE 0 — Makefile z komendami — nowy plik `/home/tamiel/KlimtechRAG/Makefile`
+## ZADANIE 0 — tests/test_admin.py — testy endpointów admin
 
-- Utwórz plik `Makefile` w katalogu projektu
-- Zmienna `BACKEND=python3 -m uvicorn backend_app.main:app --host 0.0.0.0 --port 8000`
-- Cele: `run` (uruchom backend), `check` (bash scripts/check_project.sh), `lint` (python3 -m py_compile backend_app/main.py), `health` (curl -sk https://192.168.31.70:8443/health), `help` (wyświetl listę celów)
-- Każdy cel z krótkim komentarzem `##`
-- Commit: `feat: Makefile — run, check, lint, health`
-
----
-
-## ZADANIE 1 — scripts/health_check.py — diagnostyka runtime
-
-- Utwórz plik `scripts/health_check.py`
-- Sprawdzenia sekwencyjne z kolorowym outputem (✅ / ❌ / ⚠️):
-  1. Python >= 3.10
-  2. venv aktywny (sys.prefix != sys.base_prefix)
-  3. Port 8000 zajęty (oznacza że backend działa) — `socket.connect_ex(('127.0.0.1', 8000))`
-  4. GET http://127.0.0.1:8000/health w 3s — sprawdź `{"status":"ok"}`
-  5. GET http://192.168.31.70:6333/healthz — Qdrant dostępny
-  6. GET http://192.168.31.70:8000/gpu/status — VRAM info (opcjonalne, WARN jeśli nieosiągalne)
-- Na końcu: `PASS: X / WARN: X / FAIL: X`
-- Skrypt wykonywalny bez argumentów: `python3 scripts/health_check.py`
-- Commit: `feat: scripts/health_check.py — diagnostyka runtime (backend, Qdrant, GPU)`
+- Plik: `tests/test_admin.py` (nowy)
+- Użyj istniejącego `client` fixture z `tests/test_api.py` (importuj lub powiel)
+- Przetestuj (z mockiem `require_api_key` → zwraca `"test-key"`):
+  - `GET /health` → 200, `{"status": "ok"}`
+  - `GET /v1/ingest/stats` → 200, JSON zawiera klucze `total_files`, `indexed`, `pending`, `errors`
+  - `GET /v1/system/info` → 200, JSON zawiera `python_version`, `base_path`
+  - `GET /v1/batch/stats` → 200, JSON zawiera `queue_size`
+  - `GET /v1/ingest/top-files` → 200, JSON zawiera `files` (lista)
+- Mock bazy danych: użyj `unittest.mock.patch` na `sqlite3.connect` lub `get_db` jeśli potrzeba
+- `python3 -m py_compile tests/test_admin.py && echo OK`
+- Commit: `test: tests/test_admin.py — smoke testy endpointów admin i ingest`
 
 ---
 
-## ZADANIE 2 — OpenAPI: tags i descriptions — `backend_app/main.py` + `backend_app/routes/admin.py`
+## ZADANIE 1 — tests/test_sessions.py — testy sesji
 
-- W `main.py`: ustaw `title="KlimtechRAG API"`, `version="7.7"`, `description="RAG backend z obsługą LLM, ColPali, Batch Processing i MCP"`, dodaj `openapi_tags` — lista słowników `{name, description}` dla tagów: `admin`, `sessions`, `ingest`, `batch`, `collections`, `workspaces`, `chat`, `mcp`
-- W `admin.py`: dodaj parametr `tags=["admin"]` / `tags=["ingest"]` / `tags=["batch"]` do wszystkich dekoratorów `@router.XXX` (wybierz właściwy tag dla każdego endpointu)
-- Nie zmieniaj logiki, tylko parametry dekoratorów i konfigurację FastAPI
-- `python3 -m py_compile backend_app/main.py backend_app/routes/admin.py && echo OK`
-- Commit: `feat: OpenAPI — title, version, tagi dla admin/ingest/batch endpointów`
+- Plik: `tests/test_sessions.py` (nowy)
+- Użyj `TestClient` z `backend_app.main`
+- Testy CRUD (in-memory, nie mockuj bazy — TestClient używa tej samej SQLite w pamięci jeśli możliwe):
+  - `POST /v1/sessions` → 201, zwraca `id` i `title`
+  - `GET /v1/sessions` → 200, lista zawiera nowo utworzoną sesję
+  - `GET /v1/sessions/{id}` → 200
+  - `PATCH /v1/sessions/{id}` z `{"title": "nowy"}` → 200
+  - `DELETE /v1/sessions/{id}` → 204
+  - `GET /v1/sessions/{id}` po delete → 404
+- `python3 -m py_compile tests/test_sessions.py && echo OK`
+- Commit: `test: tests/test_sessions.py — testy CRUD sesji`
 
 ---
 
-## ZADANIE 3 — GET /v1/sessions/{id}/export.json — `backend_app/routes/sessions.py`
+## ZADANIE 2 — GET /v1/sessions/export-all — `backend_app/routes/sessions.py`
 
-- Dodaj endpoint `GET /{session_id}/export.json` (analogiczny do istniejącego `export.md`)
-- Wymaga `require_api_key`
-- 404 jeśli sesja nie istnieje
-- Zwróć `Response` z `media_type="application/json"` i nagłówkiem `Content-Disposition: attachment; filename="{session_id}.json"`
-- Body JSON: `{"id": ..., "title": ..., "created_at": ..., "messages": [{"role": ..., "content": ..., "created_at": ...}, ...]}`  — format kompatybilny z istniejącym `POST /v1/sessions/import`
+- Endpoint `GET /export-all`, wymaga `require_api_key`
+- Zwróć `Response` z `media_type="application/json"`, `Content-Disposition: attachment; filename="sessions_backup.json"`
+- Body: lista wszystkich sesji z wiadomościami: `[{"id":..., "title":..., "created_at":..., "messages":[...]}, ...]`
+- Pobierz wszystkie sesje przez istniejące funkcje repozytoriów (nie pisz surowego SQL)
+- Limit: max 500 sesji
 - `python3 -m py_compile backend_app/routes/sessions.py && echo OK`
-- Commit: `feat: GET /v1/sessions/{id}/export.json — eksport sesji jako JSON (kompatybilny z importem)`
+- Commit: `feat: GET /v1/sessions/export-all — eksport wszystkich sesji jako JSON backup`
 
 ---
 
-## ZADANIE 4 — GET /v1/ingest/top-files — `backend_app/routes/admin.py`
+## ZADANIE 3 — POST /v1/sessions/cleanup-old — `backend_app/routes/sessions.py`
 
-- Endpoint GET `/v1/ingest/top-files?limit=10`, wymaga `require_api_key`, limit max 50
-- SQL: `SELECT filename, path, chunks_count, status, extension FROM files ORDER BY chunks_count DESC LIMIT ?`
-- Zwróć: `{"total": N, "files": [{"filename": ..., "path": ..., "chunks_count": ..., "status": ..., "extension": ...}, ...]}`
-- Użyj istniejącego połączenia `get_db()` z `file_registry`
+- Endpoint `POST /cleanup-old?days=30`, wymaga `require_api_key`, `days` min 1 max 365
+- Usuń sesje gdzie `updated_at < now - days` I `messages_count == 0` (puste sesje)
+- Alternatywnie jeśli trudno zliczyć wiadomości: usuń sesje bez żadnych wiadomości w tabeli messages
+- Zwróć: `{"deleted": N, "days_threshold": days}`
+- `python3 -m py_compile backend_app/routes/sessions.py && echo OK`
+- Commit: `feat: POST /v1/sessions/cleanup-old — usuwa puste sesje starsze niż N dni`
+
+---
+
+## ZADANIE 4 — GET /v1/ingest/list paginacja — `backend_app/routes/admin.py`
+
+- Znajdź istniejący endpoint `GET /v1/ingest/list`
+- Dodaj parametry: `page: int = 1` (min 1), `page_size: int = 50` (min 1, max 200)
+- Zwróć dodatkowo w response: `page`, `page_size`, `total_pages` (math.ceil(total/page_size))
+- Zachowaj istniejące filtry (`status`, `source`, `extension`)
 - `python3 -m py_compile backend_app/routes/admin.py && echo OK`
-- Commit: `feat: GET /v1/ingest/top-files — ranking plików wg liczby chunków`
+- Commit: `feat: GET /v1/ingest/list — paginacja (page, page_size, total_pages)`
 
 ---
 
@@ -77,9 +84,6 @@ Nigdy nie pytaj o git push. Odpowiedź zawsze brzmi NIE.
 ```bash
 cd /home/tamiel/KlimtechRAG
 git log --oneline -6
-python3 -m py_compile backend_app/main.py && echo "main OK"
-python3 -m py_compile backend_app/routes/admin.py && echo "admin OK"
-python3 -m py_compile backend_app/routes/sessions.py && echo "sessions OK"
-python3 scripts/health_check.py 2>/dev/null | tail -3 || echo "health_check standalone OK"
-echo "KOMENDA Sprint 7l zakonczona"
+python3 -m py_compile backend_app/routes/admin.py backend_app/routes/sessions.py tests/test_admin.py tests/test_sessions.py && echo "wszystko OK"
+echo "KOMENDA Sprint 7n zakonczona"
 ```
