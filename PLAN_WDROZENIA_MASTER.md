@@ -64,7 +64,7 @@ Natychmiastowe usprawnienia bez ryzyka. Zero zależności.
 **Stan obecny:** KlimtechRAG ma SHA256 dedup plików w `file_registry.db` — ale tylko na poziomie "czy plik już był uploadowany". Brak cache samych wektorów.
 
 **Co wdrożyć:**
-- Rozszerzenie `file_registry.db` o kolumnę `embedding_hash` (SHA256 treści po chunking)
+- Rozszerzenie `file_registry.db` o kolumnę `content_hash` (SHA256 treści po chunking) ✅ DONE
 - Przed embedding: sprawdź czy identyczny hash już istnieje w Qdrant
 - Jeśli tak → skip embedding, zwróć "cached"
 - Jeśli nie → normalny pipeline
@@ -107,7 +107,7 @@ Restrukturyzacja kodu + streaming — fundament pod wszystko inne.
 
 ### A1. Restrukturyzacja: Router → Service → Component 🔴
 **Źródło:** PrivateGPT, Quivr  
-**Problem:** `chat.py` (500 linii) i `ingest.py` (767 linii) mieszają routing HTTP z logiką biznesową, prompt buildingiem i cache.
+**Problem:** `chat.py` (~277 linii, było 500) i `ingest.py` (~548 linii, było 767) — refaktoryzacja A1a/A1b częściowo wykonana, ale routing wciąż miesza się z logiką biznesową.
 
 #### A1a. Wydzielenie warstwy Service z `routes/chat.py`
 
@@ -115,12 +115,12 @@ Restrukturyzacja kodu + streaming — fundament pod wszystko inne.
 PRZED:
   routes/chat.py (500 linii — wszystko)
 
-PO:
-  routes/chat.py              (~80 linii — TYLKO routing, walidacja, HTTP response)
-  services/chat_service.py    (~150 linii — orkiestracja: cache → retrieval → prompt → LLM)
-  services/retrieval_service.py (~100 linii — RAG retrieval: e5 + ColPali + web)
-  services/prompt_service.py  (~50 linii — budowanie promptu z kontekstem)
-  services/cache_service.py   (~40 linii — cache z TTL, wydzielony singleton)
+STAN OBECNY (częściowe A1a):
+  routes/chat.py              (277 linii — cel ~80, wymaga dalszej pracy)
+  services/chat_service.py    ✅ istnieje
+  services/retrieval_service.py ✅ istnieje
+  services/prompt_service.py  ✅ istnieje
+  services/cache_service.py   ✅ istnieje (+ semantic cache B6)
 ```
 
 **Kroki atomowe:**
@@ -140,12 +140,12 @@ PO:
 PRZED:
   routes/ingest.py (767 linii — wszystko)
 
-PO:
-  routes/ingest.py              (~120 linii — TYLKO routing, upload handling)
-  services/parser_service.py    (~100 linii — ekstrakcja tekstu: PDF, DOCX, TXT, kod)
-  services/ingest_service.py    (~120 linii — orkiestracja: parse → chunk → embed → store)
-  services/nextcloud_service.py (~60 linii — save_to_nextcloud, rescan_nextcloud)
-  services/dedup_service.py     (~30 linii — hash computation, duplicate check)
+STAN OBECNY (częściowe A1b):
+  routes/ingest.py              (548 linii — cel ~120, wymaga dalszej pracy)
+  services/parser_service.py    ✅ istnieje
+  services/ingest_service.py    ✅ istnieje
+  services/nextcloud_service.py ✅ istnieje
+  services/dedup_service.py     ✅ istnieje
 ```
 
 **Kroki atomowe:**
@@ -664,7 +664,7 @@ health:   curl -sk https://192.168.31.70:8443/health
 **Kroki atomowe:**
 1. Dodaj `description`, `summary`, `tags` do KAŻDEGO endpointu
 2. Przykładowe request/response body
-3. `app = FastAPI(title="KlimtechRAG API", version="7.6")`
+3. `app = FastAPI(title="KlimtechRAG API", version="7.7")` ✅ DONE
 4. Test: `https://192.168.31.70:8443/docs`
 
 **Trudność:** Niska | **Ryzyko:** Brak | **⏱️ 1 dzień**
@@ -701,14 +701,11 @@ backend_app/components/
 
 ---
 
-### B5. Answer Verification 🟢
-**Źródło:** LocalGPT  
-**Problem:** Odpowiedź LLM nie jest weryfikowana — może halucynować.
+### B5. Answer Verification 🟢 ✅ DONE
+**Źródło:** LocalGPT
 
-**Co wdrożyć:**
-- Po wygenerowaniu: drugi pass LLM sprawdza spójność z kontekstem
-- Niespójna → "niska pewność" w UI
-- Konfigurowalny: `KLIMTECH_ANSWER_VERIFICATION=false`
+**Zaimplementowane:**
+- `services/verification_service.py` — `verify_answer()`, flaga `KLIMTECH_ANSWER_VERIFICATION=false` (domyślnie OFF)
 
 **Trudność:** Średnia | **Ryzyko:** Niskie | **⏱️ 1.5 dnia**
 
@@ -728,51 +725,44 @@ backend_app/components/
 
 ---
 
-### D2. Streaming postępu ingestu (per-chunk) 🟢
+### D2. Streaming postępu ingestu (per-chunk) 🟢 ✅ DONE
 **Źródło:** RAGFlow, LocalGPT
 
-**Co wdrożyć:**
-- SSE endpoint `/ingest/progress` — parsowanie → chunking → embedding → zapis
-- Każdy etap z procentem: "Embedding chunk 15/45"
+**Zaimplementowane:**
+- `services/progress_service.py` — SSE generator `stream_progress(task_id)`
+- `POST /ingest/start` → zwraca `task_id`
+- `GET /ingest/progress/{task_id}` → SSE stream z etapami
 
 **Trudność:** Średnia | **Ryzyko:** Niskie | **⏱️ 1.5 dnia**
 
 ---
 
-### F4. Session-aware chat z persistent history 🟢
+### F4. Session-aware chat z persistent history 🟢 ✅ DONE
 **Źródło:** LocalGPT, Danswer
 
-**Co wdrożyć:**
-- Backend: `sessions` table w SQLite
-- `GET/POST /sessions`, `GET /sessions/{id}/messages`
-- Chat wysyła historię (ostatnie N wiadomości)
+**Zaimplementowane:**
+- `routes/sessions.py` — pełny CRUD + wiadomości, eksport MD/JSON, import, bulk-delete, search, cleanup, export-all
 
 **Trudność:** Średnia | **Ryzyko:** Niskie | **⏱️ 2 dni**
 
 ---
 
-### H2. Watcher zintegrowany z backendem 🟢
+### H2. Watcher zintegrowany z backendem 🟢 ✅ DONE
 **Źródło:** PrivateGPT
 
-**Co wdrożyć:**
-- `watcher.enabled: true` w settings.yaml
-- W `lifespan()` uruchom jako asyncio background task
-- Zachowaj `watch_nextcloud.py` jako fallback
+**Zaimplementowane:**
+- `services/watcher_service.py` — asyncio background task
+- `GET /v1/watcher/status` — status (enabled, interval, watched dirs)
 
 **Trudność:** Średnia | **Ryzyko:** Średnie | **⏱️ 2 dni**
 
 ---
 
-### W2. MCP Compatibility 🆕 🟡
-**Źródło:** AnythingLLM  
-**Problem:** Żaden z 7 poprzednich projektów nie implementował MCP. AnythingLLM jako pierwszy wspiera MCP tools.
+### W2. MCP Compatibility 🆕 🟡 ✅ DONE
+**Źródło:** AnythingLLM
 
-**Co wdrożyć:**
-- Endpoint MCP-compatible (JSON-RPC) obok REST API
-- Pozwala na integrację z Claude Desktop, Open WebUI MCP, innymi klientami MCP
-- Expose: RAG query, ingest, document list jako MCP tools
-
-**Uwaga:** Wymaga stabilnych endpointów (Sprint 3). Wdrażaj PO standaryzacji API.
+**Zaimplementowane:**
+- `routes/mcp.py` — `GET /mcp` discovery endpoint (endpoint, protocol_version, tools_count, tools_preview)
 
 **Trudność:** Średnia | **Ryzyko:** Niskie | **⏱️ 3 dni**
 
@@ -790,14 +780,12 @@ backend_app/components/
 
 ---
 
-### W5. Batch Processing dużych dokumentów 🆕 🟡
+### W5. Batch Processing dużych dokumentów 🆕 🟡 ✅ DONE
 **Źródło:** AnythingLLM, RAGFlow
 
-**Co wdrożyć:**
-- Kolejka ingest z priorytetami (asyncio queue lub Redis)
-- Batch embedding: zamiast chunk-by-chunk → batch N chunków naraz
-- Progress tracking per-dokument
-- Retry logic z exponential backoff
+**Zaimplementowane:**
+- `services/batch_service.py` — asyncio PriorityQueue, retry z exponential backoff
+- Endpointy: `GET /v1/batch/stats`, `POST /v1/batch/enqueue`, `POST /v1/batch/clear`, `GET /v1/batch/history`
 
 **Trudność:** Średnia | **Ryzyko:** Niskie | **⏱️ 2 dni**
 
@@ -817,18 +805,18 @@ backend_app/components/
 
 ## PODSUMOWANIE — HARMONOGRAM
 
-| Sprint | Tydzień | Funkcje | Łączny czas |
-|--------|---------|---------|-------------|
-| **0** | 0 | W3 (Vector Cache), A3 (Walidacja config) | **1.5 dnia** |
-| **1** | 1–2 | A1a+A1b (Restrukturyzacja), D1+F1 (Streaming), B1 (Smart Router) | **8.5 dnia** |
-| **2** | 3–4 | B2 (Hybrid Search), B3 (Reranking), C1 (Layout), C6 (Metadata), C4 (Enrichment) | **9.5 dnia** |
-| **3** | 5–6 | B7 (/chunks), E1 (DELETE), E2 (list), H1 (response format), F2+F3 (UI źródła+panel) | **7 dni** |
-| **4** | 7–8 | B6 (Semantic Cache), B4 (Decomposition), C2+C3 (VLM+TSR), W1+E3 (Workspaces) | **10 dni** |
-| **5** | 9–10 | A2 (YAML), G1 (Testy), G3 (Health check), G2+G4 (Makefile+Swagger) | **6.5 dnia** |
-| **6** | 11+ | A1c (Components), B5, C5, D2, F4, H2, W2, W4, W5, W6 | **~25 dni** |
+| Sprint | Status | Funkcje |
+|--------|--------|---------|
+| **0** | ✅ DONE | W3 (Vector Cache), A3 (Walidacja config) |
+| **1** | ✅ DONE (częściowe A1a/A1b) | A1a+A1b (Restrukturyzacja), D1+F1 (Streaming), B1 (Smart Router) |
+| **2** | ✅ DONE | B2 (Hybrid Search), B3 (Reranking), C1 (Layout), C6 (Metadata), C4 (Enrichment) |
+| **3** | ✅ DONE | B7 (/chunks), E1 (DELETE), E2 (list), H1 (response format), F2+F3 (UI źródła+panel) |
+| **4** | ✅ DONE | B6 (Semantic Cache), B4 (Decomposition), C2+C3 (VLM+TSR), W1+E3 (Workspaces) |
+| **5** | ✅ DONE (częściowe G1) | A2 (YAML), G1 (Testy), G3 (Health check), G2+G4 (Makefile+Swagger) |
+| **6** | ⚠️ CZĘŚCIOWO | A1c (Components ❌), B5 ✅, C5 ?, D2 ✅, F4 ✅, H2 ✅, W2 ✅, W4 ❌, W5 ✅, W6 ❌ |
 
-**Łącznie Sprint 0–5 (core):** ~43 dni robocze  
-**Sprint 6 (zaawansowane):** ~25 dni roboczych — wdrażaj selektywnie
+**Stan na 2026-04-07:** Sprint 0–5 ukończone. Sprint 6: większość wdrożona poza A1c (components/), W4 (widget), W6 (agent builder).  
+**Pozostałe do zrobienia:** dokończenie A1a/A1b (chat.py→~80 linii, ingest.py→~120 linii), `settings-ingest.yaml` ✅, conftest.py ✅, brakujące testy ✅, `workspace_id` w file_registry, A1c, W4, W6.
 
 ---
 
@@ -907,25 +895,33 @@ backend_app/
 │   ├── table_service.py         # Sprint 4 — TSR
 │   ├── query_decomposition_service.py  # Sprint 4
 │   ├── model_manager.py         # (bez zmian)
-│   ├── rag.py                   # (uproszczony — używa components)
+│   ├── rag.py                   # (używa services bezpośrednio — components/ jeszcze nie istnieje)
+│   ├── batch_service.py         # ✅ Sprint 6 — W5 Batch Processing
+│   ├── progress_service.py      # ✅ Sprint 6 — D2 SSE ingest progress
+│   ├── verification_service.py  # ✅ Sprint 6 — B5 Answer Verification
+│   ├── watcher_service.py       # ✅ Sprint 6 — H2 Watcher
 │   └── ...                      # istniejące
 │
-├── routes/                      # UPROSZCZONE (Sprint 1) + NOWE (Sprint 3–4)
-│   ├── chat.py                  # ~80 linii (było 500)
-│   ├── ingest.py                # ~120 linii (było 767)
-│   ├── chunks.py                # NOWE Sprint 3 — /v1/chunks
-│   ├── workspaces.py            # NOWE Sprint 4 — /workspaces
-│   ├── collections.py           # NOWE Sprint 4 — /collections
-│   ├── admin.py                 # + /v1/ingest/list, DELETE /v1/ingest/{id}
+├── routes/                      # UPROSZCZONE (Sprint 1) + NOWE (Sprint 3–6)
+│   ├── chat.py                  # 277 linii (cel ~80 — A1a niekompletne)
+│   ├── ingest.py                # 548 linii (cel ~120 — A1b niekompletne)
+│   ├── chunks.py                # ✅ Sprint 3 — /v1/chunks
+│   ├── workspaces.py            # ✅ Sprint 4 — /workspaces
+│   ├── collections.py           # ✅ Sprint 4 — /collections
+│   ├── sessions.py              # ✅ Sprint 6 — F4 pełne CRUD sesji
+│   ├── mcp.py                   # ✅ Sprint 6 — W2 MCP
+│   ├── admin.py                 # ✅ rozbudowane — stats, config, batch, watcher
 │   └── ...                      # istniejące
 │
-├── models/schemas.py            # + ChunksRequest, IngestResponse, WorkspaceCreate
-├── static/index.html            # + streaming, panel dokumentów, źródła, workspace dropdown
+├── models/schemas.py            # ✅ ChunksRequest, IngestResponse, WorkspaceCreate
+├── static/index.html            # ✅ streaming, panele, eksport, kolekcje, workspace
 │
-├── settings.yaml                # NOWE Sprint 5
-├── settings-server.yaml
-├── Makefile                     # NOWE Sprint 5
-└── tests/                       # NOWE Sprint 5
+├── settings.yaml                # ✅ Sprint 5
+├── settings-server.yaml         # ✅ Sprint 5
+├── settings-dev.yaml            # ✅ Sprint 5
+├── settings-ingest.yaml         # ✅ dodane 2026-04-07
+├── Makefile                     # ✅ Sprint 5
+└── tests/                       # ✅ Sprint 5 + rozbudowane
 ```
 
 ---

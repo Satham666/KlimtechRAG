@@ -36,6 +36,7 @@ class FileRecord:
     indexed_at: Optional[str]
     chunks_count: int
     status: str
+    workspace_id: str = "klimtech_docs"
 
 
 def get_db_path() -> str:
@@ -81,9 +82,17 @@ def init_db():
             conn.execute("ALTER TABLE files ADD COLUMN content_hash TEXT")
         except Exception:
             pass  # Kolumna już istnieje — ignoruj
-        # Indeks na content_hash dla szybkiego cache lookup (W3 Vector Cache)
+        # Migracja: dodaj workspace_id (W1 Workspaces) jeśli baza istniała przed tą wersją
+        try:
+            conn.execute("ALTER TABLE files ADD COLUMN workspace_id TEXT DEFAULT 'klimtech_docs'")
+        except Exception:
+            pass  # Kolumna już istnieje — ignoruj
+        # Indeksy
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_files_hash ON files(content_hash)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_files_workspace ON files(workspace_id)"
         )
         conn.commit()
 
