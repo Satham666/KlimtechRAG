@@ -7,13 +7,30 @@ Wywolanie: python3 scripts/health_check.py
 
 import os
 import socket
+import ssl
 import subprocess
 import sys
 
+PASS = 0
+WARN = 0
+FAIL = 0
 
-def _check(label: str, ok: bool, detail: str = "") -> str:
-    icon = "\033[92mOK\033[0m" if ok else "\033[91mFAIL\033[0m"
-    msg = f"  {icon}  {label}"
+
+def _check(label: str, ok: bool, detail: str = "", optional: bool = False) -> str:
+    global PASS, WARN, FAIL
+    if ok:
+        icon = "\033[32m✅\033[0m"
+        status = "PASS"
+        PASS += 1
+    elif optional:
+        icon = "\033[33m⚠️\033[0m"
+        status = "WARN"
+        WARN += 1
+    else:
+        icon = "\033[31m❌\033[0m"
+        status = "FAIL"
+        FAIL += 1
+    msg = f"  {icon} {status} {label}"
     if detail:
         msg += f" — {detail}"
     return msg
@@ -127,29 +144,41 @@ def check_modules() -> str:
 
 
 def main() -> None:
+    global PASS, WARN, FAIL
+
     print("\n" + "=" * 50)
     print("  KlimtechRAG Health Check")
     print("=" * 50 + "\n")
 
-    checks = [
-        ("Python & Environment", [check_python, check_venv, check_modules]),
-        ("Network & Services", [
-            lambda: check_port("localhost", 6333),
-            lambda: check_qdrant(),
-            lambda: check_port("localhost", 8080),
-            lambda: check_llama_server(),
-            lambda: check_backend(),
-        ]),
-        ("GPU & Hardware", [check_gpu]),
-        ("Configuration", [check_env_file]),
-    ]
+    print("\033[1m1. Python & Environment\033[0m")
+    print(check_python())
+    print(check_venv())
 
-    for section, funcs in checks:
-        print(f"\n\033[1m{section}\033[0m")
-        for fn in funcs:
-            print(fn())
+    print("\n\033[1m2. Backend & Port 8000\033[0m")
+    print(check_port("127.0.0.1", 8000))
 
-    print()
+    try:
+        import urllib.request
+        import json
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        resp = urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=3)
+        data = json.loads(resp.read().decode())
+        health_ok = data.get("status") == "ok"
+        print(_check("GET /health returns {ok}", health_ok))
+    except Exception as e:
+        print(_check("GET /health returns {ok}", False, str(e)))
+
+    print("\n\033[1m3. Qdrant\033[0m")
+    print(check_qdrant())
+
+    print("\n\033[1m4. GPU (optional)\033[0m")
+    print(check_gpu())
+
+    print("\n" + "=" * 50)
+    print(f"  \033[32mPASS: {PASS}\033[0m / \033[33mWARN: {WARN}\033[0m / \033[31mFAIL: {FAIL}\033[0m")
+    print("=" * 50 + "\n")
 
 
 if __name__ == "__main__":

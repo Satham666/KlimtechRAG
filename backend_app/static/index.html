@@ -316,13 +316,22 @@
 </div>
 </article>
 <article class="bg-rag-card border border-gray-800 rounded-lg p-4 flex flex-col gap-2">
-<div class="flex items-center justify-between">
-<h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">&#9201; Ostatnio zaindeksowane</h3>
-<button onclick="loadIngestHistory()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
-</div>
-<div id="ingestHistoryEl" class="space-y-1 text-[11px]">
-<div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
-</div>
+  <div class="flex items-center justify-between">
+    <h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">&#128202; Statystyki indeksowania</h3>
+    <button onclick="loadIngestStats()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
+  </div>
+  <div id="ingestStatsEl" class="space-y-1 text-[11px]">
+    <div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
+  </div>
+</article>
+<article class="bg-rag-card border border-gray-800 rounded-lg p-4 flex flex-col gap-2">
+  <div class="flex items-center justify-between">
+    <h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">&#128209; Kolekcje Qdrant</h3>
+    <button onclick="loadCollections()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
+  </div>
+  <div id="collectionsEl" class="space-y-1 text-[11px]">
+    <div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
+  </div>
 </article>
 <article class="bg-rag-card border border-gray-800 rounded-lg p-4 flex flex-col gap-2">
   <div class="flex items-center justify-between">
@@ -368,10 +377,10 @@
 </article>
 <article class="bg-rag-card border border-gray-800 rounded-lg p-4 flex flex-col gap-2">
   <div class="flex items-center justify-between">
-    <h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">&#128202; Statystyki indeksowania</h3>
-    <button onclick="loadIngestStats()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
+    <h3 class="text-xs font-bold uppercase tracking-wider text-rag-text-muted">&#9881; Przetwarzane teraz</h3>
+    <button onclick="loadProcessing()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-0.5 rounded border border-gray-700 hover:border-rag-accent transition-colors">&#8635;</button>
   </div>
-  <div id="ingestStatsEl" class="space-y-1 text-[11px]">
+  <div id="processingEl" class="space-y-1 text-[11px]">
     <div class="text-rag-text-muted text-center py-2">Ładowanie...</div>
   </div>
 </article>
@@ -553,6 +562,26 @@
 <!-- TOAST -->
 <div class="toast-msg" id="toast"></div>
 
+<!-- HELP OVERLAY -->
+<div id="helpOverlay" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="bg-rag-card border border-gray-700 rounded-lg p-6 max-w-md w-full">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-sm font-bold text-white">&#10067; Skróty klawiszowe</h3>
+      <button onclick="document.getElementById('helpOverlay').classList.add('hidden')" class="text-rag-text-muted hover:text-white text-lg">&times;</button>
+    </div>
+    <table class="w-full text-[11px]">
+      <tbody>
+        <tr class="border-b border-gray-800"><td class="py-2 text-rag-accent font-bold">Ctrl+K</td><td class="py-2 text-rag-text-muted">Focus na input czatu</td></tr>
+        <tr class="border-b border-gray-800"><td class="py-2 text-rag-accent font-bold">Ctrl+N</td><td class="py-2 text-rag-text-muted">Nowa sesja</td></tr>
+        <tr class="border-b border-gray-800"><td class="py-2 text-rag-accent font-bold">Esc</td><td class="py-2 text-rag-text-muted">Zamknij / wyczyść</td></tr>
+        <tr class="border-b border-gray-800"><td class="py-2 text-rag-accent font-bold">?</td><td class="py-2 text-rag-text-muted">Ta pomoc</td></tr>
+        <tr><td class="py-2 text-rag-accent font-bold">Enter</td><td class="py-2 text-rag-text-muted">Wyślij wiadomość</td></tr>
+      </tbody>
+    </table>
+    <div class="mt-4 text-[10px] text-rag-text-muted text-center">Naciśnij Esc lub kliknij poza oknem aby zamknąć</div>
+  </div>
+</div>
+
 <script>
 // ── STORAGE KEYS ──────────────────────────────────────────────
 const LS_SESS   = 'klimtech_sessions';
@@ -603,12 +632,13 @@ document.addEventListener('DOMContentLoaded',()=>{
   else if(sessions.length){ setActive(sessions[0].id); renderSession(sessions[0].id); }
   else{ const s=createSess(); setActive(s.id); showWelcome(); }
   renderSidebar();
-  loadStats(); loadFiles(); checkStatus(); loadIngestHistory(); loadMcpInfo(); loadServerConfig(); loadIngestErrors(); loadBatchStats(); refreshSessCountBadge(); loadIngestStats(); loadSystemInfo();
+  loadStats(); loadFiles(); checkStatus(); loadIngestHistory(); loadMcpInfo(); loadServerConfig(); loadIngestErrors(); loadBatchStats(); refreshSessCountBadge(); loadIngestStats(); loadProcessing(); loadCollections(); loadSystemInfo();
   loadModelList();
   startProgressPoll();
   startGpuPoll();
   checkHeaderHealth();
-  setInterval(()=>{ loadStats(); checkStatus(); checkHeaderHealth(); loadBatchStats(); }, 30000);
+  setInterval(()=>{ loadStats(); checkStatus(); checkHeaderHealth(); loadBatchStats(); loadProcessing(); }, 30000);
+  setInterval(()=>{ var p=document.getElementById('processingEl'); if(p) loadProcessing(); }, 10000);
 
   // Textarea auto-resize
   const ibox=document.getElementById('ibox');
@@ -633,6 +663,14 @@ document.addEventListener('DOMContentLoaded',()=>{
     if(e.key==='Escape'){
       var modal=document.getElementById('modalBg');
       if(modal&&modal.classList.contains('show')) closeModal();
+      var help=document.getElementById('helpOverlay');
+      if(help&&!help.classList.contains('hidden')) help.classList.add('hidden');
+    }
+    // ? — toggle pomocy
+    if(e.key==='?'&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='TEXTAREA'){
+      e.preventDefault();
+      var help=document.getElementById('helpOverlay');
+      if(help) help.classList.toggle('hidden');
     }
   });
 });
@@ -645,11 +683,15 @@ function renderSidebar(){
     return;
   }
   el.innerHTML=sessions.map(s=>`
-    <div class="flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${s.id===activeId?'bg-rag-accent/10 border border-rag-accent/20':'bg-rag-bg/50 border border-transparent hover:bg-white/5'}" onclick="switchSess('${s.id}')" title="Utworzono: ${s.ts?fmtDate(s.ts):'?'} | Wiadomości: ${s.messages.length}">
+    <div class="flex items-center gap-3 p-2 rounded cursor-pointer transition-colors group ${s.id===activeId?'bg-rag-accent/10 border border-rag-accent/20':'bg-rag-bg/50 border border-transparent hover:bg-white/5'}" onclick="switchSess('${s.id}')" title="Utworzono: ${s.ts?fmtDate(s.ts):'?'} | Wiadomości: ${s.messages.length}">
       <div class="w-8 h-8 rounded-full bg-rag-accent/20 flex items-center justify-center text-rag-accent text-xs shrink-0">${s.messages.length?'&#128172;':'&#10024;'}</div>
       <div class="flex-1 overflow-hidden">
         <div class="text-[11px] font-bold truncate" ondblclick="renameSess(event,'${s.id}')" title="Dwuklik = zmień nazwę">${esc(s.title)}</div>
         <div class="text-[9px] text-rag-text-muted">${fmtDate(s.ts)} / ${s.messages.length} wiad.</div>
+      </div>
+      <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button onclick="event.stopPropagation();exportSessMd('${s.id}')" class="text-[9px] text-rag-text-muted hover:text-white px-1" title="Export MD">&#8645; MD</button>
+        <button onclick="event.stopPropagation();exportSessJson('${s.id}')" class="text-[9px] text-rag-text-muted hover:text-white px-1" title="Export JSON">&#8645; JSON</button>
       </div>
       <span class="text-[10px] text-rag-text-muted hover:text-red-400 cursor-pointer opacity-0 group-hover:opacity-100" onclick="event.stopPropagation();delSess(event,'${s.id}')">&#10005;</span>
     </div>`).join('');
@@ -778,6 +820,22 @@ async function renameSess(e, id){
     }).catch(function(){});
   }
   toast('Nazwa zmieniona');
+}
+function exportSessMd(id){
+  var sess=getSess(id); if(!sess) return;
+  var bid=sess.backendId; if(!bid){ toast('Brak backendId'); return; }
+  window.open(B+'/v1/sessions/'+bid+'/export.md','_blank');
+}
+function exportSessJson(id){
+  var sess=getSess(id); if(!sess) return;
+  var bid=sess.backendId; if(!bid){ toast('Brak backendId'); return; }
+  var url=B+'/v1/sessions/'+bid+'/export.json';
+  F(url).then(function(r){if(!r.ok)throw r.status; return r.blob();}).then(function(blob){
+    var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download=(sess.title||'sesja').replace(/[^a-zA-Z0-9 _-]/g,'').trim()+'.json';
+    a.click(); URL.revokeObjectURL(a.href);
+    toast('Wyeksportowano JSON');
+  }).catch(function(e){ toast('Export error: '+e); });
 }
 function clearAll(){
   if(!confirm('Usunac WSZYSTKIE rozmowy?'))return;
@@ -1346,6 +1404,49 @@ async function loadIngestStats(){
     el.innerHTML='<div class="text-red-400 text-center py-2">Błąd: '+e.message+'</div>';
   }
 }
+var _processingInterval=null;
+async function loadProcessing(){
+  var el=document.getElementById('processingEl');
+  if(!el) return;
+  try{
+    var r=await F(B+'/v1/ingest/processing');
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    var total=d.total||0;
+    if(total===0){
+      el.innerHTML='<div class="text-green-400 text-center py-2">&#10003; Brak aktywnych</div>';
+      return;
+    }
+    var files=d.files||[];
+    el.innerHTML='<div class="text-rag-text-muted mb-1">Przetwarzane: '+total+'</div>'
+      +files.map(function(f){
+        var name=esc(f.filename||f.path||'?');
+        var date=f.updated_at?f.updated_at.slice(0,19).replace('T',' '):'';
+        return '<div class="flex justify-between p-1 rounded bg-rag-bg/50"><span class="truncate text-gray-300" title="'+name+'">'+name.slice(0,30)+'</span><span class="text-rag-text-muted shrink-0 ml-1">'+date+'</span></div>';
+      }).join('');
+  }catch(e){
+    el.innerHTML='<div class="text-rag-text-muted text-center py-2">Niedostępne</div>';
+  }
+}
+async function loadCollections(){
+  var el=document.getElementById('collectionsEl');
+  if(!el) return;
+  try{
+    var r=await F(B+'/collections');
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    var list=Array.isArray(d)?d:(d.collections||[]);
+    if(!list.length){el.innerHTML='<div class="text-rag-text-muted text-center py-2">Brak kolekcji</div>';return;}
+    el.innerHTML=list.map(function(c){
+      var name=esc(c.name||c.collection_name||'?');
+      var points=esc(String(c.points_count||c.vectors||0));
+      var dim=esc(String(c.vector_size||c.dimension||0));
+      return '<div class="flex justify-between p-1 rounded hover:bg-white/5"><span class="text-gray-300">'+name+'</span><span class="text-rag-text-muted"><span class="text-rag-accent">'+points+'</span> | '+dim+'</span></div>';
+    }).join('');
+  }catch(e){
+    el.innerHTML='<div class="text-rag-text-muted text-center py-2">Niedostępne</div>';
+  }
+}
 async function loadSystemInfo(){
   var el=document.getElementById('systemInfoEl');
   if(!el) return;
@@ -1657,13 +1758,29 @@ function appendMsgEl(role,content,sources,ts,animate){
     ? 'bg-rag-bubble-user rounded-2xl rounded-tr-none p-3 text-sm'
     : 'bg-rag-bubble-ai border border-gray-700 rounded-2xl rounded-tl-none p-3 text-sm';
 
+  const copyBtn = !isUser ? `<div class="mt-1"><button onclick="copyMessage(this, '${esc(content).replace(/'/g, "\\'")}')" class="text-[9px] text-rag-text-muted hover:text-white px-1 cursor-pointer">&#128203; Kopiuj</button></div>` : '';
+
   d.innerHTML=`
     ${avatar}
     <div>
       <div class="${bubbleCls}">${safe}${srcHtml}</div>
       <div class="text-[9px] text-rag-text-muted mt-1 ${isUser?'text-right':''}">${fmtTime(ts)}</div>
+      ${copyBtn}
     </div>`;
   msgsEl.appendChild(d);
+}
+function copyMessage(btn, text){
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(function(){
+      btn.innerHTML='&#10003; Skopiowano';
+      setTimeout(function(){ btn.innerHTML='&#128203; Kopiuj'; }, 2000);
+    });
+  } else {
+    var ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    btn.innerHTML='&#10003; Skopiowano';
+    setTimeout(function(){ btn.innerHTML='&#128203; Kopiuj'; }, 2000);
+  }
 }
 
 // F1: Tworzy bańkę AI z kursorem animowanym — zwraca referencję do elementu treści

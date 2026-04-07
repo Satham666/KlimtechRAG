@@ -95,13 +95,20 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="KlimtechRAG API",
     version="7.7",
-    description=(
-        "KlimtechRAG — lokalny system RAG z VLM, ColPali, streaming i zarzadzaniem dokumentow. "
-        "OpenAI-compatible chat completions, hybrid search, reranking, workspaces."
-    ),
+    description="RAG backend z obsługą LLM, ColPali, Batch Processing i MCP",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
+    openapi_tags=[
+        {"name": "admin", "description": "Zarządzanie plikami, indeksowaniem i kolekcjami"},
+        {"name": "sessions", "description": "Zarządzanie sesjami czatu"},
+        {"name": "ingest", "description": "Ingest dokumentów i plików"},
+        {"name": "batch", "description": "Batch processing i kolejkowanie"},
+        {"name": "collections", "description": "Operacje na kolekcjach Qdrant"},
+        {"name": "workspaces", "description": "Zarządzanie workspace'ami"},
+        {"name": "chat", "description": "Chat completions i komunikacja z LLM"},
+        {"name": "mcp", "description": "Model Context Protocol — integracje"},
+    ],
 )
 
 from fastapi.staticfiles import StaticFiles
