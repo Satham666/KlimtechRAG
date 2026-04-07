@@ -287,6 +287,7 @@
     <option value="error">Błędy</option>
   </select>
 </div>
+<input id="fileSearchInput" type="text" placeholder="Szukaj pliku..." oninput="onFileSearch(this.value)" class="w-full text-[10px] bg-rag-bg border border-gray-700 rounded px-2 py-1 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-rag-accent mb-1"/>
 <div id="fileList" class="overflow-y-auto custom-scrollbar flex-1 space-y-1 pr-1">
 <div class="text-[11px] text-rag-text-muted text-center py-4">Ladowanie...</div>
 </div>
@@ -483,6 +484,17 @@
 <!-- END: Left Sidebar -->
 <!-- BEGIN: Main Chat Area -->
 <section id="chatMainEl" class="flex-1 flex flex-col bg-rag-bg relative" data-purpose="chat-main">
+<!-- Chat Header with Session Title -->
+<div id="chatHeader" class="flex items-center justify-between px-6 py-2 border-b border-gray-800 bg-rag-sidebar/50 shrink-0">
+  <div class="flex items-center gap-2">
+    <span class="text-xs font-bold text-rag-text-muted">Rozmowa:</span>
+    <span id="activeSessionTitle" class="text-sm text-white font-semibold truncate max-w-[300px]">Brak</span>
+  </div>
+  <div class="flex items-center gap-2">
+    <button onclick="exportChatTxt()" class="text-[10px] text-rag-text-muted hover:text-white px-2 py-1 rounded border border-gray-700 hover:border-rag-accent transition-colors" title="Eksportuj czat jako TXT">&#11015; Eksportuj czat</button>
+    <button onclick="clearChatMessages()" class="text-[10px] text-rag-text-muted hover:text-red-400 px-2 py-1 rounded border border-gray-700 hover:border-red-500 transition-colors" title="Wyczyść wiadomości">&#128465; Wyczyść czat</button>
+  </div>
+</div>
 <!-- BEGIN: Chat Messages Container -->
 <div id="msgs" class="flex-1 overflow-y-auto p-6 flex flex-col gap-6 custom-scrollbar">
 <!-- Messages will be rendered here by JS -->
@@ -626,6 +638,8 @@ let gpuTimer = null;
 var filePage = 1;
 var filePageSize = 20;
 var fileTotalPages = 1;
+var fileSearchTimer = null;
+var fileSearchQuery = '';
 
 // ── SESSIONS ─────────────────────────────────────────────────
 function loadSessions(){
@@ -647,7 +661,13 @@ function createSess(title){
     .catch(function(){});
   return s;
 }
-function setActive(id){ activeId=id; localStorage.setItem(LS_ACTIVE,id); }
+function setActive(id){ 
+  activeId=id; 
+  localStorage.setItem(LS_ACTIVE,id);
+  var sess=getSess(id);
+  var titleEl=document.getElementById('activeSessionTitle');
+  if(titleEl && sess) titleEl.textContent=sess.title||'Nowa rozmowa';
+}
 
 // ── INIT ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded',()=>{
@@ -718,7 +738,7 @@ function renderSidebar(){
       <div class="w-8 h-8 rounded-full bg-rag-accent/20 flex items-center justify-center text-rag-accent text-xs shrink-0">${s.messages.length?'&#128172;':'&#10024;'}</div>
       <div class="flex-1 overflow-hidden">
         <div class="text-[11px] font-bold truncate" ondblclick="renameSess(event,'${s.id}')" title="Dwuklik = zmień nazwę">${esc(s.title)}</div>
-        <div class="text-[9px] text-rag-text-muted">${fmtDate(s.ts)} / ${s.messages.length} wiad.</div>
+        <div class="text-[9px] text-rag-text-muted">${fmtDate(s.ts)}<span class="text-rag-accent text-[9px]"> (${s.messages_count||s.messages.length})</span></div>
       </div>
       <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button onclick="event.stopPropagation();exportSessMd('${s.id}')" class="text-[9px] text-rag-text-muted hover:text-white px-1" title="Export MD">&#8645; MD</button>
@@ -835,6 +855,8 @@ function showWelcome(){
         <span class="tip-btn px-3 py-1.5 rounded-full bg-rag-card border border-gray-700 text-[11px] text-rag-text-muted cursor-pointer hover:border-rag-accent hover:text-rag-accent transition-colors" onclick="useTip(this)">Szukaj informacji o...</span>
       </div>
     </div>`;
+  var titleEl=document.getElementById('activeSessionTitle');
+  if(titleEl) titleEl.textContent='Witaj!';
 }
 function newSession(){
   const s=createSess(); setActive(s.id);
@@ -853,7 +875,7 @@ async function syncSessionsFromBackend(){
       var existing=sessions.find(function(s){ return s.backendId===bs.id; });
       if(!existing){
         // Nowa sesja z backendu — dodaj do localStorage
-        var ns={id:'sess_be_'+bs.id, title:bs.title||'Sesja z backendu', ts:new Date(bs.updated_at).getTime()||Date.now(), messages:[], backendId:bs.id};
+        var ns={id:'sess_be_'+bs.id, title:bs.title||'Sesja z backendu', ts:new Date(bs.updated_at).getTime()||Date.now(), messages:[], backendId:bs.id, messages_count:bs.messages_count||0};
         sessions.push(ns);
         merged++;
       }
@@ -879,6 +901,10 @@ async function renameSess(e, id){
   if(newTitle===null) return;
   newTitle=newTitle.trim()||sess.title;
   sess.title=newTitle; saveSessions(); renderSidebar();
+  if(id===activeId){
+    var titleEl=document.getElementById('activeSessionTitle');
+    if(titleEl) titleEl.textContent=newTitle;
+  }
   if(sess.backendId){
     F(B+'/v1/sessions/'+sess.backendId, {
       method:'PATCH',
@@ -887,6 +913,45 @@ async function renameSess(e, id){
     }).catch(function(){});
   }
   toast('Nazwa zmieniona');
+}
+async function clearChatMessages(){
+  var sess=getSess(activeId);
+  if(!sess) return;
+  if(!confirm('Usunąć wszystkie wiadomości z tej sesji?')) return;
+  var msgsEl=document.getElementById('msgs');
+  msgsEl.innerHTML='<div class="m-auto max-w-md text-center"><div class="text-[11px] text-rag-text-muted">Brak wiadomości</div></div>';
+  var titleEl=document.getElementById('activeSessionTitle');
+  if(titleEl) titleEl.textContent=sess.title+' (wyczyszczony)';
+  sess.messages=[];
+  saveSessions();
+  if(sess.backendId){
+    try{
+      var r=await F(B+'/v1/sessions/'+sess.backendId+'/messages',{method:'DELETE'});
+      if(r.ok) toast('Wiadomości usunięte');
+    }catch(e){toast('Błąd: '+e.message);}
+  } else {
+    toast('Wiadomości wyczyszczone (lokalnie)');
+  }
+  renderSidebar();
+}
+function exportChatTxt(){
+  var sess=getSess(activeId);
+  if(!sess||!sess.messages.length){toast('Brak wiadomości do eksportu');return;}
+  var lines=[];
+  sess.messages.forEach(function(m){
+    var role=m.role==='user'?'Użytkownik':'Asystent';
+    var time=m.ts?new Date(m.ts).toLocaleString('pl'):'';
+    lines.push('--- '+role+' ('+time+') ---\n'+m.content+'\n');
+  });
+  var txt=lines.join('\n');
+  var blob=new Blob([txt],{type:'text/plain;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='chat_'+(sess.title||sess.id).replace(/[^a-zA-Z0-9 _-]/g,'')+'.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Czat wyeksportowany');
 }
 function exportSessMd(id){
   var sess=getSess(id); if(!sess) return;
@@ -1639,14 +1704,36 @@ function changeFilePage(delta){
   filePage=np;
   loadFiles();
 }
+function onFileSearch(val){
+  clearTimeout(fileSearchTimer);
+  fileSearchQuery=val;
+  if(!val||val.length<2){loadFiles();return;}
+  fileSearchTimer=setTimeout(function(){doFileSearch(val);},400);
+}
+async function doFileSearch(q){
+  var el=document.getElementById('fileList');
+  try{
+    var r=await F(B+'/v1/ingest/search?q='+encodeURIComponent(q)+'&limit=30');
+    if(!r.ok) throw new Error(r.status);
+    var d=await r.json();
+    var list=Array.isArray(d)?d:(d.results||d.files||[]);
+    if(!list.length){el.innerHTML='<div class="text-[11px] text-rag-text-muted text-center py-4">Brak wyników</div>';return;}
+    el.innerHTML=list.map(function(f){
+      var name=esc(f.filename||f.name||f.path||'?');
+      var statusCls=f.status==='indexed'?'text-rag-accent':f.status==='error'?'text-red-400':'text-rag-text-muted';
+      var statusTxt=f.status==='indexed'?'&#10003;':f.status==='error'?'!':'...';
+      return '<div class="flex items-center justify-between p-1.5 hover:bg-white/5 rounded transition-colors text-[11px]"><span class="truncate text-gray-300">&#128196; '+name+'</span><span class="'+statusCls+'">'+statusTxt+'</span></div>';
+    }).join('');
+  }catch(e){el.innerHTML='<div class="text-[11px] text-rag-text-muted text-center py-4">Błąd wyszukiwania</div>';}
+}
 
 // ── UPLOAD ────────────────────────────────────────────────────
 (function(){
   const drop=document.getElementById('drop'), fileIn=document.getElementById('fileIn');
   drop.addEventListener('click',()=>fileIn.click());
-  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('border-rag-accent/60');});
-  drop.addEventListener('dragleave',()=>drop.classList.remove('border-rag-accent/60'));
-  drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('border-rag-accent/60');handleFiles(e.dataTransfer.files);});
+  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('border-rag-accent');drop.classList.add('bg-rag-accent/10');drop.classList.remove('border-gray-700');});
+  drop.addEventListener('dragleave',e=>{if(!drop.contains(e.relatedTarget)){drop.classList.remove('border-rag-accent','bg-rag-accent/10');drop.classList.add('border-gray-700');}});
+  drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('border-rag-accent','bg-rag-accent/10');drop.classList.add('border-gray-700');handleFiles(e.dataTransfer.files);});
   fileIn.addEventListener('change',()=>handleFiles(fileIn.files));
 })();
 

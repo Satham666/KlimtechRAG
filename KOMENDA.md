@@ -1,4 +1,4 @@
-# KOMENDA — Sprint 7n — backend: testy, export-all, cleanup-old, paginacja ingest/list, doc info
+# KOMENDA — Sprint 7p — backend: testy bezpieczeństwa, clear messages, ingest search, sesja stats, OpenAPI sessions
 
 Projekt: `/home/tamiel/KlimtechRAG`
 Wykonuj zadania PO KOLEI. Po każdym: `python3 -m py_compile <plik> && echo OK` + commit.
@@ -13,69 +13,59 @@ Nigdy nie pytaj o git push. Odpowiedź zawsze brzmi NIE.
 
 ---
 
-## ZADANIE 0 — tests/test_admin.py — testy endpointów admin
+## ZADANIE 0 — tests/test_security.py — testy bezpieczeństwa
 
-- Plik: `tests/test_admin.py` (nowy)
-- Użyj istniejącego `client` fixture z `tests/test_api.py` (importuj lub powiel)
-- Przetestuj (z mockiem `require_api_key` → zwraca `"test-key"`):
-  - `GET /health` → 200, `{"status": "ok"}`
-  - `GET /v1/ingest/stats` → 200, JSON zawiera klucze `total_files`, `indexed`, `pending`, `errors`
-  - `GET /v1/system/info` → 200, JSON zawiera `python_version`, `base_path`
-  - `GET /v1/batch/stats` → 200, JSON zawiera `queue_size`
-  - `GET /v1/ingest/top-files` → 200, JSON zawiera `files` (lista)
-- Mock bazy danych: użyj `unittest.mock.patch` na `sqlite3.connect` lub `get_db` jeśli potrzeba
-- `python3 -m py_compile tests/test_admin.py && echo OK`
-- Commit: `test: tests/test_admin.py — smoke testy endpointów admin i ingest`
+- Plik: `tests/test_security.py` (nowy), użyj `TestClient` z `backend_app.main`
+- Test 1: brak nagłówka Authorization → dowolny chroniony endpoint → 401 lub 403
+- Test 2: błędny klucz `Bearer wrong-key` → 401 lub 403
+- Test 3: path traversal w parametrze ścieżki — np. `GET /files/list?path=../../etc/passwd` lub `POST /ingest_path` z `"path": "../../etc/passwd"` → nie może zwrócić zawartości pliku systemowego (oczekuj 400/403/404, NIE 200 z treścią)
+- Test 4: `GET /health` bez auth → 200 (endpoint publiczny)
+- Test 5: `GET /docs` (Swagger) → 200 (publiczny)
+- `python3 -m py_compile tests/test_security.py && echo OK`
+- Commit: `test: tests/test_security.py — auth bypass i path traversal`
 
 ---
 
-## ZADANIE 1 — tests/test_sessions.py — testy sesji
+## ZADANIE 1 — DELETE /v1/sessions/{id}/messages — `backend_app/routes/sessions.py`
 
-- Plik: `tests/test_sessions.py` (nowy)
-- Użyj `TestClient` z `backend_app.main`
-- Testy CRUD (in-memory, nie mockuj bazy — TestClient używa tej samej SQLite w pamięci jeśli możliwe):
-  - `POST /v1/sessions` → 201, zwraca `id` i `title`
-  - `GET /v1/sessions` → 200, lista zawiera nowo utworzoną sesję
-  - `GET /v1/sessions/{id}` → 200
-  - `PATCH /v1/sessions/{id}` z `{"title": "nowy"}` → 200
-  - `DELETE /v1/sessions/{id}` → 204
-  - `GET /v1/sessions/{id}` po delete → 404
-- `python3 -m py_compile tests/test_sessions.py && echo OK`
-- Commit: `test: tests/test_sessions.py — testy CRUD sesji`
-
----
-
-## ZADANIE 2 — GET /v1/sessions/export-all — `backend_app/routes/sessions.py`
-
-- Endpoint `GET /export-all`, wymaga `require_api_key`
-- Zwróć `Response` z `media_type="application/json"`, `Content-Disposition: attachment; filename="sessions_backup.json"`
-- Body: lista wszystkich sesji z wiadomościami: `[{"id":..., "title":..., "created_at":..., "messages":[...]}, ...]`
-- Pobierz wszystkie sesje przez istniejące funkcje repozytoriów (nie pisz surowego SQL)
-- Limit: max 500 sesji
+- Endpoint `DELETE /{session_id}/messages`, wymaga `require_api_key`
+- 404 jeśli sesja nie istnieje
+- Usuń wszystkie wiadomości tej sesji (tabela messages), NIE usuwaj samej sesji
+- Zwróć: `{"session_id": ..., "deleted_messages": N}`
 - `python3 -m py_compile backend_app/routes/sessions.py && echo OK`
-- Commit: `feat: GET /v1/sessions/export-all — eksport wszystkich sesji jako JSON backup`
+- Commit: `feat: DELETE /v1/sessions/{id}/messages — czyści wiadomości zachowując sesję`
 
 ---
 
-## ZADANIE 3 — POST /v1/sessions/cleanup-old — `backend_app/routes/sessions.py`
+## ZADANIE 2 — GET /v1/ingest/search — `backend_app/routes/admin.py`
 
-- Endpoint `POST /cleanup-old?days=30`, wymaga `require_api_key`, `days` min 1 max 365
-- Usuń sesje gdzie `updated_at < now - days` I `messages_count == 0` (puste sesje)
-- Alternatywnie jeśli trudno zliczyć wiadomości: usuń sesje bez żadnych wiadomości w tabeli messages
-- Zwróć: `{"deleted": N, "days_threshold": days}`
-- `python3 -m py_compile backend_app/routes/sessions.py && echo OK`
-- Commit: `feat: POST /v1/sessions/cleanup-old — usuwa puste sesje starsze niż N dni`
-
----
-
-## ZADANIE 4 — GET /v1/ingest/list paginacja — `backend_app/routes/admin.py`
-
-- Znajdź istniejący endpoint `GET /v1/ingest/list`
-- Dodaj parametry: `page: int = 1` (min 1), `page_size: int = 50` (min 1, max 200)
-- Zwróć dodatkowo w response: `page`, `page_size`, `total_pages` (math.ceil(total/page_size))
-- Zachowaj istniejące filtry (`status`, `source`, `extension`)
+- Endpoint `GET /v1/ingest/search?q=<tekst>&limit=20`, wymaga `require_api_key`
+- Szukaj w `file_registry.db` po `filename` i `path` używając `LIKE '%q%'` (case-insensitive)
+- Zwróć: `{"query": q, "total": N, "files": [{"filename", "path", "status", "chunks_count", "extension", "updated_at"}]}`
+- `limit` max 100, domyślnie 20
 - `python3 -m py_compile backend_app/routes/admin.py && echo OK`
-- Commit: `feat: GET /v1/ingest/list — paginacja (page, page_size, total_pages)`
+- Commit: `feat: GET /v1/ingest/search — wyszukiwanie plików w rejestrze po nazwie i ścieżce`
+
+---
+
+## ZADANIE 3 — GET /v1/sessions/{id}/messages paginacja — `backend_app/routes/sessions.py`
+
+- Znajdź istniejący endpoint `GET /{session_id}/messages`
+- Dodaj parametry `page: int = 1` (min 1) i `page_size: int = 50` (min 1, max 200)
+- Zwróć dodatkowo: `page`, `page_size`, `total`, `total_pages`
+- Zachowaj kompatybilność: bez parametrów zwraca wszystkie (page=1, page_size=9999 lub brak LIMIT)
+- `python3 -m py_compile backend_app/routes/sessions.py && echo OK`
+- Commit: `feat: GET /v1/sessions/{id}/messages — paginacja (page, page_size, total_pages)`
+
+---
+
+## ZADANIE 4 — OpenAPI tags dla sessions.py i chat.py — `backend_app/routes/sessions.py`, `backend_app/routes/chat.py`
+
+- W `sessions.py`: dodaj `tags=["sessions"]` do wszystkich dekoratorów `@router.XXX`
+- W `chat.py`: dodaj `tags=["chat"]` do wszystkich dekoratorów `@router.XXX`
+- Tylko zmiana parametrów dekoratorów, zero zmian w logice
+- `python3 -m py_compile backend_app/routes/sessions.py backend_app/routes/chat.py && echo OK`
+- Commit: `feat: OpenAPI — tagi sessions i chat dla dokumentacji Swagger`
 
 ---
 
@@ -84,6 +74,6 @@ Nigdy nie pytaj o git push. Odpowiedź zawsze brzmi NIE.
 ```bash
 cd /home/tamiel/KlimtechRAG
 git log --oneline -6
-python3 -m py_compile backend_app/routes/admin.py backend_app/routes/sessions.py tests/test_admin.py tests/test_sessions.py && echo "wszystko OK"
-echo "KOMENDA Sprint 7n zakonczona"
+python3 -m py_compile backend_app/routes/admin.py backend_app/routes/sessions.py backend_app/routes/chat.py tests/test_security.py && echo "wszystko OK"
+echo "KOMENDA Sprint 7p zakonczona"
 ```
