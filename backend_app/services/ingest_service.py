@@ -217,6 +217,55 @@ def ingest_colpali_batch(file_batch, metadata: dict) -> list[dict]:
     return results
 
 
+def ingest_pdf_vlm_sync(file_path: str, filename: str, max_images: int = 10) -> dict:
+    """Indeksuje PDF z opisem obrazów przez VLM (synchronicznie).
+
+    Zwraca słownik z wynikiem: message, chunks_processed, filename, vlm_used.
+    Wydzielone z routes/ingest.py (A1b refaktoryzacja).
+    """
+    from ..ingest.image_handler import start_vlm_server, stop_vlm_server, process_pdf_with_images
+    from ..services.parser_service import clean_text
+    from ..services import get_indexing_pipeline
+    from ..services.qdrant import ensure_indexed
+    from haystack import Document
+
+    vlm_started = False
+    try:
+        logger.info("[PDF+VLM] Uruchamiam VLM server...")
+        vlm_started = start_vlm_server()
+
+        if not vlm_started:
+            logger.warning("[PDF+VLM] VLM niedostępny, używam zwykłego parsera")
+            markdown_text = parse_with_docling(file_path)
+        else:
+            result_data = process_pdf_with_images(
+                pdf_path=file_path, extract_images=True,
+                describe_images=True, max_images=max_images,
+            )
+            markdown_text = clean_text(result_data.get("combined_content", "")) or parse_with_docling(file_path)
+
+        if not markdown_text or not markdown_text.strip():
+            mark_indexed(file_path, 0)
+            return {"message": "File empty", "chunks_processed": 0, "filename": filename}
+
+        docs = [Document(content=markdown_text, meta={"source": filename, "type": ".pdf", "vlm": str(vlm_started)})]
+        result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
+        chunks = result["writer"]["documents_written"]
+        mark_indexed(file_path, chunks)
+        ensure_indexed()
+        clear_cache()
+        logger.info("[PDF+VLM] %s → %d chunks", filename, chunks)
+        return {"message": "OK", "chunks_processed": chunks, "filename": filename, "vlm_used": vlm_started}
+
+    except Exception as e:
+        mark_failed(file_path, str(e)[:200])
+        logger.exception("[PDF+VLM] Error: %s", e)
+        raise
+    finally:
+        if vlm_started:
+            stop_vlm_server()
+
+
 def ingest_semantic_batch(file_batch, model_name: str) -> list[dict]:
     """Indeksuje batch plików tekstowych (e5-large / bge-large).
 

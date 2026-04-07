@@ -5,24 +5,17 @@ import tempfile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
-from haystack import Document
-
-from ..categories.classifier import classify_document
 from ..config import settings
 from ..fs_tools import resolve_path, FsSecurityError
 from ..models import IngestPathRequest
 from ..models.schemas import IngestItem, IngestResponse
-from ..services import get_indexing_pipeline, doc_store, get_text_embedder
 from ..services.cache_service import clear_cache
 from ..services.dedup_service import hash_bytes, hash_file, compute_content_hash
 from ..services.ingest_service import ingest_file_background, ingest_colpali_batch, ingest_semantic_batch
 from ..services.nextcloud_service import EXT_TO_DIR, TEXT_INDEXABLE, save_to_uploads, rescan_nextcloud
-from ..services.parser_service import parse_with_docling, read_text_file
 from ..services.qdrant import ensure_indexed
-from ..services.embedder_pool import get_embedder, unload_embedder
 from ..utils.rate_limit import apply_rate_limit, get_client_id
 from ..utils.dependencies import require_api_key, get_request_id
-from ..monitoring import log_stats
 from ..file_registry import (
     mark_indexed,
     mark_failed,
@@ -140,6 +133,8 @@ async def ingest_file(
     request_id: str = Depends(get_request_id),
 ):
     """Klasyczny endpoint: parsuje i indeksuje bezpośrednio (bez zapisu do Nextcloud)."""
+    from ..services.ingest_service import ingest_text_docs
+
     require_api_key(request)
     apply_rate_limit(get_client_id(request))
 
@@ -171,22 +166,14 @@ async def ingest_file(
                 unload_model()
             return {"message": "Zaindeksowano przez ColPali", "pages_processed": pages, "collection": "klimtech_colpali"}
 
-        if suffix == ".pdf":
-            markdown_text = parse_with_docling(temp_file_path)
-        elif suffix in TEXT_INDEXABLE:
-            markdown_text = read_text_file(temp_file_path, suffix)
-        else:
+        if suffix not in TEXT_INDEXABLE:
             return {"message": f"Format {suffix} not text-indexable", "chunks_processed": 0}
 
-        if not markdown_text or not markdown_text.strip():
+        logger.info("[ingest] Embedding %s", file.filename, extra={"request_id": request_id})
+        chunks = ingest_text_docs(temp_file_path, file.filename, suffix, embedding_model)
+        if chunks == 0:
             return {"message": "File empty (Scanned PDF?)", "chunks_processed": 0}
-
-        category = classify_document(filepath=file.filename, content=markdown_text)
-        docs = [Document(content=markdown_text, meta={"source": file.filename, "type": suffix, "category": category})]
-        logger.info("[ingest] Embedding %s | %s", file.filename, log_stats("Start"), extra={"request_id": request_id})
-        result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
-        chunks = result["writer"]["documents_written"]
-        logger.info("[ingest] %s → %d chunków | %s", file.filename, chunks, log_stats("Koniec"), extra={"request_id": request_id})
+        logger.info("[ingest] %s → %d chunków", file.filename, chunks, extra={"request_id": request_id})
         return {"message": "File ingested successfully", "chunks_processed": chunks}
 
     finally:
@@ -258,23 +245,11 @@ async def ingest_by_path(
         return {"message": "OK (ColPali)", "chunks_processed": pages, "filename": filename}
 
     try:
-        if suffix == ".pdf":
-            markdown_text = parse_with_docling(file_path)
-        else:
-            markdown_text = read_text_file(file_path, suffix)
-
-        if not markdown_text or not markdown_text.strip():
-            mark_indexed(file_path, 0)
-            return {"message": "File empty", "chunks_processed": 0, "filename": filename}
-
-        category = classify_document(filepath=file_path, content=markdown_text)
-        docs = [Document(content=markdown_text, meta={"source": filename, "type": suffix, "category": category})]
-        result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
-        chunks = result["writer"]["documents_written"]
-        mark_indexed(file_path, chunks)
+        from ..services.ingest_service import ingest_text_docs
+        chunks = ingest_text_docs(file_path, filename, suffix, embedding_model)
         ensure_indexed()
         clear_cache()
-        logger.info("[ingest_path] %s → %d chunks (kategoria: %s)", filename, chunks, category)
+        logger.info("[ingest_path] %s → %d chunks", filename, chunks)
         return IngestResponse(data=[IngestItem(
             doc_id=filename,
             source=filename,
@@ -387,8 +362,7 @@ async def ingest_pdf_with_vlm(
     request_id: str = Depends(get_request_id),
 ):
     """Indeksuje PDF z opisem obrazów przez VLM."""
-    from ..ingest.image_handler import start_vlm_server, stop_vlm_server
-    from ..services.parser_service import clean_text
+    from ..services.ingest_service import ingest_pdf_vlm_sync
 
     require_api_key(req)
     apply_rate_limit(get_client_id(req))
@@ -405,39 +379,10 @@ async def ingest_pdf_with_vlm(
     if not filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Tylko pliki PDF")
 
-    vlm_started = False
     try:
-        logger.info("[PDF+VLM] Uruchamiam VLM server...")
-        vlm_started = start_vlm_server()
-
-        if not vlm_started:
-            logger.warning("[PDF+VLM] VLM niedostępny, używam zwykłego parsera")
-            markdown_text = parse_with_docling(file_path)
-        else:
-            from ..ingest.image_handler import process_pdf_with_images
-            result_data = process_pdf_with_images(pdf_path=file_path, extract_images=True, describe_images=True, max_images=max_images)
-            markdown_text = clean_text(result_data.get("combined_content", "")) or parse_with_docling(file_path)
-
-        if not markdown_text or not markdown_text.strip():
-            mark_indexed(file_path, 0)
-            return {"message": "File empty", "chunks_processed": 0, "filename": filename}
-
-        docs = [Document(content=markdown_text, meta={"source": filename, "type": ".pdf", "vlm": str(vlm_started)})]
-        result = get_indexing_pipeline().run({"splitter": {"documents": docs}})
-        chunks = result["writer"]["documents_written"]
-        mark_indexed(file_path, chunks)
-        ensure_indexed()
-        clear_cache()
-        logger.info("[PDF+VLM] %s → %d chunks", filename, chunks)
-        return {"message": "OK", "chunks_processed": chunks, "filename": filename, "vlm_used": vlm_started}
-
+        return ingest_pdf_vlm_sync(file_path, filename, max_images)
     except Exception as e:
-        mark_failed(file_path, str(e)[:200])
-        logger.exception("[PDF+VLM] Error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if vlm_started:
-            stop_vlm_server()
 
 
 # ---------------------------------------------------------------------------
