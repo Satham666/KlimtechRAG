@@ -501,6 +501,44 @@ NOTES
 
 ---
 
+## 17. Funkcja `export_claude` — Eksport sesji do pliku
+
+### Trigger: "export_claude"
+
+Gdy użytkownik napisze **`export_claude`**, asystent wykonuje:
+
+```
+[ ] 1. Ustal nazwę pliku: export_YYYY-MM-DD_HHMMSS.txt (aktualny czas)
+[ ] 2. Upewnij się że katalog istnieje: mkdir -p /home/tamiel/KlimtechRAG/export_claude_session
+[ ] 3. Uruchom komendę eksportu sesji Claude Code:
+```
+
+```bash
+mkdir -p /home/tamiel/KlimtechRAG/export_claude_session
+EXPORT_FILE=$(find /home/tamiel/KlimtechRAG -maxdepth 1 -name "*.txt" -newer /home/tamiel/KlimtechRAG/CLAUDE.md 2>/dev/null | sort | tail -1)
+if [ -n "$EXPORT_FILE" ]; then
+  DEST="/home/tamiel/KlimtechRAG/export_claude_session/$(basename "$EXPORT_FILE")"
+  mv "$EXPORT_FILE" "$DEST"
+  echo "Sesja zapisana: $DEST"
+else
+  echo "Brak nowego pliku eksportu — użyj najpierw /export w Claude Code"
+fi
+```
+
+### Jak to działa
+
+1. Użytkownik wpisuje `/export` w Claude Code — CLI zapisuje plik `.txt` w katalogu projektu
+2. Następnie wpisuje `export_claude` — asystent przenosi plik do `export_claude_session/`
+3. Folder `export_claude_session/` jest w `.gitignore` (nie trafia do repo)
+
+### Upewnij się że katalog jest w .gitignore
+
+```bash
+grep -q "export_claude_session" /home/tamiel/KlimtechRAG/.gitignore || echo "export_claude_session/" >> /home/tamiel/KlimtechRAG/.gitignore
+```
+
+---
+
 ## KOŃCOWE ZASADY SESJI
 
 - Zawsze kończ wypowiedź pytaniem o zgodę na następny krok lub — jeśli to koniec zadania — podsumowaniem i pytaniem o dalsze instrukcje.

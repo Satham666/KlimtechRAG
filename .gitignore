@@ -10,3 +10,4 @@ modele_LLM/
 .ruff_cache/*.bak
 *.backup
 nohup.out
+export_claude_session/
