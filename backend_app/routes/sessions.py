@@ -152,6 +152,43 @@ async def export_session_markdown(
     )
 
 
+@router.get("/{session_id}/export.json")
+async def export_session_json(
+    session_id: str,
+    _: str = Depends(require_api_key),
+):
+    """Eksportuje historię sesji jako JSON (kompatybilny z POST /v1/sessions/import)."""
+    import json
+    from fastapi.responses import Response
+    from ..services.session_service import get_session, get_messages
+
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+
+    messages = get_messages(session_id, limit=500)
+    export_data = {
+        "id": session["id"],
+        "title": session["title"],
+        "created_at": session["created_at"],
+        "messages": [
+            {
+                "role": msg["role"],
+                "content": msg["content"],
+                "created_at": msg["created_at"],
+            }
+            for msg in messages
+        ],
+    }
+
+    content = json.dumps(export_data, ensure_ascii=False, indent=2)
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{session_id}.json"'},
+    )
+
+
 @router.get("/stats")
 async def sessions_stats(_: str = Depends(require_api_key)):
     """Zwraca statystyki sesji: liczba sesji, wiadomości, ostatnia aktywność."""

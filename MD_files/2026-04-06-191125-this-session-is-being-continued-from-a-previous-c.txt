@@ -1,0 +1,1181 @@
+ ▐▛███▜▌   Claude Code v2.1.92
+▝▜█████▛▘  Sonnet 4.6 · Claude Pro
+  ▘▘ ▝▝    ~/KlimtechRAG
+
+✻ Conversation compacted (ctrl+o for history)
+
+  ⎿  Read 
+     ../KlimtechRAG-worktrees/reranker/backend_app/services/retrieval_service.py
+      (148 lines)
+  ⎿  Referenced file ../KlimtechRAG-worktrees/reranker/CLAUDE.md
+  ⎿  Read 
+     ../KlimtechRAG-worktrees/reranker/backend_app/services/reranker_service.py 
+     (78 lines)
+  ⎿  Read ../KlimtechRAG-worktrees/hybrid-search/backend_app/services/retrieval_
+     service.py (142 lines)
+  ⎿  Referenced file ../KlimtechRAG-worktrees/hybrid-search/CLAUDE.md
+
+● Bash(cd /home/tamiel/KlimtechRAG-worktrees/reranker && python3 -c "
+      import ast, sys…)
+  ⎿  OK: backend_app/services/reranker_service.py
+     OK: backend_app/services/retrieval_service.py
+  ⎿  Shell cwd was reset to /home/tamiel/KlimtechRAG
+  ⎿  Loaded ../KlimtechRAG-worktrees/hybrid-search/CLAUDE.md
+  ⎿  Loaded ../KlimtechRAG-worktrees/reranker/CLAUDE.md
+
+● Bash(cd /home/tamiel/KlimtechRAG-worktrees/reranker && git add
+      backend_app/services/reranker_service.py
+      backend_app/services/retrieval_service.py && git commit -m "f…)
+  ⎿  [feature/reranker 68e5a6a] feat: B3 Reranking — cross-encoder BAAI/bge
+     -reranker-base po hybrid merge
+      2 files changed, 87 insertions(+), 4 deletions(-)
+      create mode 100644 backend_app/services/reranker_service.py
+  ⎿  Shell cwd was reset to /home/tamiel/KlimtechRAG
+
+● Bash(git merge feature/reranker --no-ff -m "merge: B3 Reranking —
+      cross-encoder reranking po hybrid merge")
+  ⎿  Merge made by the 'ort' strategy.
+      backend_app/services/reranker_service.py  | 77 ++++++++++++++++++++++
+     +++++++++
+     … +3 lines (ctrl+o to expand)
+
+● B3 gotowe — merge do main. Teraz Sprint 2: C6 Metadata Extraction. Czytam
+  plan.
+
+  Searched for 3 patterns, read 1 file (ctrl+o to expand)
+
+● Teraz C6 — tworzę worktree i metadata_service.py.
+
+● Bash(git worktree add /home/tamiel/KlimtechRAG-worktrees/metadata
+      feature/metadata 2>/dev/null || git worktree add
+      /home/tamiel/KlimtechRAG-worktrees/metadata -b fea…)
+  ⎿  Preparing worktree (new branch 'feature/metadata')
+     HEAD is now at 927987c merge: B3 Reranking — cross-encoder reranking p
+     o hybrid merge
+
+● Write(~/KlimtechRAG-worktrees/metadata/backend_app/services/metadata_service.p
+       y)
+  ⎿  Wrote 119 lines to
+     ../KlimtechRAG-worktrees/metadata/backend_app/services/metadata_service.py
+       1 import logging
+       2 import os
+       3 from datetime import datetime, timezone
+       4 from typing import Any, Dict, Optional
+       5 
+       6 logger = logging.getLogger("klimtechrag")
+       7 
+       8 # --------------------------------------------------------------
+         -------------
+       9 # Metadata Service — ekstrakcja metadanych przy ingeście
+      10 # C6: title, author, page_count, language, chunk_index, indexed_
+         at
+     … +109 lines (ctrl+o to expand)
+
+● Bash(python3 -c "import ast; ast.parse(open('/home/tamiel/KlimtechRAG-worktree
+      s/metadata/backend_app/services/metadata_service.py').read());
+      print('OK')")
+  ⎿  OK
+
+● Teraz integruję build_chunk_meta w ingest_service.py. Czytam najpierw.
+
+  Read 1 file (ctrl+o to expand)
+  ⎿  Loaded ../KlimtechRAG-worktrees/metadata/CLAUDE.md
+
+● Integruję build_chunk_meta do ingest_service.py — dodaję import i rozszerzam
+  meta przy tworzeniu dokumentu.
+
+● Update(~/KlimtechRAG-worktrees/metadata/backend_app/services/ingest_service.py
+        )
+  ⎿  Added 1 line
+      12  from ..services.cache_service import clear_cache
+      13  from ..services.dedup_service import compute_content_hash
+      14  from ..services.nextcloud_service import TEXT_INDEXABLE
+      15 +from ..services.metadata_service import build_chunk_meta       
+      16  from ..services.parser_service import parse_with_docling, read_
+          text_file
+      17  
+      18  logger = logging.getLogger("klimtechrag")
+
+● Update(~/KlimtechRAG-worktrees/metadata/backend_app/services/ingest_service.py
+        )
+  ⎿  Added 10 lines, removed 6 lines
+      71              text_hash[:12],
+      72          )
+      73          category = classify_document(filepath=file_path, conten
+          t=markdown_text)
+      74 -        docs = [                                               
+      75 -            Document(                                          
+      76 -                content=markdown_text,                         
+      77 -                meta={"source": filename, "type": suffix, "cate
+         -gory": category},                                              
+      78 -            )                                                  
+      79 -        ]                                                      
+      74 +        # C6: rozszerzone metadane (title, author, page_count, 
+         +language, indexed_at)                                          
+      75 +        meta = build_chunk_meta(                               
+      76 +            source=filename,                                   
+      77 +            chunk_index=0,                                     
+      78 +            total_chunks=0,                                    
+      79 +            text=markdown_text,                                
+      80 +            file_path=file_path,                               
+      81 +            extra={"type": suffix, "category": category},      
+      82 +        )                                                      
+      83 +        docs = [Document(content=markdown_text, meta=meta)]    
+      84          result = get_indexing_pipeline().run({"splitter": {"doc
+          uments": docs}})
+      85          chunks = result["writer"]["documents_written"]
+      86  
+
+● Update(~/KlimtechRAG-worktrees/metadata/backend_app/services/ingest_service.py
+        )
+  ⎿  Added 10 lines, removed 6 lines
+      120          logger.info("⚪ Empty: %s", filename)
+      121          return 0
+      122  
+      123 -    docs = [                                                  
+      124 -        Document(                                             
+      125 -            content=markdown_text,                            
+      126 -            meta={"source": filename, "type": suffix, "embeddi
+          -ng_model": model_name},                                       
+      127 -        )                                                     
+      128 -    ]                                                         
+      123 +    # C6: rozszerzone metadane (title, author, page_count, lan
+          +guage, indexed_at)                                            
+      124 +    meta = build_chunk_meta(                                  
+      125 +        source=filename,                                      
+      126 +        chunk_index=0,                                        
+      127 +        total_chunks=0,                                       
+      128 +        text=markdown_text,                                   
+      129 +        file_path=file_path,                                  
+      130 +        extra={"type": suffix, "embedding_model": model_name},
+      131 +    )                                                         
+      132 +    docs = [Document(content=markdown_text, meta=meta)]       
+      133      result = get_indexing_pipeline().run({"splitter": {"docume
+           nts": docs}})
+      134      chunks = result["writer"]["documents_written"]
+      135      mark_indexed(file_path, chunks)
+
+● Bash(python3 -c "
+      import ast, sys…)
+  ⎿  OK: /home/tamiel/KlimtechRAG-worktrees/metadata/backend_app/services/m
+     etadata_service.py
+     OK: /home/tamiel/KlimtechRAG-worktrees/metadata/backend_app/services/i
+     ngest_service.py
+
+● Bash(cd /home/tamiel/KlimtechRAG-worktrees/metadata && git add
+      backend_app/services/metadata_service.py
+      backend_app/services/ingest_service.py && git commit -m "feat…)  ⎿  [feature/metadata 8b5d6f8] feat: C6 Metadata extraction — title, autho
+     r, language, indexed_at przy ingescie
+      2 files changed, 140 insertions(+), 12 deletions(-)
+      create mode 100644 backend_app/services/metadata_service.py
+  ⎿  Shell cwd was reset to /home/tamiel/KlimtechRAG
+
+● Bash(git merge feature/metadata --no-ff -m "merge: C6 Metadata extraction —
+      rozszerzone meta przy ingescie")
+  ⎿  Merge made by the 'ort' strategy.
+      backend_app/services/ingest_service.py   |  33 +++++----
+      backend_app/services/metadata_service.py | 119 ++++++++++++++++++++++
+     … +3 lines (ctrl+o to expand)
+
+● C6 gotowe. Teraz C4 — Contextual Enrichment.
+
+● Bash(git worktree add /home/tamiel/KlimtechRAG-worktrees/enrichment -b
+      feature/enrichment)
+  ⎿  Preparing worktree (new branch 'feature/enrichment')
+     HEAD is now at a21206f merge: C6 Metadata extraction — rozszerzone met
+     a przy ingescie
+
+● Write(~/KlimtechRAG-worktrees/enrichment/backend_app/services/enrichment_servi
+       ce.py)
+  ⎿  Wrote 111 lines to ../KlimtechRAG-worktrees/enrichment/backend_app/services
+     /enrichment_service.py
+       1 import logging
+       2 import os
+       3 from typing import List
+       4 
+       5 from haystack import Document as HaystackDocument
+       6 
+       7 logger = logging.getLogger("klimtechrag")
+       8 
+       9 # --------------------------------------------------------------
+         -------------
+      10 # Enrichment Service — Contextual Enrichment chunków (C4)
+     … +101 lines (ctrl+o to expand)
+
+● Teraz integruję enrich_chunks w ingest_service.py — po splitterze, przed
+  embedderem. Sprawdzam jak wygląda pipeline.
+
+  Read 1 file (ctrl+o to expand)
+  ⎿  Loaded ../KlimtechRAG-worktrees/enrichment/CLAUDE.md
+
+● Muszę sprawdzić jak zbudowany jest get_indexing_pipeline() — enrichment musi
+  się wstrzyknąć po splitterze.
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+● Podejście: gdy enrichment ON — split ręcznie → enrich → podaj do pipeline od
+  kroku embedder. Haystack v2 pozwala na to.
+
+● Update(~/KlimtechRAG-worktrees/enrichment/backend_app/services/ingest_service.
+        py)
+  ⎿  Added 1 line
+      12  from ..services.cache_service import clear_cache
+      13  from ..services.dedup_service import compute_content_hash
+      14  from ..services.nextcloud_service import TEXT_INDEXABLE
+      15 +from ..services.enrichment_service import ENRICHMENT_ENABLED, e
+         +nrich_chunks                                                   
+      16  from ..services.metadata_service import build_chunk_meta
+      17  from ..services.parser_service import parse_with_docling, read_
+          text_file
+      18  
+
+● Teraz zamieniam wywołanie pipeline w ingest_file_background i
+  ingest_text_docs:
+
+● Update(~/KlimtechRAG-worktrees/enrichment/backend_app/services/ingest_service.
+        py)
+  ⎿  Added 1 line, removed 1 line
+      82              extra={"type": suffix, "category": category},
+      83          )
+      84          docs = [Document(content=markdown_text, meta=meta)]
+      85 -        result = get_indexing_pipeline().run({"splitter": {"doc
+         -uments": docs}})                                               
+      85 +        result = _run_indexing(docs)                           
+      86          chunks = result["writer"]["documents_written"]
+      87  
+      88          mark_indexed(file_path, chunks)
+
+● Update(~/KlimtechRAG-worktrees/enrichment/backend_app/services/ingest_service.
+        py)
+  ⎿  Added 1 line, removed 1 line
+      131          extra={"type": suffix, "embedding_model": model_name},
+      132      )
+      133      docs = [Document(content=markdown_text, meta=meta)]
+      134 -    result = get_indexing_pipeline().run({"splitter": {"docume
+          -nts": docs}})                                                 
+      134 +    result = _run_indexing(docs)                              
+      135      chunks = result["writer"]["documents_written"]
+      136      mark_indexed(file_path, chunks)
+      137      logger.info("✅ %s: %s (%d chunks)", model_name, filename,
+            chunks)
+
+● Teraz dodaję helper _run_indexing przed ingest_file_background:
+
+● Update(~/KlimtechRAG-worktrees/enrichment/backend_app/services/ingest_service.
+        py)
+  ⎿  Added 19 lines
+      24  # -------------------------------------------------------------
+          --------------
+      25  
+      26  
+      27 +def _run_indexing(docs: list) -> dict:                         
+      28 +    """Uruchamia indexing pipeline, opcjonalnie z C4 Contextual
+         + Enrichment.                                                   
+      29 +                                                               
+      30 +    Jeśli KLIMTECH_CONTEXTUAL_ENRICHMENT=true:                 
+      31 +        split ręcznie → enrich → embedder → writer             
+      32 +    Normalnie:                                                 
+      33 +        splitter → embedder → writer (cały pipeline)           
+      34 +    """                                                        
+      35 +    pipeline = get_indexing_pipeline()                         
+      36 +    if ENRICHMENT_ENABLED:                                     
+      37 +        from haystack.components.preprocessors import DocumentS
+         +plitter as _DS                                                 
+      38 +                                                               
+      39 +        splitter = _DS(split_by="word", split_length=200, split
+         +_overlap=30)                                                   
+      40 +        split_result = splitter.run(documents=docs)            
+      41 +        enriched = enrich_chunks(split_result["documents"])    
+      42 +        return pipeline.run({"embedder": {"documents": enriched
+         +}})                                                            
+      43 +    return pipeline.run({"splitter": {"documents": docs}})     
+      44 +                                                               
+      45 +                                                               
+      46  def ingest_file_background(file_path: str) -> None:
+      47      """Indeksuje plik do Qdrant w tle.
+      48  
+
+● Bash(python3 -c "
+      import ast, sys…)
+  ⎿  OK: /home/tamiel/KlimtechRAG-worktrees/enrichment/backend_app/services
+     /enrichment_service.py
+     OK: /home/tamiel/KlimtechRAG-worktrees/enrichment/backend_app/services
+     /ingest_service.py
+
+● Bash(cd /home/tamiel/KlimtechRAG-worktrees/enrichment && git add
+      backend_app/services/enrichment_service.py
+      backend_app/services/ingest_service.py && git commit -m "…)
+  ⎿  [feature/enrichment 4429dd7] feat: C4 Contextual Enrichment — LLM-gene
+     rowany kontekst per chunk
+      2 files changed, 133 insertions(+), 2 deletions(-)
+      create mode 100644 backend_app/services/enrichment_service.py
+  ⎿  Shell cwd was reset to /home/tamiel/KlimtechRAG
+
+● Bash(git merge feature/enrichment --no-ff -m "merge: C4 Contextual Enrichment
+      — LLM kontekst per chunk (opt-in)")
+  ⎿  Merge made by the 'ort' strategy.
+      backend_app/services/enrichment_service.py | 111 ++++++++++++++++++++
+     +++++++++
+     … +3 lines (ctrl+o to expand)
+
+● C4 gotowe. Teraz C1 — Layout Analysis (trudność wysoka). Czytam spec.
+
+  Read 1 file (ctrl+o to expand)
+
+● C1 layout_service.py — implementuję z PyMuPDF (bez modelu ML, heurystyczna
+  detekcja regionów).
+
+● Bash(git worktree add /home/tamiel/KlimtechRAG-worktrees/layout -b
+      feature/layout)
+  ⎿  Preparing worktree (new branch 'feature/layout')
+     HEAD is now at 7bdcb95 merge: C4 Contextual Enrichment — LLM kontekst
+     per chunk (opt-in)
+
+● Write(~/KlimtechRAG-worktrees/layout/backend_app/services/layout_service.py)
+  ⎿  Wrote 185 lines to
+     ../KlimtechRAG-worktrees/layout/backend_app/services/layout_service.py
+       1 import logging
+       2 from dataclasses import dataclass, field
+       3 from typing import List, Optional
+       4 
+       5 logger = logging.getLogger("klimtechrag")
+       6 
+       7 # --------------------------------------------------------------
+         -------------
+       8 # Layout Service — rozpoznawanie struktury PDF (C1)
+       9 # Implementacja: PyMuPDF heurystyki (bez zewnętrznego modelu ML)
+      10 # Klasyfikuje regiony: text, header, footer, image, table_hint
+     … +175 lines (ctrl+o to expand)
+● Teraz podpinam w parser_service.py — routing PDF przez layout:
+
+  Read 1 file (ctrl+o to expand)
+  ⎿  Loaded ../KlimtechRAG-worktrees/layout/CLAUDE.md
+
+● Podpinam layout_service w parse_with_docling — gdy PyMuPDF dostępny, używam go
+   jako filtra nagłówków/stopek/tabel:
+
+● Update(~/KlimtechRAG-worktrees/layout/backend_app/services/parser_service.py)
+  ⎿  Added 14 lines, removed 1 line
+      41  
+      42  
+      43  def parse_with_docling(file_path: str) -> str:
+      44 -    """Parsuje PDF: najpierw pdftotext, fallback na Docling OCR
+         -.                                                              
+      44 +    """Parsuje PDF: najpierw pdftotext z layout analysis, fallb
+         +ack na Docling OCR.                                            
+      45  
+      46      Zwraca oczyszczony tekst w formacie markdown.
+      47 +    C1: Gdy PyMuPDF dostępny — filtruje nagłówki/stopki i oznac
+         +za tabele.                                                     
+      48      """
+      49 +    # C1: Layout analysis — filtrowanie nagłówków/stopek/tabel 
+         +przez PyMuPDF                                                  
+      50 +    from .layout_service import get_layout_summary, parse_pdf_l
+         +ayout, regions_to_text_chunks                                  
+      51 +                                                               
+      52 +    regions = parse_pdf_layout(file_path)                      
+      53 +    if regions:                                                
+      54 +        layout_text = regions_to_text_chunks(regions)          
+      55 +        if layout_text and len(layout_text) > 100:             
+      56 +            summary = get_layout_summary(regions)              
+      57 +            logger.info("[PDF] Layout analysis OK: %s", summary
+         +)                                                              
+      58 +            return clean_text(layout_text)                     
+      59 +        logger.debug("[PDF] Layout analysis zwróciło za mało te
+         +kstu — fallback pdftotext")                                    
+      60 +                                                               
+      61      text = extract_pdf_text(file_path)
+      62      if text:
+      63          logger.info("[PDF] Użyto pdftotext (szybkie)")
+
+● Bash(python3 -c "
+      import ast, sys…)
+  ⎿  OK: /home/tamiel/KlimtechRAG-worktrees/layout/backend_app/services/lay
+     out_service.py
+     OK: /home/tamiel/KlimtechRAG-worktrees/layout/backend_app/services/par
+     ser_service.py
+
+● Bash(cd /home/tamiel/KlimtechRAG-worktrees/layout && git add
+      backend_app/services/layout_service.py
+      backend_app/services/parser_service.py && git commit -m "feat: C1…)
+  ⎿  [feature/layout b7cafaf] feat: C1 Layout Analysis — PyMuPDF heurystycz
+     na klasyfikacja regionow PDF
+      2 files changed, 199 insertions(+), 1 deletion(-)
+      create mode 100644 backend_app/services/layout_service.py
+  ⎿  Shell cwd was reset to /home/tamiel/KlimtechRAG
+
+● Bash(git merge feature/layout --no-ff -m "merge: C1 Layout Analysis — PyMuPDF
+      klasyfikacja regionow PDF")
+  ⎿  Merge made by the 'ort' strategy.
+      backend_app/services/layout_service.py | 185 ++++++++++++++++++++++++
+     +++++++++
+     … +3 lines (ctrl+o to expand)
+
+● Sprint 2 gotowy. Teraz Sprint 3 — zaczynam od B7 /v1/chunks.
+
+● Bash(git worktree add /home/tamiel/KlimtechRAG-worktrees/chunks -b
+      feature/chunks)
+  ⎿  Preparing worktree (new branch 'feature/chunks')
+     HEAD is now at b50e9c4 merge: C1 Layout Analysis — PyMuPDF klasyfikacj
+     a regionow PDF
+
+● Sprawdzam aktualne schematy:
+
+  Read 1 file (ctrl+o to expand)
+
+● Dodaję schematy ChunksRequest i ChunksResponse:
+
+● Update(~/KlimtechRAG-worktrees/chunks/backend_app/models/schemas.py)
+  ⎿  Added 41 lines
+       77  
+       78  class IngestPathRequest(BaseModel):
+       79      path: str
+       80 +                                                              
+       81 +                                                              
+       82 +# ------------------------------------------------------------
+          +---------------                                               
+       83 +# B7: /v1/chunks — Low-level retrieval bez LLM                
+       84 +# ------------------------------------------------------------
+          +---------------                                               
+       85 +                                                              
+       86 +class ChunksRequest(BaseModel):                               
+       87 +    text: str                                                 
+       88 +    limit: int = 10                                           
+       89 +    context_filter: dict = Field(default_factory=dict)  # np. 
+          +{"source": "raport.pdf"}                                      
+       90 +                                                              
+       91 +                                                              
+       92 +class ChunkResult(BaseModel):                                 
+       93 +    id: str = ""                                              
+       94 +    content: str                                              
+       95 +    score: float = 0.0                                        
+       96 +    source: str = ""                                          
+       97 +    meta: dict = Field(default_factory=dict)                  
+       98 +                                                              
+       99 +                                                              
+      100 +class ChunksResponse(BaseModel):                              
+      101 +    object: str = "list"                                      
+      102 +    data: List[ChunkResult]                                   
+      103 +    total: int                                                
+      104 +                                                              
+      105 +                                                              
+      106 +# ------------------------------------------------------------
+          +---------------                                               
+      107 +# H1: Standaryzacja IngestResponse (OpenAI-compatible)        
+      108 +# ------------------------------------------------------------
+          +---------------                                               
+      109 +                                                              
+      110 +class IngestItem(BaseModel):                                  
+      111 +    doc_id: str                                               
+      112 +    source: str                                               
+      113 +    status: str       # indexed | skipped | error | duplicate 
+          +| cached                                                      
+      114 +    chunks_count: int = 0                                     
+      115 +    collection: str = "klimtech_docs"                         
+      116 +                                                              
+      117 +                                                              
+      118 +class IngestResponse(BaseModel):                              
+      119 +    object: str = "ingest.result"                             
+      120 +    data: List[IngestItem]                                    
+
+● Teraz tworzę routes/chunks.py:
+
+● Write(~/KlimtechRAG-worktrees/chunks/backend_app/routes/chunks.py)
+  ⎿  Wrote 83 lines to
+     ../KlimtechRAG-worktrees/chunks/backend_app/routes/chunks.py
+      1 import logging
+      2 from typing import List
+      3 
+      4 from fastapi import APIRouter, Depends, HTTPException
+      5 
+      6 from ..models.schemas import ChunkResult, ChunksRequest, ChunksRe
+        sponse
+      7 from ..utils.dependencies import require_api_key
+      8 
+      9 logger = logging.getLogger("klimtechrag")
+     … +73 lines (ctrl+o to expand)
+
+● Rejestruję router w main.py:
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(~/KlimtechRAG-worktrees/chunks/backend_app/main.py)
+  ⎿  Added 1 line
+      19  )
+      20  from .routes.whisper_stt import router as whisper_router
+      21  from .routes.gpu_status import router as gpu_router
+      22 +from .routes.chunks import router as chunks_router             
+      23  
+      24  from .services import doc_store
+      25  from .file_registry import init_db as init_file_registry
+
+● Update(~/KlimtechRAG-worktrees/chunks/backend_app/main.py)
+  ⎿  Added 1 line
+      104  app.include_router(web_search_router)
+      105  app.include_router(whisper_router)
+      106  app.include_router(gpu_router)
+      107 +app.include_router(chunks_router)                             
+      108  
+      109  
+      110  @app.middleware("http")
+
+● Bash(python3 -c "
+      import ast, sys…)
+  ⎿  OK: /home/tamiel/KlimtechRAG-worktrees/chunks/backend_app/models/schem
+     as.py
+     OK: /home/tamiel/KlimtechRAG-worktrees/chunks/backend_app/routes/chunk
+     … +2 lines (ctrl+o to expand)
+
+● Bash(cd /home/tamiel/KlimtechRAG-worktrees/chunks && git add
+      backend_app/models/schemas.py backend_app/routes/chunks.py
+      backend_app/main.py && git commit -m "feat: B…)
+  ⎿  [feature/chunks e5f9d78] feat: B7 /v1/chunks + H1 IngestResponse schem
+     a
+      3 files changed, 126 insertions(+)
+      create mode 100644 backend_app/routes/chunks.py
+  ⎿  Shell cwd was reset to /home/tamiel/KlimtechRAG
+
+● Bash(git merge feature/chunks --no-ff -m "merge: B7 /v1/chunks + H1
+      IngestResponse schema")
+  ⎿  Merge made by the 'ort' strategy.
+      backend_app/main.py           |  2 ++
+      backend_app/models/schemas.py | 41 +++++++++++++++++++++
+     … +4 lines (ctrl+o to expand)
+
+● Teraz E1 (DELETE /v1/ingest/{doc_id}) + E2 (/v1/ingest/list). Najpierw
+  sprawdzam istniejące routes/admin.py:
+
+● Bash(git worktree add /home/tamiel/KlimtechRAG-worktrees/ingest-mgmt -b
+      feature/ingest-mgmt)
+  ⎿  Preparing worktree (new branch 'feature/ingest-mgmt')
+     HEAD is now at 0ef5f0b merge: B7 /v1/chunks + H1 IngestResponse schema
+
+  Read 1 file (ctrl+o to expand)
+● Sprawdzam file_registry.py — co jest dostępne do E1/E2:
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Teraz dodaję E1 i E2 do admin.py:
+
+● Update(~/KlimtechRAG-worktrees/ingest-mgmt/backend_app/routes/admin.py)
+  ⎿  Added 5 lines, removed 3 lines
+       1  import logging
+       2 +import os                                                      
+       3  import secrets
+       4  from typing import Optional
+       5  
+       5 -from fastapi import APIRouter, Depends, HTTPException, Request,
+         - WebSocket                                                     
+       6 +from fastapi import APIRouter, Depends, HTTPException, Query, R
+         +equest, WebSocket                                              
+       7  from fastapi.responses import JSONResponse
+       8  
+       9  from ..utils.dependencies import require_api_key
+      10  from ..config import settings
+      11  from ..services import doc_store
+      12  from ..file_registry import (
+      13 +    get_connection as _get_registry_connection,                
+      14      init_db as init_file_registry,
+      13 -    sync_with_filesystem,                                      
+      14 -    get_stats as get_file_stats,                               
+      15      list_files,
+      16      get_pending_files,
+      17 +    get_stats as get_file_stats,                               
+      18 +    sync_with_filesystem,                                      
+      19  )
+      20  from ..utils.dependencies import require_api_key
+      21  
+
+● Teraz dodaję endpointy E1 i E2 na końcu pliku:
+
+● Update(~/KlimtechRAG-worktrees/ingest-mgmt/backend_app/routes/admin.py)
+  ⎿  Added 111 lines
+      174              for f in files
+      175          ],
+      176      }
+      177 +                                                              
+      178 +                                                              
+      179 +# ------------------------------------------------------------
+          +---------------                                               
+      180 +# E1: DELETE /v1/ingest/{doc_id} — usuwanie dokumentu z RAG   
+      181 +# ------------------------------------------------------------
+          +---------------                                               
+      182 +                                                              
+      183 +@router.delete("/v1/ingest/{doc_id}")                         
+      184 +async def delete_ingest(                                      
+      185 +    doc_id: str,                                              
+      186 +    delete_file: bool = Query(False, description="Usuń też pli
+          +k źródłowy"),                                                 
+      187 +    _: str = Depends(require_api_key),                        
+      188 +):                                                            
+      189 +    """Usuwa dokument z Qdrant (po meta.source) i file_registr
+          +y.                                                            
+      190 +                                                              
+      191 +    ?delete_file=true → usuwa też plik fizyczny.              
+      192 +    """                                                       
+      193 +    if not doc_id or not doc_id.strip():                      
+      194 +        raise HTTPException(status_code=422, detail="doc_id ni
+          +e może być pusty")                                            
+      195 +                                                              
+      196 +    deleted_qdrant = 0                                        
+      197 +    deleted_registry = 0                                      
+      198 +    deleted_file = False                                      
+      199 +    file_path_to_delete: Optional[str] = None                 
+      200 +                                                              
+      201 +    # Usuń z Qdrant (filtr po meta.source == doc_id)          
+      202 +    try:                                                      
+      203 +        doc_store.delete_by_filter(                           
+      204 +            {"field": "meta.source", "operator": "==", "value"
+          +: doc_id}                                                     
+      205 +        )                                                     
+      206 +        deleted_qdrant = 1                                    
+      207 +        logger.info("[E1] Usunięto z Qdrant: %s", doc_id)     
+      208 +    except Exception as e:                                    
+      209 +        logger.warning("[E1] Błąd Qdrant delete: %s", e)      
+      210 +                                                              
+      211 +    # Usuń z file_registry                                    
+      212 +    try:                                                      
+      213 +        with _get_registry_connection() as conn:              
+      214 +            row = conn.execute(                               
+      215 +                "SELECT path FROM files WHERE filename = ? LIM
+          +IT 1", (doc_id,)                                              
+      216 +            ).fetchone()                                      
+      217 +            if row:                                           
+      218 +                file_path_to_delete = row["path"]             
+      219 +            result = conn.execute("DELETE FROM files WHERE fil
+          +ename = ?", (doc_id,))                                        
+      220 +            deleted_registry = result.rowcount                
+      221 +            conn.commit()                                     
+      222 +        logger.info("[E1] Usunięto z registry: %s (%d wierszy)
+          +", doc_id, deleted_registry)                                  
+      223 +    except Exception as e:                                    
+      224 +        logger.warning("[E1] Błąd registry delete: %s", e)    
+      225 +                                                              
+      226 +    # Opcjonalnie usuń plik fizyczny                          
+      227 +    if delete_file and file_path_to_delete and os.path.isfile(
+          +file_path_to_delete):                                         
+      228 +        try:                                                  
+      229 +            os.remove(file_path_to_delete)                    
+      230 +            deleted_file = True                               
+      231 +            logger.info("[E1] Usunięto plik: %s", file_path_to
+          +_delete)                                                      
+      232 +        except Exception as e:                                
+      233 +            logger.warning("[E1] Błąd usuwania pliku: %s", e) 
+      234 +                                                              
+      235 +    return {                                                  
+      236 +        "status": "ok",                                       
+      237 +        "doc_id": doc_id,                                     
+      238 +        "deleted_from_qdrant": deleted_qdrant > 0,            
+      239 +        "deleted_from_registry": deleted_registry > 0,        
+      240 +        "file_deleted": deleted_file,                         
+      241 +    }                                                         
+      242 +                                                              
+      243 +                                                              
+      244 +# ------------------------------------------------------------
+          +---------------                                               
+      245 +# E2: GET /v1/ingest/list — lista zaindeksowanych dokumentów  
+      246 +# ------------------------------------------------------------
+          +---------------                                               
+      247 +                                                              
+      248 +@router.get("/v1/ingest/list")                                
+      249 +async def ingest_list(                                        
+      250 +    status: Optional[str] = Query(None, description="indexed |
+          + pending | error | failed"),                                  
+      251 +    source: Optional[str] = Query(None, description="Nazwa pli
+          +ku (częściowe dopasowanie)"),                                 
+      252 +    extension: Optional[str] = Query(None, description="Rozsze
+          +rzenie, np. .pdf"),                                           
+      253 +    limit: int = Query(100, ge=1, le=1000),                   
+      254 +    _: str = Depends(require_api_key),                        
+      255 +):                                                            
+      256 +    """Zwraca listę dokumentów z file_registry z metadanymi.  
+      257 +                                                              
+      258 +    Zgodny z formatem OpenAI-style.                           
+      259 +    """                                                       
+      260 +    files = list_files(extension=extension, status=status, lim
+          +it=limit)                                                     
+      261 +                                                              
+      262 +    # Filtr po source (częściowe dopasowanie nazwy)           
+      263 +    if source:                                                
+      264 +        source_lower = source.lower()                         
+      265 +        files = [f for f in files if source_lower in f.filenam
+          +e.lower()]                                                    
+      266 +                                                              
+      267 +    data = [                                                  
+      268 +        {                                                     
+      269 +            "doc_id": f.filename,                             
+      270 +            "source": f.filename,                             
+      271 +            "path": f.path,                                   
+      272 +            "status": f.status,                               
+      273 +            "chunks_count": f.chunks_count,                   
+      274 +            "extension": f.extension,                         
+      275 +            "size_kb": round(f.size_bytes / 1024, 1),         
+      276 +            "indexed_at": f.indexed_at,                       
+      277 +            "content_hash": f.content_hash or "",             
+      278 +            "collection": "klimtech_docs",                    
+      279 +        }                                                     
+      280 +        for f in files                                        
+      281 +    ]                                                         
+      282 +                                                              
+      283 +    return {                                                  
+      284 +        "object": "list",                                     
+      285 +        "total": len(data),                                   
+      286 +        "data": data,                                         
+      287 +    }                                                         
+
+● Bash(python3 -c "
+      import ast, sys…)
+  ⎿  OK: /home/tamiel/KlimtechRAG-worktrees/ingest-mgmt/backend_app/routes/
+     admin.py
+
+● Bash(cd /home/tamiel/KlimtechRAG-worktrees/ingest-mgmt && git add
+      backend_app/routes/admin.py && git commit -m "feat: E1 DELETE
+      /v1/ingest/{doc_id} + E2 GET /v1/inge…)
+  ⎿  [feature/ingest-mgmt fbbad75] feat: E1 DELETE /v1/ingest/{doc_id} + E2
+      GET /v1/ingest/list
+      1 file changed, 116 insertions(+), 3 deletions(-)
+  ⎿  Shell cwd was reset to /home/tamiel/KlimtechRAG
+
+● Bash(git merge feature/ingest-mgmt --no-ff -m "merge: E1 DELETE
+      /v1/ingest/{doc_id} + E2 GET /v1/ingest/list")
+  ⎿  Merge made by the 'ort' strategy.
+      backend_app/routes/admin.py | 119 +++++++++++++++++++++++++++++++++++
+     +++++++--
+      1 file changed, 116 insertions(+), 3 deletions(-)
+
+● Teraz H1 — standaryzacja IngestResponse. Schemat już dodałem w B7. Teraz
+  refaktoryzuję return statements w endpointach ingest:
+
+● Bash(git worktree add /home/tamiel/KlimtechRAG-worktrees/ingest-response -b
+      feature/ingest-response)
+  ⎿  Preparing worktree (new branch 'feature/ingest-response')
+     HEAD is now at cd7f64a merge: E1 DELETE /v1/ingest/{doc_id} + E2 GET /
+     v1/ingest/list
+
+  Read 1 file (ctrl+o to expand)
+
+● Sprawdzam jak UI obsługuje odpowiedź z /upload i /ingest_path:
+
+  Searched for 4 patterns, read 1 file (ctrl+o to expand)
+
+● H1 — refaktoryzuję returns w ingest_all, upload i ingest_path na format
+  IngestResponse, plus update UI:
+
+● Update(~/KlimtechRAG-worktrees/ingest-response/backend_app/routes/ingest.py)
+  ⎿  Added 1 line
+      10  from ..config import settings
+      11  from ..fs_tools import resolve_path, FsSecurityError
+      12  from ..models import IngestPathRequest
+      13 +from ..models.schemas import IngestItem, IngestResponse        
+      14  from ..services import get_indexing_pipeline, doc_store, get_te
+          xt_embedder
+      15  from ..services.cache_service import clear_cache
+      16  from ..services.dedup_service import hash_bytes, hash_file, com
+          pute_content_hash
+
+● Teraz podmieniam główne return statements. Upload:
+
+● Update(~/KlimtechRAG-worktrees/ingest-response/backend_app/routes/ingest.py)
+  ⎿  Added 10 lines, removed 5 lines
+      104  
+      105          if ext in TEXT_INDEXABLE:
+      106              background_tasks.add_task(ingest_file_background, 
+           target_path)
+      107 -            index_msg = "Indeksowanie do RAG w tle..."        
+      107 +            status_val = "pending"                            
+      108          else:
+      109 -            index_msg = f"Format {ext} zapisany (indeksowanie 
+          -audio/video/obrazów wymaga dedykowanego pipeline)"            
+      109 +            status_val = "skipped"                            
+      110  
+      111          logger.info(
+      112 -            "[Upload] %s → Nextcloud/%s (%.1f KB) | %s",      
+      113 -            file.filename, subdir, file_size / 1024, index_msg
+          -,                                                             
+      112 +            "[Upload] %s → Nextcloud/%s (%.1f KB) | status=%s"
+          +,                                                             
+      113 +            file.filename, subdir, file_size / 1024, status_va
+          +l,                                                            
+      114              extra={"request_id": request_id},
+      115          )
+      116 -        return {"message": "Plik zapisany", "filename": file.f
+          -ilename, "duplicate": False, "size_bytes": file_size}         
+      116 +        return IngestResponse(data=[IngestItem(               
+      117 +            doc_id=safe_filename,                             
+      118 +            source=file.filename,                             
+      119 +            status=status_val,                                
+      120 +            chunks_count=0,                                   
+      121 +        )])                                                   
+      122  
+      123      except HTTPException:
+      124          raise
+
+● ingest_path — główny return sukcesu:
+
+● Update(~/KlimtechRAG-worktrees/ingest-response/backend_app/routes/ingest.py)
+  ⎿  Added 6 lines, removed 1 line
+      274          ensure_indexed()
+      275          clear_cache()
+      276          logger.info("[ingest_path] %s → %d chunks (kategoria: 
+           %s)", filename, chunks, category)
+      277 -        return {"message": "OK", "chunks_processed": chunks, "
+          -filename": filename}                                          
+      277 +        return IngestResponse(data=[IngestItem(               
+      278 +            doc_id=filename,                                  
+      279 +            source=filename,                                  
+      280 +            status="indexed",                                 
+      281 +            chunks_count=chunks,                              
+      282 +        )])                                                   
+      283  
+      284      except Exception as e:
+      285          mark_failed(file_path, str(e)[:200])
+
+● ingest_all — główny return:
+
+● Update(~/KlimtechRAG-worktrees/ingest-response/backend_app/routes/ingest.py)
+  ⎿  Added 9 lines, removed 1 line
+      362  
+      363      indexed_count = len([r for r in results if "ok" in r.get("
+           status", "")])
+      364      logger.info("🎯 Indeksowanie skończone: %d/%d sukces", ind
+           exed_count, len(results))
+      365 -    return {"indexed": indexed_count, "results": results}     
+      365 +    return IngestResponse(data=[                              
+      366 +        IngestItem(                                           
+      367 +            doc_id=r.get("filename", "unknown"),              
+      368 +            source=r.get("filename", "unknown"),              
+      369 +            status="indexed" if "ok" in r.get("status", "") el
+          +se r.get("status", "error"),                                  
+      370 +            chunks_count=r.get("chunks", 0),                  
+      371 +        )                                                     
+      372 +        for r in results                                      
+      373 +    ])                                                        
+      374  
+      375  
+      376  # ------------------------------------------------------------
+           ---------------
+
+● Aktualizuję UI — d.indexed → d.data ? d.data.length : (d.indexed || 0):
+
+● Update(~/KlimtechRAG-worktrees/ingest-response/backend_app/static/index.html)
+  ⎿  Added 1 line, removed 1 line
+      969    }).then(r=>r.json()).then(d=>{
+      970      if(poll)clearInterval(poll);
+      971      fill.style.width='100%';
+      972 -    status.textContent=`Zaindeksowano ${d.indexed||0} plikow`;
+      972 +    status.textContent=`Zaindeksowano ${d.data ? d.data.filter
+          +(x=>x.status==='indexed').length : (d.indexed||0)} plikow`;   
+      973      status.style.color='#4ade80';
+      974      btn.innerHTML='&#129504; Indeksuj pliki w RAG'; btn.disabl
+           ed=false;
+      975      setTimeout(()=>{prog.classList.remove('show');},3000);
+
+● Bash(python3 -c "
+      import ast, sys…)
+  ⎿  OK: /home/tamiel/KlimtechRAG-worktrees/ingest-response/backend_app/rou
+     tes/ingest.py
+
+● Bash(cd /home/tamiel/KlimtechRAG-worktrees/ingest-response && git add
+      backend_app/routes/ingest.py backend_app/static/index.html && git commit
+      -m "feat: H1 Standaryz…)  ⎿  [feature/ingest-response 6932a99] feat: H1 Standaryzacja IngestRespons
+     e — OpenAI-compatible format
+      2 files changed, 27 insertions(+), 8 deletions(-)
+  ⎿  Shell cwd was reset to /home/tamiel/KlimtechRAG
+
+● Bash(git merge feature/ingest-response --no-ff -m "merge: H1 Standaryzacja
+      IngestResponse — OpenAI-compatible format")
+  ⎿  Merge made by the 'ort' strategy.
+      backend_app/routes/ingest.py  | 33 ++++++++++++++++++++++++++-------
+      backend_app/static/index.html |  2 +-
+      2 files changed, 27 insertions(+), 8 deletions(-)
+
+● Teraz ostatnie dwa punkty Sprintu 3: F2 (podgląd źródeł) i F3 (panel
+  dokumentów). F2 zależy od B7 (już gotowe), F3 od E1+E2 (już gotowe).
+
+● Bash(git worktree add /home/tamiel/KlimtechRAG-worktrees/ui-sources -b
+      feature/ui-sources)
+  ⎿  Preparing worktree (new branch 'feature/ui-sources')
+     HEAD is now at 4215ed1 merge: H1 Standaryzacja IngestResponse — OpenAI
+     -compatible format
+
+● Sprawdzam aktualny stan UI — znajdę gdzie renderowane są odpowiedzi czatu i
+  sources:
+
+  Searched for 2 patterns, read 2 files (ctrl+o to expand)
+
+● Aktualizuję handle_chat_completions_stream — dodaję sources na końcu streamu:
+
+● Update(~/KlimtechRAG-worktrees/ui-sources/backend_app/services/chat_service.py
+        )
+  ⎿  Added 13 lines, removed 2 lines
+      172      rag_docs: List[HaystackDocument] = []
+      173      web_doc = None
+      174  
+      175 +    sources: List[str] = []                                   
+      176 +                                                              
+      177      if use_rag:
+      176 -        rag_docs, _ = retrieve_rag(                           
+      178 +        rag_docs, rag_sources = retrieve_rag(                 
+      179              user_message, top_k=top_k,
+      180              embedding_model=embedding_model,
+      181              request_id=request_id,
+      182          )
+      183 +        sources.extend(rag_sources)                           
+      184  
+      185      if web_search:
+      183 -        web_doc, _ = retrieve_web(user_message, request_id=req
+          -uest_id)                                                      
+      186 +        web_doc, web_sources = retrieve_web(user_message, requ
+          +est_id=request_id)                                            
+      187 +        sources.extend(web_sources)                           
+      188  
+      189      context_text = merge_context(rag_docs, web_doc)
+      190      full_prompt = build_rag_prompt(user_message, context_text)
+     ...
+      192      async for chunk in stream_llm_response(full_prompt, model=
+           model, request_id=request_id):
+      193          yield chunk
+      194  
+      195 +    # F2: Wyślij sources jako ostatni event SSE (po [DONE])   
+      196 +    if sources:                                               
+      197 +        import json as _json                                  
+      198 +        # Deduplikacja i limit 10 źródeł                      
+      199 +        unique_sources = list(dict.fromkeys(sources))[:10]    
+      200 +        yield "data: " + _json.dumps({"type": "sources", "sour
+          +ces": unique_sources}) + "\n\n"                               
+      201  
+      202 +                                                              
+      203  def handle_code_query(
+      204      query: str,
+      205      request_id: str = "-",
+
+● Teraz aktualizuję UI — parsing sources z SSE i wyświetlanie po zakończeniu
+  streamu:
+
+● Update(~/KlimtechRAG-worktrees/ui-sources/backend_app/static/index.html)
+  ⎿  Added 15 lines, removed 1 line
+      1034      const reader=r.body.getReader();
+      1035      const decoder=new TextDecoder();
+      1036      var accumulated='';
+      1037 +    var streamSources=[];                                    
+      1038  
+      1039      while(true){
+      1040        const {done,value}=await reader.read();
+     ...
+      1047          if(line.startsWith('data: ')){
+      1048            try{
+      1049              var json=JSON.parse(line.slice(6));
+      1050 +            // F2: event ze zrodlami                         
+      1051 +            if(json.type==='sources' && json.sources){       
+      1052 +              streamSources=json.sources;                    
+      1053 +              continue;                                      
+      1054 +            }                                                
+      1055              var delta=json.choices?.[0]?.delta?.content;
+      1056              if(delta){
+      1057                accumulated+=delta;
+     ...
+      1063        }
+      1064      }
+      1065  
+      1066 +    // F2: Dodaj źródła pod bańką AI                         
+      1067 +    if(streamSources.length>0){                              
+      1068 +      var srcDiv=document.createElement('div');              
+      1069 +      srcDiv.className='mt-2 pt-2 border-t border-gray-700 te
+           +xt-[10px] text-rag-text-muted';                              
+      1070 +      srcDiv.innerHTML='<span class="text-rag-accent">&#12820
+           +6; '+streamSources.length+'</span> ' + streamSources.map(func
+           +tion(s){return '<span class="bg-rag-bg px-1 rounded cursor-po
+           +inter hover:text-rag-accent" title="'+s+'">'+s.slice(0,40)+(s
+           +.length>40?'...':'')+'</span>';}).join(' ');                 
+      1071 +      bubbleEl.appendChild(srcDiv);                          
+      1072 +    }                                                        
+      1073 +                                                             
+      1074      document.getElementById('sendBtn').disabled=false;
+      1075      const finalAnswer=accumulated||'Brak odpowiedzi';
+      1062 -    sess.messages.push({role:'ai',content:finalAnswer,sources
+           -:null,ts:aiTs});                                             
+      1076 +    sess.messages.push({role:'ai',content:finalAnswer,sources
+           +:streamSources.length?streamSources:null,ts:aiTs});          
+      1077      saveSessions(); renderSidebar();
+      1078  
+      1079    }catch(e){
+
+● Bash(python3 -c "
+      import ast, sys…)
+  ⎿  OK: /home/tamiel/KlimtechRAG-worktrees/ui-sources/backend_app/services
+     /chat_service.py
+
+● Teraz F3 — panel dokumentów w UI. Sprawdzam czy jest już zakładka w sidebarze:
+
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+  ⎿  Loaded ../KlimtechRAG-worktrees/ui-sources/CLAUDE.md
+
+● Szukam miejsca w sidebarze do wstawienia panelu F3:
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Teraz znalazłem miejsce. Dodam panel F3 "Dokumenty RAG" jako nowy artikel po
+  siatce, pełna szerokość (col-span-2):
+
+● Update(~/KlimtechRAG-worktrees/ui-sources/backend_app/static/index.html)
+  ⎿  Error editing file
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(~/KlimtechRAG-worktrees/ui-sources/backend_app/static/index.html)
+  ⎿  Added 15 lines
+      292  </div>
+      293  </article>
+      294  </div>
+      295 +<!-- F3: PANEL DOKUMENTOW RAG -->                             
+      296 +<article class="bg-rag-card border border-gray-800 rounded-lg 
+          +p-4 flex flex-col" data-purpose="rag-docs-panel">             
+      297 +<div class="flex justify-between items-center mb-3">          
+      298 +<h3 class="text-xs font-bold uppercase tracking-wider text-rag
+          +-text-muted">&#128196; Dokumenty RAG</h3>                     
+      299 +<div class="flex gap-2 items-center">                         
+      300 +<select id="ragDocFilter" onchange="loadRagDocs()" class="text
+          +-[10px] bg-rag-bg border border-gray-700 rounded px-1 py-0.5 t
+          +ext-rag-text-muted">                                          
+      301 +<option value="">Wszystkie</option><option value="indexed">Zai
+          +ndeksowane</option><option value="pending">Oczekujace</option>
+          +<option value="error">Bledy</option>                          
+      302 +</select>                                                     
+      303 +<button onclick="loadRagDocs()" class="text-[10px] text-rag-te
+          +xt-muted hover:text-white px-2 py-0.5 rounded border border-gr
+          +ay-700 hover:border-rag-accent transition-colors">&#8635;</but
+          +ton>                                                          
+      304 +</div>                                                        
+      305 +</div>                                                        
+      306 +<div id="ragDocsList" class="overflow-y-auto custom-scrollbar 
+          +space-y-1 pr-1" style="max-height:160px">                     
+      307 +<div class="text-[11px] text-rag-text-muted text-center py-4">
+          +Kliknij odswierz...</div>                                     
+      308 +</div>                                                        
+      309 +</article>                                                    
+      310  <!-- Bottom Section Grid: Indeksowanie + Historia Rozmow -->
+      311  <div class="mt-auto grid grid-cols-2 gap-4">
+      312  <!-- INDEKSOWANIE RAG -->
+
+● Teraz dodaję funkcje JS loadRagDocs() i deleteRagDoc() przed loadFiles:
+
+● Update(~/KlimtechRAG-worktrees/ui-sources/backend_app/static/index.html)
+  ⎿  Added 36 lines
+      910  }
+      911  
+      912  // ── FILES ──────────────────────────────────────────────────
+           ───
+      913 +// F3: Panel dokumentow RAG — loadRagDocs() + deleteRagDoc()  
+      914 +async function loadRagDocs(){                                 
+      915 +  var el=document.getElementById('ragDocsList');              
+      916 +  var status=document.getElementById('ragDocFilter').value;   
+      917 +  var url=B+'/v1/ingest/list?limit=50'+(status?'&status='+enco
+          +deURIComponent(status):'');                                   
+      918 +  try{                                                        
+      919 +    var r=await F(url); if(!r.ok)throw 0;                     
+      920 +    var json=await r.json();                                  
+      921 +    var list=Array.isArray(json)?json:(json.data??[]);        
+      922 +    if(!list.length){el.innerHTML='<div class="text-[11px] tex
+          +t-rag-text-muted text-center py-4">Brak dokumentow</div>';retu
+          +rn;}                                                          
+      923 +    el.innerHTML=list.map(function(f){                        
+      924 +      var statusCls=f.status==='indexed'?'text-rag-accent':f.s
+          +tatus==='error'?'text-red-400':'text-yellow-400';             
+      925 +      var statusIcon=f.status==='indexed'?'&#10003;':f.status=
+          +=='error'?'!':'&#8987;';                                      
+      926 +      var chunks=f.chunks_count||0;                           
+      927 +      var kb=f.size_kb?f.size_kb+'KB':'-';                    
+      928 +      var docId=f.doc_id||f.source||'';                       
+      929 +      return '<div class="flex items-center justify-between p-
+          +1.5 hover:bg-white/5 rounded transition-colors text-[11px] gap
+          +-1">'+                                                        
+      930 +        '<span class="truncate text-gray-300 flex-1" title="'+
+          +esc(docId)+' | '+chunks+' chunks | '+kb+'">&#128196; '+esc(doc
+          +Id.slice(0,35))+'</span>'+                                    
+      931 +        '<span class="text-[10px] text-rag-text-muted shrink-0
+          +">'+chunks+'ch</span>'+                                       
+      932 +        '<span class="'+statusCls+' shrink-0 w-4 text-center">
+          +'+statusIcon+'</span>'+                                       
+      933 +        '<button onclick="deleteRagDoc(\''+esc(docId)+'\')" cl
+          +ass="shrink-0 text-[10px] text-red-400 hover:text-red-300 px-1
+          + rounded hover:bg-red-400/10 transition-colors" title="Usun z 
+          +RAG">&#10005;</button>'+                                      
+      934 +        '</div>';                                             
+      935 +    }).join('');                                              
+      936 +  }catch(e){el.innerHTML='<div class="text-[11px] text-rag-tex
+          +t-muted text-center py-4">Blad ladowania</div>';}             
+      937 +}                                                             
+      938 +                                                              
+      939 +async function deleteRagDoc(docId){                           
+      940 +  if(!confirm('Usunac "'+docId+'" z RAG?'))return;            
+      941 +  try{                                                        
+      942 +    var r=await F(B+'/v1/ingest/'+encodeURIComponent(docId),{m
+          +ethod:'DELETE'});                                             
+      943 +    var json=await r.json();                                  
+      944 +    if(json.status==='ok'){toast('Usunieto: '+docId); loadRagD
+          +ocs(); loadStats(); loadFiles();}                             
+      945 +    else{toast('Blad usuwania'); }                            
+      946 +  }catch(e){toast('Blad: '+e.message);}                       
+      947 +}                                                             
+      948 +                                                              
+      949  async function loadFiles(){
+      950    const el=document.getElementById('fileList');
+      951    try{
+
+● Bash(python3 -c "
+      import ast, sys…)
+  ⎿  OK: /home/tamiel/KlimtechRAG-worktrees/ui-sources/backend_app/services
+     /chat_service.py
+
+● Bash(cd /home/tamiel/KlimtechRAG-worktrees/ui-sources && git add
+      backend_app/services/chat_service.py backend_app/static/index.html && git
+      commit -m "feat: F2 Podgla…)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ /context                                                                      
+  ⎿  Context Usage
+     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁   Sonnet 4.6
+                           claude-sonnet-4-6
+     ⛁ ⛀ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁   146.9k/200k tokens (73%)
+
+     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁   Estimated usage by category
+                           ⛁ System prompt: 6.3k tokens (3.1%)
+     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁   ⛁ System tools: 8.5k tokens (4.3%)
+                           ⛁ Memory files: 8k tokens (4.0%)
+     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁   ⛁ Skills: 476 tokens (0.2%)
+                           ⛁ Messages: 124.2k tokens (62.1%)
+     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁   ⛶ Free space: 31.5k (15.8%)
+                           ⛝ Autocompact buffer: 21k tokens (10.5%)
+     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ 
+
+     ⛁ ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ 
+
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛝ 
+
+     ⛝ ⛝ ⛝ ⛝ ⛝ ⛝ ⛝ ⛝ ⛝ ⛝ 
+
+     MCP tools · /mcp (loaded on-demand)
+
+     Available
+     └ mcp__claude_ai_Gmail__authenticate
+     └ mcp__claude_ai_Google_Calendar__authenticate
+     └ mcp__claude_ai_Hugging_Face__dynamic_space
+     └ mcp__claude_ai_Hugging_Face__hf_doc_fetch
+     └ mcp__claude_ai_Hugging_Face__hf_doc_search
+     └ mcp__claude_ai_Hugging_Face__hf_hub_query
+     └ mcp__claude_ai_Hugging_Face__hf_whoami
+     └ mcp__claude_ai_Hugging_Face__hub_repo_details
+     └ mcp__claude_ai_Hugging_Face__hub_repo_search
+     └ mcp__claude_ai_Hugging_Face__paper_search
+     └ mcp__claude_ai_Hugging_Face__space_search
+
+     Memory files · /memory
+     └ CLAUDE.md: 7.8k tokens
+     └ ~/.claude/projects/-home-tamiel-KlimtechRAG/memory/MEMORY.md: 225 tokens
+
+     Skills · /skills
+
+      Suggestions
+      ℹ File reads using 19.5k tokens (10%) → save ~5.9k
+        If you are re-reading files, consider referencing earlier reads. Use 
+        offset/limit for large files.

@@ -68,7 +68,7 @@ async def health_check():
     }
 
 
-@router.get("/metrics")
+@router.get("/metrics", tags=["admin"])
 async def metrics_endpoint():
     return {
         "ingest_requests": metrics["ingest_requests"],
@@ -77,7 +77,7 @@ async def metrics_endpoint():
     }
 
 
-@router.delete("/documents")
+@router.delete("/documents", tags=["admin"])
 async def delete_documents(
     req: Request,
     source: Optional[str] = None,
@@ -123,7 +123,7 @@ async def websocket_health(ws: WebSocket):
         await ws.close()
 
 
-@router.get("/files/stats")
+@router.get("/files/stats", tags=["admin"])
 async def files_stats(req: Request = None):
     require_api_key(req)
     stats = get_file_stats()
@@ -142,7 +142,7 @@ async def files_stats(req: Request = None):
     return stats
 
 
-@router.get("/files/list")
+@router.get("/files/list", tags=["admin"])
 async def files_list(
     ext: Optional[str] = None,
     status: Optional[str] = None,
@@ -169,14 +169,14 @@ async def files_list(
     }
 
 
-@router.post("/files/sync")
+@router.post("/files/sync", tags=["admin"])
 async def files_sync(req: Request = None):
     require_api_key(req)
     count = sync_with_filesystem()
     return {"registered": count, "message": f"Zsynchronizowano {count} plików"}
 
 
-@router.get("/files/pending")
+@router.get("/files/pending", tags=["admin"])
 async def files_pending(req: Request = None):
     require_api_key(req)
     files = get_pending_files()
@@ -198,7 +198,7 @@ async def files_pending(req: Request = None):
 # E1: DELETE /v1/ingest/{doc_id} — usuwanie dokumentu z RAG
 # ---------------------------------------------------------------------------
 
-@router.delete("/v1/ingest/{doc_id}")
+@router.delete("/v1/ingest/{doc_id}", tags=["ingest"])
 async def delete_ingest(
     doc_id: str,
     delete_file: bool = Query(False, description="Usuń też plik źródłowy"),
@@ -263,7 +263,7 @@ async def delete_ingest(
 # E2: GET /v1/ingest/list — lista zaindeksowanych dokumentów
 # ---------------------------------------------------------------------------
 
-@router.get("/v1/ingest/list")
+@router.get("/v1/ingest/list", tags=["ingest"])
 async def ingest_list(
     status: Optional[str] = Query(None, description="indexed | pending | error | failed"),
     source: Optional[str] = Query(None, description="Nazwa pliku (częściowe dopasowanie)"),
@@ -309,7 +309,7 @@ async def ingest_list(
 # W5: Batch queue stats
 # ---------------------------------------------------------------------------
 
-@router.get("/v1/batch/stats")
+@router.get("/v1/batch/stats", tags=["batch"])
 async def batch_stats(_: str = Depends(require_api_key)):
     """Zwraca statystyki kolejki batch (W5)."""
     from ..services.batch_service import get_batch_queue
@@ -327,7 +327,7 @@ class BatchEnqueueRequest(_BaseModel):
     priority: str = "normal"   # "high" | "normal" | "low"
 
 
-@router.post("/v1/batch/enqueue")
+@router.post("/v1/batch/enqueue", tags=["batch"])
 async def batch_enqueue(
     body: BatchEnqueueRequest,
     _: str = Depends(require_api_key),
@@ -371,7 +371,7 @@ async def batch_enqueue(
 # GET /v1/ingest/history — ostatnio zaindeksowane pliki z file_registry
 # ---------------------------------------------------------------------------
 
-@router.get("/v1/ingest/history")
+@router.get("/v1/ingest/history", tags=["ingest"])
 async def ingest_history(
     limit: int = 20,
     status: str = "indexed",
@@ -411,7 +411,7 @@ async def ingest_history(
 # POST /v1/batch/clear — czyszczenie kolejki batch (W5)
 # ---------------------------------------------------------------------------
 
-@router.post("/v1/batch/clear")
+@router.post("/v1/batch/clear", tags=["batch"])
 async def batch_clear(_: str = Depends(require_api_key)):
     """Usuwa wszystkie oczekujące elementy z kolejki batch processing."""
     from ..services.batch_service import get_batch_queue
@@ -423,7 +423,7 @@ async def batch_clear(_: str = Depends(require_api_key)):
 # GET /v1/ingest/duplicates — pliki z tym samym content_hash (W3 cache)
 # ---------------------------------------------------------------------------
 
-@router.get("/v1/ingest/duplicates")
+@router.get("/v1/ingest/duplicates", tags=["ingest"])
 async def ingest_duplicates(_: str = Depends(require_api_key)):
     """Zwraca grupy plików o tym samym content_hash (potencjalne duplikaty).
 
@@ -448,7 +448,7 @@ async def ingest_duplicates(_: str = Depends(require_api_key)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/v1/batch/history")
+@router.get("/v1/batch/history", tags=["batch"])
 async def batch_history(limit: int = 50, _: str = Depends(require_api_key)):
     """Zwraca log ostatnich operacji batch processing."""
     from ..services.batch_service import get_batch_queue
@@ -462,7 +462,7 @@ async def batch_history(limit: int = 50, _: str = Depends(require_api_key)):
 # POST /v1/ingest/retry-failed — ponowne kolejkowanie plików z błędem
 # ---------------------------------------------------------------------------
 
-@router.post("/v1/ingest/retry-failed")
+@router.post("/v1/ingest/retry-failed", tags=["ingest"])
 async def retry_failed_ingest(
     limit: int = 10,
     _: str = Depends(require_api_key),
@@ -500,7 +500,7 @@ async def retry_failed_ingest(
 # GET /v1/watcher/status — status usługi watcher (H2)
 # ---------------------------------------------------------------------------
 
-@router.get("/v1/watcher/status")
+@router.get("/v1/watcher/status", tags=["admin"])
 async def watcher_status(_: str = Depends(require_api_key)):
     """Zwraca status usługi watcher: czy włączona, interwał, katalogi."""
     from ..services.watcher_service import WATCHER_ENABLED, WATCHER_INTERVAL
@@ -520,7 +520,7 @@ async def watcher_status(_: str = Depends(require_api_key)):
 # GET /v1/config — bezpieczny podgląd ustawień (bez kluczy API)
 # ---------------------------------------------------------------------------
 
-@router.get("/v1/config")
+@router.get("/v1/config", tags=["admin"])
 async def get_config(_: str = Depends(require_api_key)):
     """Zwraca nieczułe ustawienia serwera (bez kluczy API, haseł).
 
@@ -558,7 +558,7 @@ async def get_config(_: str = Depends(require_api_key)):
 # GET /v1/ingest/errors — lista plików z błędem indeksowania
 # ---------------------------------------------------------------------------
 
-@router.get("/v1/ingest/errors")
+@router.get("/v1/ingest/errors", tags=["ingest"])
 async def ingest_errors(
     limit: int = 50,
     _: str = Depends(require_api_key),
@@ -598,7 +598,7 @@ async def ingest_errors(
 # POST /v1/ingest/clear-errors — reset statusu 'error' → 'pending'
 # ---------------------------------------------------------------------------
 
-@router.post("/v1/ingest/clear-errors")
+@router.post("/v1/ingest/clear-errors", tags=["ingest"])
 async def clear_ingest_errors(_: str = Depends(require_api_key)):
     """Resetuje status wszystkich plików z 'error' na 'pending'.
 
@@ -624,7 +624,7 @@ async def clear_ingest_errors(_: str = Depends(require_api_key)):
 # GET /v1/ingest/stats — zagregowane statystyki rejestru plików
 # ---------------------------------------------------------------------------
 
-@router.get("/v1/ingest/stats")
+@router.get("/v1/ingest/stats", tags=["ingest"])
 async def ingest_stats(_: str = Depends(require_api_key)):
     """Zwraca statystyki rejestru plików: total, indexed, pending, errors, chunks.
 
@@ -655,7 +655,7 @@ async def ingest_stats(_: str = Depends(require_api_key)):
 # GET /v1/system/info — rozmiary baz danych i katalogów, wersja Pythona
 # ---------------------------------------------------------------------------
 
-@router.get("/v1/system/info")
+@router.get("/v1/system/info", tags=["admin"])
 async def system_info(_: str = Depends(require_api_key)):
     """Zwraca informacje o systemie: rozmiary plików DB, katalog danych, wersja Python."""
     import sys
@@ -706,7 +706,7 @@ async def system_info(_: str = Depends(require_api_key)):
 # POST /v1/ingest/reindex-all — reset indexed→pending + kolejkowanie HIGH
 # ---------------------------------------------------------------------------
 
-@router.post("/v1/ingest/reindex-all")
+@router.post("/v1/ingest/reindex-all", tags=["ingest"])
 async def reindex_all(_: str = Depends(require_api_key)):
     """Resetuje status wszystkich plików 'indexed' na 'pending' i dodaje do kolejki.
 
@@ -745,7 +745,7 @@ async def reindex_all(_: str = Depends(require_api_key)):
 # POST /v1/ingest/requeue-pending — dodaj wszystkie 'pending' do kolejki batch
 # ---------------------------------------------------------------------------
 
-@router.post("/v1/ingest/requeue-pending")
+@router.post("/v1/ingest/requeue-pending", tags=["ingest"])
 async def requeue_pending(
     limit: int = 100,
     _: str = Depends(require_api_key),
@@ -788,7 +788,7 @@ async def requeue_pending(
 # GET /v1/ingest/processing — lista aktualnie przetwarzanych plików
 # ---------------------------------------------------------------------------
 
-@router.get("/v1/ingest/processing")
+@router.get("/v1/ingest/processing", tags=["ingest"])
 async def ingest_processing(_: str = Depends(require_api_key)):
     """Zwraca pliki aktualnie przetwarzane (status='processing').
 
@@ -811,6 +811,44 @@ async def ingest_processing(_: str = Depends(require_api_key)):
                 "filename": r["filename"],
                 "updated_at": r["updated_at"],
                 "chunks_count": r["chunks_count"] or 0,
+            }
+            for r in rows
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/ingest/top-files — ranking plików wg liczby chunków
+# ---------------------------------------------------------------------------
+
+@router.get("/v1/ingest/top-files", tags=["ingest"])
+async def top_files(
+    limit: int = Query(10, ge=1, le=50),
+    _: str = Depends(require_api_key),
+):
+    """Zwraca ranking plików uporządkowanych według liczby chunków (malejąco).
+
+    ?limit=10  — liczba wyników (max 50)
+    """
+    try:
+        with _get_registry_connection() as conn:
+            rows = conn.execute(
+                "SELECT filename, path, chunks_count, status, extension "
+                "FROM files WHERE chunks_count > 0 ORDER BY chunks_count DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "total": len(rows),
+        "files": [
+            {
+                "filename": r["filename"],
+                "path": r["path"],
+                "chunks_count": r["chunks_count"],
+                "status": r["status"],
+                "extension": r["extension"],
             }
             for r in rows
         ],
