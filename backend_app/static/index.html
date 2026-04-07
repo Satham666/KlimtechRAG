@@ -1914,7 +1914,7 @@ async function send(){
     if(streamSources.length>0){
       var srcDiv=document.createElement('div');
       srcDiv.className='mt-2 pt-2 border-t border-gray-700 text-[10px] text-rag-text-muted';
-      srcDiv.innerHTML='<span class="text-rag-accent">&#128206; '+streamSources.length+'</span> ' + streamSources.map(function(s){return '<span class="bg-rag-bg px-1 rounded cursor-pointer hover:text-rag-accent" title="'+s+'">'+s.slice(0,40)+(s.length>40?'...':'')+'</span>';}).join(' ');
+      srcDiv.innerHTML='<span class="text-rag-accent">&#128206; '+streamSources.length+'</span> ' + streamSources.map(function(s){return '<span class="bg-rag-bg px-1 rounded cursor-pointer hover:text-rag-accent" title="Kliknij aby zobaczyć chunki: '+s+'" onclick="openChunkPreview(\''+esc(s).replace(/'/g,"\\'")+'\')" >'+s.slice(0,40)+(s.length>40?'...':'')+'</span>';}).join(' ');
       bubbleEl.appendChild(srcDiv);
     }
 
@@ -1954,7 +1954,11 @@ function appendMsgEl(role,content,sources,ts,animate){
     .replace(/`([^`]+)`/g,(_,c)=>`<code class="bg-[#05070a] px-1 rounded text-[11px] font-mono">${c}</code>`)
     .replace(/\*\*([^*]+)\*\*/g,'<strong class="text-rag-accent">$1</strong>')
     .replace(/\n/g,'<br>');
-  const srcHtml=sources?.length?`<div class="mt-2 pt-2 border-t border-gray-700 text-[10px] text-rag-text-muted"><span class="text-rag-accent">&#128206;</span> ${sources.join(', ')}</div>`:'';
+  var srcHtml='';
+  if(sources&&sources.length){
+    var srcSpans=sources.map(function(s){return '<span class="bg-rag-bg px-1 rounded cursor-pointer hover:text-rag-accent" title="Kliknij aby zobaczyć chunki: '+esc(s)+'" onclick="openChunkPreview(\''+esc(s).replace(/'/g,"\\'")+'\')" >'+esc(s.slice(0,40))+(s.length>40?'...':'')+'</span>';}).join(' ');
+    srcHtml='<div class="mt-2 pt-2 border-t border-gray-700 text-[10px] text-rag-text-muted"><span class="text-rag-accent">&#128206; '+sources.length+'</span> '+srcSpans+'</div>';
+  }
 
   const avatar = isUser
     ? '<div class="w-8 h-8 rounded-full bg-rag-blue/20 flex items-center justify-center text-xs shrink-0">&#128100;</div>'
@@ -2106,5 +2110,57 @@ function toggleSidebarFocus(){
     sb.classList.add('hidden'); sb.style.display='none'; cm.style.width='100%';
   }
 })();
+
+// F2: Podgląd chunków — otwiera modal z wynikami /v1/chunks dla danego źródła
+function openChunkPreview(source){
+  var modal=document.getElementById('chunkModal');
+  var title=document.getElementById('chunkModalTitle');
+  var body=document.getElementById('chunkModalBody');
+  title.textContent='Podgląd: '+source;
+  body.innerHTML='<div class="text-rag-text-muted text-sm py-4 text-center">Ładowanie chunków…</div>';
+  modal.classList.remove('hidden');
+  F(B+'/v1/chunks',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text:source,limit:5,context_filter:{source:source}})
+  }).then(function(r){return r.json();}).then(function(data){
+    var chunks=data.data||[];
+    if(!chunks.length){
+      body.innerHTML='<div class="text-rag-text-muted text-sm py-4 text-center">Brak chunków dla tego źródła.</div>';
+      return;
+    }
+    var html='';
+    for(var i=0;i<chunks.length;i++){
+      var c=chunks[i];
+      var scoreColor=c.score>=0.8?'text-green-400':c.score>=0.5?'text-yellow-400':'text-red-400';
+      var page=c.meta&&c.meta.page_number?'str. '+c.meta.page_number:'';
+      html+='<div class="mb-3 p-3 bg-rag-bg rounded-lg border border-gray-700">';
+      html+='<div class="flex justify-between items-center mb-1">';
+      html+='<span class="text-[10px] text-rag-text-muted">'+esc(c.source||source)+(page?' · '+page:'')+'</span>';
+      html+='<span class="text-[10px] '+scoreColor+' font-mono">score: '+c.score+'</span>';
+      html+='</div>';
+      html+='<p class="text-xs text-gray-300 leading-relaxed line-clamp-6">'+esc(c.content||'').replace(/\n/g,'<br>')+'</p>';
+      html+='</div>';
+    }
+    body.innerHTML=html;
+  }).catch(function(){
+    body.innerHTML='<div class="text-red-400 text-sm py-4 text-center">Błąd pobierania chunków.</div>';
+  });
+}
+function closeChunkModal(){
+  document.getElementById('chunkModal').classList.add('hidden');
+}
 </script>
+
+<!-- F2: Modal podglądu chunków źródła -->
+<div id="chunkModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50" onclick="if(event.target===this)closeChunkModal()">
+  <div class="bg-rag-card border border-gray-700 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl mx-4">
+    <div class="flex items-center justify-between p-4 border-b border-gray-700">
+      <h3 id="chunkModalTitle" class="text-sm font-semibold text-white truncate pr-4">Podgląd źródła</h3>
+      <button onclick="closeChunkModal()" class="text-rag-text-muted hover:text-white text-lg leading-none">&#10005;</button>
+    </div>
+    <div id="chunkModalBody" class="overflow-y-auto p-4 flex-1 text-sm"></div>
+  </div>
+</div>
+
 </body></html>
