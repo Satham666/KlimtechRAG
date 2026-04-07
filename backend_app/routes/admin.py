@@ -269,18 +269,26 @@ async def ingest_list(
     source: Optional[str] = Query(None, description="Nazwa pliku (częściowe dopasowanie)"),
     extension: Optional[str] = Query(None, description="Rozszerzenie, np. .pdf"),
     limit: int = Query(100, ge=1, le=1000),
+    page: int = Query(1, ge=1, description="Numer strony"),
+    page_size: int = Query(50, ge=1, le=200, description="Liczba wyników na stronę"),
     _: str = Depends(require_api_key),
 ):
     """Zwraca listę dokumentów z file_registry z metadanymi.
 
-    Zgodny z formatem OpenAI-style.
+    Zgodny z formatem OpenAI-style. Obsługuje paginację.
     """
-    files = list_files(extension=extension, status=status, limit=limit)
+    import math
+    all_files = list_files(extension=extension, status=status, limit=10000)
 
-    # Filtr po source (częściowe dopasowanie nazwy)
     if source:
         source_lower = source.lower()
-        files = [f for f in files if source_lower in f.filename.lower()]
+        all_files = [f for f in all_files if source_lower in f.filename.lower()]
+
+    total = len(all_files)
+    total_pages = math.ceil(total / page_size) if total > 0 else 1
+
+    offset = (page - 1) * page_size
+    paginated_files = all_files[offset : offset + page_size]
 
     data = [
         {
@@ -295,13 +303,16 @@ async def ingest_list(
             "content_hash": f.content_hash or "",
             "collection": "klimtech_docs",
         }
-        for f in files
+        for f in paginated_files
     ]
 
     return {
         "object": "list",
-        "total": len(data),
+        "total": total,
         "data": data,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
     }
 
 

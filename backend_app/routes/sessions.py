@@ -1,6 +1,5 @@
 import logging
-
-import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -245,10 +244,40 @@ async def cleanup_sessions(
 ):
     """Usuwa sesje starsze niż max_age_days (domyślnie 30 dni)."""
     from ..services.session_service import cleanup_old_sessions
+
     if body.max_age_days < 1:
         raise HTTPException(status_code=400, detail="max_age_days musi być >= 1")
     deleted = cleanup_old_sessions(max_age_days=body.max_age_days)
     return {"deleted": deleted, "max_age_days": body.max_age_days}
+
+
+@router.post("/cleanup-old")
+async def cleanup_old_sessions_endpoint(
+    days: int = 30,
+    _: str = Depends(require_api_key),
+):
+    """Usuwa puste sesje starsze niż N dni.
+
+    ?days=30  — próg wieku w dniach (min 1, max 365)
+    """
+    from datetime import timedelta
+    from ..services.session_service import _conn
+
+    if days < 1 or days > 365:
+        raise HTTPException(status_code=400, detail="days musi być >= 1 i <= 365")
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    with _conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM sessions WHERE updated_at < ? AND id NOT IN (SELECT session_id FROM messages)",
+            (cutoff,),
+        )
+        conn.commit()
+        deleted = cur.rowcount
+
+    logger.info("[cleanup-old] Usunięto %d pustych sesji starszych niż %d dni", deleted, days)
+    return {"deleted": deleted, "days_threshold": days}
 
 
 @router.get("/search")
