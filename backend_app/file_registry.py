@@ -279,7 +279,8 @@ def list_files(
             query += " AND status = ?"
             params.append(status)
 
-        query += f" ORDER BY filename LIMIT {limit}"
+        query += " ORDER BY filename LIMIT ?"
+        params.append(limit)
         rows = conn.execute(query, params).fetchall()
         return [_row_to_record(r) for r in rows]
 

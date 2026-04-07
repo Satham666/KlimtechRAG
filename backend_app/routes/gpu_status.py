@@ -5,10 +5,12 @@ GET /gpu/status — zwraca JSON z temperaturą, użyciem GPU i VRAM
 """
 
 import subprocess
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-router = APIRouter(tags=["gpu"])
+from ..utils.dependencies import require_api_key
+
+router = APIRouter(tags=["gpu"], dependencies=[Depends(require_api_key)])
 
 
 def _parse_rocm_smi() -> dict:
