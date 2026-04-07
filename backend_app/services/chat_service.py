@@ -1,7 +1,8 @@
 import json
 import logging
-from typing import List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
+import requests as _requests
 from haystack import Document as HaystackDocument
 
 from .cache_service import get_cached, set_cached, get_semantic_cached, set_semantic_cached
@@ -115,6 +116,7 @@ def handle_chat_completions(
     top_k: int,
     embedding_model: str,
     request_id: str = "-",
+    session_id: Optional[str] = None,
 ) -> Tuple[str, List[str]]:
     """Obsługuje /v1/chat/completions — opcjonalny RAG + web + LLM.
 
@@ -171,6 +173,26 @@ def handle_chat_completions(
         answer = maybe_append_low_confidence(answer, confidence)
 
     set_semantic_cached(user_message, answer)
+
+    # F4: zapisz wiadomości do sesji jeśli podano session_id
+    if session_id:
+        try:
+            from ..services.session_service import (
+                add_message as _add_msg,
+                auto_title_from_message,
+                get_session,
+                update_session_title,
+            )
+            session = get_session(session_id)
+            if session:
+                _add_msg(session_id, "user", user_message)
+                _add_msg(session_id, "assistant", answer)
+                if not session["title"]:
+                    update_session_title(session_id, auto_title_from_message(user_message))
+                logger.debug("[F4] Zapisano wiadomości do sesji %s", session_id)
+        except Exception as _se:
+            logger.warning("[F4] Błąd zapisu do sesji %s: %s", session_id, _se)
+
     return answer, sources
 
 
@@ -219,6 +241,59 @@ async def handle_chat_completions_stream(
         # Deduplikacja i limit 10 źródeł
         unique_sources = list(dict.fromkeys(sources))[:10]
         yield "data: " + _json.dumps({"type": "sources", "sources": unique_sources}) + "\n\n"
+
+
+def embed_texts(inputs: List[str]) -> List[Dict[str, Any]]:
+    """Oblicza embeddingi dla listy tekstów — wydzielone z /v1/embeddings.
+
+    Zwraca listę {"object": "embedding", "embedding": [...], "index": i}.
+    """
+    from ..services import get_text_embedder
+    results = []
+    for i, text in enumerate(inputs):
+        result = get_text_embedder().run(text=str(text))
+        results.append({"object": "embedding", "embedding": result["embedding"], "index": i})
+    return results
+
+
+def get_rag_debug_info(query: str = "test") -> Dict[str, Any]:
+    """Zbiera informacje diagnostyczne RAG — wydzielone z /rag/debug.
+
+    Zwraca słownik z info o Qdrant, retrieval i cache.
+    """
+    from ..services import get_text_embedder
+    from ..services.qdrant import get_qdrant_retriever
+    from ..services.cache_service import cache_size, CACHE_TTL
+    from ..config import settings
+    from haystack_integrations.components.retrievers.qdrant import QdrantEmbeddingRetriever
+    from ..services import doc_store
+
+    result: Dict[str, Any] = {}
+
+    try:
+        qdrant_info = _requests.get(
+            f"{settings.qdrant_url}/collections/{settings.qdrant_collection}", timeout=5
+        ).json()
+        result["qdrant_points"] = qdrant_info.get("result", {}).get("points_count", 0)
+        result["qdrant_indexed"] = qdrant_info.get("result", {}).get("indexed_vectors_count", 0)
+        result["qdrant_ok"] = result["qdrant_points"] > 0
+    except Exception as e:
+        result["qdrant_error"] = str(e)
+
+    try:
+        embedding_result = get_text_embedder().run(text=query)
+        retriever = QdrantEmbeddingRetriever(document_store=doc_store, top_k=3)
+        retrieval_result = retriever.run(query_embedding=embedding_result["embedding"])
+        docs = retrieval_result.get("documents", [])
+        result["retrieved_docs"] = len(docs)
+        result["sample"] = docs[0].content[:200] if docs else None
+        result["sources"] = [doc.meta.get("source", "unknown") for doc in docs] if docs else []
+    except Exception as e:
+        result["retrieval_error"] = str(e)
+
+    result["cache_size"] = cache_size()
+    result["cache_ttl_seconds"] = CACHE_TTL
+    return result
 
 
 def handle_code_query(
