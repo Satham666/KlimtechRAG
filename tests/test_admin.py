@@ -1,3 +1,4 @@
+import sqlite3
 import pytest
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
@@ -23,6 +24,13 @@ class TestAdminEndpoints:
     @pytest.fixture(autouse=True)
     def mock_auth(self):
         with patch("backend_app.utils.dependencies.require_api_key", return_value="test-key"):
+            yield
+
+    @pytest.fixture(autouse=True)
+    def mock_db(self):
+        in_memory = sqlite3.connect(":memory:")
+        in_memory.row_factory = sqlite3.Row
+        with patch("sqlite3.connect", return_value=in_memory):
             yield
 
     def test_health_ok(self, client):

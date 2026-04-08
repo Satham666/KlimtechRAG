@@ -51,7 +51,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Porównaj pliki z poprzednim skanem (Static Data)\nconst staticData = $getWorkflowStaticData('global');\nconst previousFiles = staticData.knownFiles || [];\n\n// Parsuj odpowiedź WebDAV PROPFIND (XML)\nconst responseText = typeof $input.first().json.data === 'string'\n  ? $input.first().json.data\n  : JSON.stringify($input.first().json);\n\n// Wyciągnij nazwy plików z odpowiedzi\nconst filePattern = /RAG_Dane\\/[^<\"\\s]+\\.[a-zA-Z0-9]+/g;\nconst matches = responseText.match(filePattern) || [];\n\n// Deduplikacja\nconst currentFiles = [...new Set(matches)];\n\n// Znajdź nowe pliki\nconst newFiles = currentFiles.filter(f => !previousFiles.includes(f));\n\n// Zapisz aktualny stan\nstaticData.knownFiles = currentFiles;\n\n// Mapowanie ścieżek Nextcloud -> ścieżki lokalne\nconst NEXTCLOUD_BASE = '/media/lobo/BACKUP/KlimtechRAG/data/nextcloud/data/admin/files';\nconst results = newFiles.map(f => {\n  const localPath = NEXTCLOUD_BASE + '/' + f;\n  const ext = f.split('.').pop().toLowerCase();\n  const isPdf = ext === 'pdf';\n  return {\n    remotePath: f,\n    localPath: localPath,\n    extension: ext,\n    isPdf: isPdf\n  };\n});\n\nreturn [{\n  json: {\n    totalCurrent: currentFiles.length,\n    totalNew: newFiles.length,\n    newFiles: results\n  }\n}];"
+        "jsCode": "// Porównaj pliki z poprzednim skanem (Static Data)\nconst staticData = $getWorkflowStaticData('global');\nconst previousFiles = staticData.knownFiles || [];\n\n// Parsuj odpowiedź WebDAV PROPFIND (XML)\nconst responseText = typeof $input.first().json.data === 'string'\n  ? $input.first().json.data\n  : JSON.stringify($input.first().json);\n\n// Wyciągnij nazwy plików z odpowiedzi\nconst filePattern = /RAG_Dane\\/[^<\"\\s]+\\.[a-zA-Z0-9]+/g;\nconst matches = responseText.match(filePattern) || [];\n\n// Deduplikacja\nconst currentFiles = [...new Set(matches)];\n\n// Znajdź nowe pliki\nconst newFiles = currentFiles.filter(f => !previousFiles.includes(f));\n\n// Zapisz aktualny stan\nstaticData.knownFiles = currentFiles;\n\n// Mapowanie ścieżek Nextcloud -> ścieżki lokalne\nconst NEXTCLOUD_BASE = '/home/lobo/KlimtechRAG/data/nextcloud/data/admin/files';\nconst results = newFiles.map(f => {\n  const localPath = NEXTCLOUD_BASE + '/' + f;\n  const ext = f.split('.').pop().toLowerCase();\n  const isPdf = ext === 'pdf';\n  return {\n    remotePath: f,\n    localPath: localPath,\n    extension: ext,\n    isPdf: isPdf\n  };\n});\n\nreturn [{\n  json: {\n    totalCurrent: currentFiles.length,\n    totalNew: newFiles.length,\n    newFiles: results\n  }\n}];"
       },
       "id": "compare-files",
       "name": "Porownaj z poprzednim skanem",
@@ -221,7 +221,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{\"model_path\":\"/media/lobo/BACKUP/KlimtechRAG/modele_LLM/model_thinking/speakleash_Bielik-11B-v3.0-Instruct-GGUF_Bielik-11B-v3.0-Instruct.Q8_0.gguf\",\"model_type\":\"llm\"}",
+        "jsonBody": "{\"model_path\":\"/home/lobo/KlimtechRAG/modele_LLM/model_thinking/speakleash_Bielik-11B-v3.0-Instruct-GGUF_Bielik-11B-v3.0-Instruct.Q8_0.gguf\",\"model_type\":\"llm\"}",
         "options": {
           "timeout": 60000
         }

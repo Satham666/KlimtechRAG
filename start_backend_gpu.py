@@ -10,11 +10,11 @@ KlimtechRAG — GPU Ingest Mode
 import subprocess, os, time, signal, sys, json
 
 # ---------------------------------------------------------------------------
-BASE_DIR         = "/media/lobo/BACKUP/KlimtechRAG"
+BASE_DIR         = "/home/lobo/KlimtechRAG"
 LLAMA_DIR        = os.path.join(BASE_DIR, "llama.cpp")
 LOG_DIR          = os.path.join(BASE_DIR, "logs")
 LLM_COMMAND_FILE = os.path.join(LOG_DIR, "llm_command.txt")
-PYTHON_VENV      = "/media/lobo/BACKUP/KlimtechRAG/venv/bin/python3"
+PYTHON_VENV      = "/home/lobo/KlimtechRAG/venv/bin/python3"
 LLAMA_PORT       = "8082"
 BACKEND_PORT     = "8000"
 QDRANT_PORT      = "6333"

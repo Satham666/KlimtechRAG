@@ -17,10 +17,10 @@ def _detect_base() -> str:
     env = os.environ.get("KLIMTECH_BASE_PATH", "").strip()
     if env and Path(env).exists():
         return env
-    backup_path = Path("/media/lobo/BACKUP/KlimtechRAG")
+    backup_path = Path("/home/lobo/KlimtechRAG")
     if backup_path.exists():
         return str(backup_path)
-    return "/media/lobo/BACKUP/KlimtechRAG"
+    return "/home/lobo/KlimtechRAG"
 
 
 BASE = _detect_base()

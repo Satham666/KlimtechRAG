@@ -44,6 +44,81 @@ async def create_session_endpoint(
     return create_session(title=body.title)
 
 
+@router.get("/export-all")
+async def export_all_sessions(
+    limit: int = 500,
+    _: str = Depends(require_api_key),
+):
+    """Eksportuje wszystkie sesje z wiadomościami jako JSON (backup)."""
+    import json
+    from fastapi.responses import Response
+    from ..services.session_service import list_sessions, get_messages
+
+    limit = min(limit, 500)
+    sessions = list_sessions(limit=limit, offset=0)
+
+    export_data = []
+    for session in sessions:
+        messages = get_messages(session["id"], limit=500)
+        export_data.append({
+            "id": session["id"],
+            "title": session["title"],
+            "created_at": session["created_at"],
+            "messages": [
+                {
+                    "role": msg["role"],
+                    "content": msg["content"],
+                    "created_at": msg["created_at"],
+                }
+                for msg in messages
+            ],
+        })
+
+    content = json.dumps(export_data, ensure_ascii=False, indent=2)
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="sessions_backup.json"'},
+    )
+
+
+@router.get("/stats")
+async def sessions_stats(_: str = Depends(require_api_key)):
+    """Zwraca statystyki sesji: liczba sesji, wiadomości, ostatnia aktywność."""
+    from ..services.session_service import get_sessions_stats
+    return get_sessions_stats()
+
+
+@router.get("/search")
+async def search_sessions(
+    q: str,
+    limit: int = 20,
+    _: str = Depends(require_api_key),
+):
+    """Przeszukuje tytuły i treść wiadomości sesji.
+
+    ?q=zapytanie  — fraza do wyszukania (min 2 znaki)
+    ?limit=20     — max wyników
+    """
+    if len(q.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Parametr 'q' musi mieć min. 2 znaki")
+    pattern = f"%{q.strip()}%"
+    from ..services.session_service import _conn
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT s.id, s.title, s.created_at, s.updated_at "
+            "FROM sessions s LEFT JOIN messages m ON s.id = m.session_id "
+            "WHERE s.title LIKE ? OR m.content LIKE ? "
+            "ORDER BY s.updated_at DESC LIMIT ?",
+            (pattern, pattern, min(limit, 100)),
+        ).fetchall()
+    return {
+        "query": q,
+        "total": len(rows),
+        "sessions": [dict(r) for r in rows],
+    }
+
+
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session_endpoint(
     session_id: str,
@@ -221,51 +296,6 @@ async def export_session_json(
     )
 
 
-@router.get("/export-all")
-async def export_all_sessions(
-    limit: int = 500,
-    _: str = Depends(require_api_key),
-):
-    """Eksportuje wszystkie sesje z wiadomościami jako JSON (backup)."""
-    import json
-    from fastapi.responses import Response
-    from ..services.session_service import list_sessions, get_messages
-
-    limit = min(limit, 500)
-    sessions = list_sessions(limit=limit, offset=0)
-
-    export_data = []
-    for session in sessions:
-        messages = get_messages(session["id"], limit=500)
-        export_data.append({
-            "id": session["id"],
-            "title": session["title"],
-            "created_at": session["created_at"],
-            "messages": [
-                {
-                    "role": msg["role"],
-                    "content": msg["content"],
-                    "created_at": msg["created_at"],
-                }
-                for msg in messages
-            ],
-        })
-
-    content = json.dumps(export_data, ensure_ascii=False, indent=2)
-    return Response(
-        content=content.encode("utf-8"),
-        media_type="application/json",
-        headers={"Content-Disposition": 'attachment; filename="sessions_backup.json"'},
-    )
-
-
-@router.get("/stats")
-async def sessions_stats(_: str = Depends(require_api_key)):
-    """Zwraca statystyki sesji: liczba sesji, wiadomości, ostatnia aktywność."""
-    from ..services.session_service import get_sessions_stats
-    return get_sessions_stats()
-
-
 class CleanupRequest(BaseModel):
     max_age_days: int = 30
 
@@ -311,36 +341,6 @@ async def cleanup_old_sessions_endpoint(
 
     logger.info("[cleanup-old] Usunięto %d pustych sesji starszych niż %d dni", deleted, days)
     return {"deleted": deleted, "days_threshold": days}
-
-
-@router.get("/search")
-async def search_sessions(
-    q: str,
-    limit: int = 20,
-    _: str = Depends(require_api_key),
-):
-    """Przeszukuje tytuły i treść wiadomości sesji.
-
-    ?q=zapytanie  — fraza do wyszukania (min 2 znaki)
-    ?limit=20     — max wyników
-    """
-    if len(q.strip()) < 2:
-        raise HTTPException(status_code=400, detail="Parametr 'q' musi mieć min. 2 znaki")
-    pattern = f"%{q.strip()}%"
-    from ..services.session_service import _conn
-    with _conn() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT s.id, s.title, s.created_at, s.updated_at "
-            "FROM sessions s LEFT JOIN messages m ON s.id = m.session_id "
-            "WHERE s.title LIKE ? OR m.content LIKE ? "
-            "ORDER BY s.updated_at DESC LIMIT ?",
-            (pattern, pattern, min(limit, 100)),
-        ).fetchall()
-    return {
-        "query": q,
-        "total": len(rows),
-        "sessions": [dict(r) for r in rows],
-    }
 
 
 class SessionImportRequest(BaseModel):
@@ -414,7 +414,7 @@ async def session_llm_context(
 # ---------------------------------------------------------------------------
 
 class BulkDeleteRequest(BaseModel):
-    ids: list[str]
+    session_ids: list[str]
 
 
 @router.post("/bulk-delete", status_code=200)
@@ -424,26 +424,26 @@ async def bulk_delete_sessions(
 ):
     """Usuwa wiele sesji naraz po liście ID.
 
-    Body: {"ids": ["id1", "id2", ...]}
+    Body: {"session_ids": ["id1", "id2", ...]}
     Zwraca liczbę faktycznie usuniętych sesji.
     """
     from ..services.session_service import delete_session
 
-    if not body.ids:
-        raise HTTPException(status_code=400, detail="ids nie może być puste")
-    if len(body.ids) > 100:
+    if not body.session_ids:
+        raise HTTPException(status_code=400, detail="session_ids nie może być puste")
+    if len(body.session_ids) > 100:
         raise HTTPException(status_code=400, detail="Maksymalnie 100 sesji naraz")
 
     deleted = 0
-    for session_id in body.ids:
+    for session_id in body.session_ids:
         try:
             delete_session(session_id)
             deleted += 1
         except Exception:
             pass
 
-    logger.info("[bulk-delete] Usunięto %d z %d sesji", deleted, len(body.ids))
-    return {"requested": len(body.ids), "deleted": deleted}
+    logger.info("[bulk-delete] Usunięto %d z %d sesji", deleted, len(body.session_ids))
+    return {"requested": len(body.session_ids), "deleted": deleted}
 
 
 # ---------------------------------------------------------------------------

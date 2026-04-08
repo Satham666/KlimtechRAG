@@ -34,10 +34,20 @@ class TestSessionsCRUD:
 
     def test_list_sessions(self, client, api_key):
         headers = _auth_headers(api_key)
+        create_resp = client.post(
+            "/v1/sessions",
+            json={"title": "List Test"},
+            headers=headers,
+        )
+        created_id = create_resp.json()["id"]
+
         resp = client.get("/v1/sessions", headers=headers)
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, (list, dict))
+        session_list = data if isinstance(data, list) else data.get("data", data.get("sessions", []))
+        ids = [s["id"] for s in session_list]
+        assert created_id in ids
 
     def test_get_session(self, client, api_key):
         headers = _auth_headers(api_key)

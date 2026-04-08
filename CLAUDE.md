@@ -514,7 +514,6 @@ Gdy użytkownik napisze **`export_claude`**, asystent wykonuje:
 ```
 
 ```bash
-mkdir -p /home/tamiel/KlimtechRAG/export_claude_session
 EXPORT_FILE=$(find /home/tamiel/KlimtechRAG -maxdepth 1 -name "*.txt" -newer /home/tamiel/KlimtechRAG/CLAUDE.md 2>/dev/null | sort | tail -1)
 if [ -n "$EXPORT_FILE" ]; then
   DEST="/home/tamiel/KlimtechRAG/export_claude_session/$(basename "$EXPORT_FILE")"
@@ -536,6 +535,54 @@ fi
 ```bash
 grep -q "export_claude_session" /home/tamiel/KlimtechRAG/.gitignore || echo "export_claude_session/" >> /home/tamiel/KlimtechRAG/.gitignore
 ```
+
+---
+
+## 18. wiki/ — Zewnętrzna Pamięć Sesji (AKTYWNE)
+
+<!-- AKTUALNY FOCUS: wiki/ + Qdrant RAG na laptopie. Sekcje dotyczące serwera i Qwen3 zakomentowane. -->
+
+Katalog `wiki/` zawiera skompilowaną wiedzę o projekcie — czytaj ją na początku sesji.
+
+### Pliki
+
+| Plik | Zawartość | Kiedy aktualizować |
+|------|-----------|--------------------|
+| `wiki/status.md` | Aktualny stan, co zrobiono, co następne | Na końcu każdej sesji |
+| `wiki/decisions.md` | Decyzje architektoniczne i dlaczego | Gdy podjęto decyzję techniczną |
+| `wiki/lessons.md` | Błędy, odkrycia, co nie działa i dlaczego | Gdy napotkano nowy bug/odkrycie |
+
+### Protokół na początku sesji
+
+```
+[ ] Przeczytaj wiki/status.md → dowiedz się gdzie skończyliśmy
+[ ] Przeczytaj wiki/lessons.md → poznaj znane pułapki zanim zaczniesz edytować
+```
+
+### Protokół na końcu sesji (trigger "na dzisiaj koniec")
+
+Dodaj do checklisty sekcji 15 jako krok 6:
+```
+[ ] 6. Zaktualizuj wiki/status.md (co zrobiono, co następne, git_status)
+[ ] 7. Dopisz do wiki/decisions.md jeśli podjęto decyzję architektoniczną
+[ ] 8. Dopisz do wiki/lessons.md jeśli napotkano nowy bug/odkrycie
+```
+
+### Qdrant — pamięć Claude Code (laptop, AKTYWNE)
+
+```
+supervisor_memory dim=1024 — snapshoty sesji: co zrobiono, co następne, git_status
+agent_memory      dim=1024 — decyzje i odkrycia zapisywane przez Claude Code
+Qdrant URL:       http://localhost:6333 (Podman quadlet, /home/tamiel/qdrant_storage/)
+```
+
+<!-- PRZYSZŁOŚĆ (wymaga GPU1 + Qwen3) — odkomentuj gdy karta dostępna:
+
+agent_memory służy też jako pamięć Qwen3-Coder (czyta przed każdym zadaniem).
+supervisor_memory — Sonnet zapisuje oceny pracy Qwen3 i wzorce błędów.
+Qwen3 NIE pisze do żadnej bazy — tylko Sonnet.
+
+-->
 
 ---
 

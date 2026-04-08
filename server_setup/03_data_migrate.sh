@@ -71,7 +71,7 @@ if [ -z "$BACKUP_DISK" ]; then
     echo "  Dostępne katalogi w /media/lobo/:" | tee -a "$LOG"
     ls /media/lobo/ 2>/dev/null | tee -a "$LOG"
     echo ""
-    read -r -p "  Podaj ścieżkę do katalogu KlimtechRAG na dysku BACKUP (np. /media/lobo/BACKUP/KlimtechRAG): " MANUAL_PATH
+    read -r -p "  Podaj ścieżkę do katalogu KlimtechRAG na dysku BACKUP (np. /home/lobo/KlimtechRAG): " MANUAL_PATH
     if [ -d "$MANUAL_PATH" ]; then
         OLD_BACKUP_PROJECT="$MANUAL_PATH"
         BACKUP_DISK=$(dirname "$MANUAL_PATH")
@@ -185,7 +185,7 @@ if [ -f "$OLD_ENV" ]; then
     ok ".env skopiowany"
 
     # Zaktualizuj starą ścieżkę bazową na nową
-    OLD_PATH_IN_ENV="/media/lobo/BACKUP/KlimtechRAG"
+    OLD_PATH_IN_ENV="/home/lobo/KlimtechRAG"
     if grep -q "$OLD_PATH_IN_ENV" "$NEW_ENV"; then
         sed -i "s|$OLD_PATH_IN_ENV|$NEW_BASE|g" "$NEW_ENV"
         ok ".env: ścieżka zaktualizowana ($OLD_PATH_IN_ENV → $NEW_BASE)"

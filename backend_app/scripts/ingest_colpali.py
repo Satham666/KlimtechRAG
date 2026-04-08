@@ -9,7 +9,7 @@ Użycie:
     python3 -m backend_app.scripts.ingest_colpali --file /ścieżka/do/plik.pdf
 
     # Cały katalog PDF:
-    python3 -m backend_app.scripts.ingest_colpali --dir /media/lobo/BACKUP/KlimtechRAG/data/uploads/pdf_RAG
+    python3 -m backend_app.scripts.ingest_colpali --dir /home/lobo/KlimtechRAG/data/uploads/pdf_RAG
 
     # Z konkretnym modelem:
     python3 -m backend_app.scripts.ingest_colpali --dir ./pdf_RAG --model vidore/colpali-v1.3-hf

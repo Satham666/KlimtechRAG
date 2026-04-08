@@ -434,6 +434,68 @@ gh release list --limit 5                  # ostatnie releases na GitHub
 
 ---
 
+## 16. Shell, Wiki i Pamięć RAG (Laptop)
+
+<!-- AKTUALNY FOCUS: wiki/ + Qdrant RAG na laptopie. GPU1/Qwen3 sekcje zakomentowane — brak drugiej karty. -->
+
+### Fish shell — ograniczenia (SERWER)
+```
+❌ Heredoc: cat << 'EOF' ... EOF — nie działa w fish
+❌ Backslash \ na końcu linii — nie działa przy kopiowaniu w zsh/bash
+✔  python3 -c "print('...')" — zamiast heredoc
+✔  Jedna długa linia lub łącz przez ; (średnik)
+```
+
+### wiki/ — zewnętrzna pamięć sesji (AKTYWNE)
+
+Katalog `wiki/` zawiera skompilowaną wiedzę projektu. **Na początku każdej sesji:**
+```
+[ ] Przeczytaj wiki/status.md — dowiedz się gdzie skończyliśmy
+[ ] Przeczytaj wiki/decisions.md — poznaj istniejące decyzje
+[ ] Przeczytaj wiki/lessons.md — poznaj znane pułapki
+```
+
+**Na końcu sesji (trigger "na dzisiaj koniec"):**
+```
+[ ] Zaktualizuj wiki/status.md — co zrobiono, co następne
+[ ] Dopisz do wiki/decisions.md jeśli podjęto decyzję architektoniczną
+[ ] Dopisz do wiki/lessons.md jeśli napotkano nowy bug/odkrycie
+```
+
+Pliki wiki to **git-tracked markdown** — każda zmiana jest revertowalna.
+
+### Qdrant RAG dla Claude Code (laptop — AKTYWNE)
+
+Qdrant na laptopie służy jako pamięć Claude Code między sesjami.
+```
+supervisor_memory (dim=1024) — snapshoty sesji: co zrobiono, co następne, git_status
+agent_memory      (dim=1024) — decyzje, odkrycia, błędy zapisywane przez Claude Code
+Qdrant URL:       http://localhost:6333 (Podman quadlet, auto-start)
+```
+
+Endpoint do zapisu: `POST /v1/agent/memory` (po wdrożeniu Fazy 1.3)  
+Endpoint do snapshotów: `POST /v1/supervisor/snapshot` (po wdrożeniu Fazy 1.4)
+
+<!-- PRZYSZŁOŚĆ (wymaga GPU1 32GB) — odkomentuj gdy karta dostępna:
+
+### Model Wykonawczy — Qwen3-Coder
+
+W architekturze agentowej:
+- **Claude Sonnet 4.6** (ten agent) = Mistrz/Nadzorca
+- **Qwen3-Coder-30B-A3B** (port 8083) = Uczeń/Wykonawca
+
+Zasady Qwen3:
+- Nie może zapisywać do baz pamięci (tylko Sonnet)
+- Tylko czyta agent_memory i klimtech_docs
+- Każda zmiana przez git — revertowalna
+
+Model: unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF Q8_0 (~30GB VRAM)
+Start: HIP_VISIBLE_DEVICES=1 llama-server --port 8083 ...
+
+-->
+
+---
+
 ## KOŃCOWE ZASADY SESJI
 
 - Zawsze kończ wypowiedź pytaniem o zgodę na następny krok lub — jeśli to koniec zadania — podsumowaniem i pytaniem o dalsze instrukcje.

@@ -38,14 +38,14 @@ def _detect_base():
     env = os.environ.get("KLIMTECH_BASE_PATH", "").strip()
     if env and Path(env).exists():
         return env
-    # Preferuj /media/lobo/BACKUP/KlimtechRAG (tam sa modele GGUF)
-    backup = Path("/media/lobo/BACKUP/KlimtechRAG")
+    # Preferuj /home/lobo/KlimtechRAG (tam sa modele GGUF)
+    backup = Path("/home/lobo/KlimtechRAG")
     if backup.exists():
         return str(backup)
     h = Path.home() / "KlimtechRAG"
     if h.exists():
         return str(h)
-    return "/media/lobo/BACKUP/KlimtechRAG"
+    return "/home/lobo/KlimtechRAG"
 
 
 BASE_DIR = _detect_base()

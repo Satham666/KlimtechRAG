@@ -72,7 +72,7 @@ if __name__ == "__main__":
         target_folder = sys.argv[1]
     else:
         # Domyślnie indeksujemy pobrane repozytorium opencode
-        target_folder = "/media/lobo/BACKUP/KlimtechRAG/git_sync/zizzania"
+        target_folder = "/home/lobo/KlimtechRAG/git_sync/zizzania"
 
     ingest_folder(target_folder)
 #    observer = Observer()

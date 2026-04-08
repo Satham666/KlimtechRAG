@@ -29,7 +29,7 @@ os.environ.setdefault("GPU_MAX_ALLOC_PERCENT", "100")
 os.environ.setdefault("HSA_ENABLE_SDMA", "0")
 
 # ── Ścieżki ───────────────────────────────────────────────────────────────────
-BASE_DIR   = Path("/media/lobo/BACKUP/KlimtechRAG")
+BASE_DIR   = Path("/home/lobo/KlimtechRAG")
 MODELE_DIR = BASE_DIR / "modele_LLM"
 LLAMA_BIN  = BASE_DIR / "llama.cpp" / "build" / "bin" / "llama-server"
 EMBED_PORT = 8083

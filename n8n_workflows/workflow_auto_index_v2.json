@@ -51,7 +51,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parsuj odpowiedź WebDAV PROPFIND (XML) i wyciągnij wszystkie pliki\nconst responseText = typeof $input.first().json.data === 'string'\n  ? $input.first().json.data\n  : JSON.stringify($input.first().json);\n\n// Wyciągnij pełne ścieżki plików\nconst filePattern = /RAG_Dane\\/[^<\"\\s]+\\.[a-zA-Z0-9]+/g;\nconst matches = responseText.match(filePattern) || [];\n\n// Deduplikacja\nconst allFiles = [...new Set(matches)];\n\n// Mapowanie ścieżek -> ścieżki lokalne\nconst UPLOAD_BASE = '/media/lobo/BACKUP/KlimtechRAG/data/uploads';\nconst files = allFiles.map(f => {\n  const localPath = UPLOAD_BASE + '/' + f;\n  const ext = f.split('.').pop().toLowerCase();\n  const isPdf = ext === 'pdf';\n  return {\n    remotePath: f,\n    localPath: localPath,\n    extension: ext,\n    isPdf: isPdf\n  };\n});\n\nreturn [{ json: { files: files, totalFiles: files.length } }];"
+        "jsCode": "// Parsuj odpowiedź WebDAV PROPFIND (XML) i wyciągnij wszystkie pliki\nconst responseText = typeof $input.first().json.data === 'string'\n  ? $input.first().json.data\n  : JSON.stringify($input.first().json);\n\n// Wyciągnij pełne ścieżki plików\nconst filePattern = /RAG_Dane\\/[^<\"\\s]+\\.[a-zA-Z0-9]+/g;\nconst matches = responseText.match(filePattern) || [];\n\n// Deduplikacja\nconst allFiles = [...new Set(matches)];\n\n// Mapowanie ścieżek -> ścieżki lokalne\nconst UPLOAD_BASE = '/home/lobo/KlimtechRAG/data/uploads';\nconst files = allFiles.map(f => {\n  const localPath = UPLOAD_BASE + '/' + f;\n  const ext = f.split('.').pop().toLowerCase();\n  const isPdf = ext === 'pdf';\n  return {\n    remotePath: f,\n    localPath: localPath,\n    extension: ext,\n    isPdf: isPdf\n  };\n});\n\nreturn [{ json: { files: files, totalFiles: files.length } }];"
       },
       "id": "parse-files",
       "name": "Parsuj liste plikow",
@@ -293,7 +293,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{\"model_path\":\"/media/lobo/BACKUP/KlimtechRAG/modele_LLM/model_thinking/speakleash_Bielik-11B-v3.0-Instruct-GGUF_Bielik-11B-v3.0-Instruct.Q8_0.gguf\",\"model_type\":\"llm\"}",
+        "jsonBody": "{\"model_path\":\"/home/lobo/KlimtechRAG/modele_LLM/model_thinking/speakleash_Bielik-11B-v3.0-Instruct-GGUF_Bielik-11B-v3.0-Instruct.Q8_0.gguf\",\"model_type\":\"llm\"}",
         "options": {
           "timeout": 60000
         }

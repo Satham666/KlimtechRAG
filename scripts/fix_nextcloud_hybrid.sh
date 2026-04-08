@@ -10,7 +10,7 @@
 set -e
 
 # --- KONFIGURACJA ---
-BASE_PATH="/media/lobo/BACKUP/KlimtechRAG"
+BASE_PATH="/home/lobo/KlimtechRAG"
 NEXTCLOUD_DATA_DIR="${BASE_PATH}/data/nextcloud"
 NEXTCLOUD_USER_DATA="${BASE_PATH}/data/nextcloud_data"
 

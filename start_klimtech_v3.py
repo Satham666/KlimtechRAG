@@ -13,9 +13,9 @@ Modele LLM/VLM -> uruchamiane z panelu UI
 import subprocess, os, time, signal, sys
 
 # --- KONFIGURACJA -----------------------------------------------------------
-BASE_DIR = "/media/lobo/BACKUP/KlimtechRAG"
+BASE_DIR = "/home/lobo/KlimtechRAG"
 LOG_DIR = os.path.join(BASE_DIR, "logs")
-PYTHON_VENV = "/media/lobo/BACKUP/KlimtechRAG/venv/bin/python3"
+PYTHON_VENV = "/home/lobo/KlimtechRAG/venv/bin/python3"
 INTERFACE = "enp9s0"
 
 # Porty HTTP (wewnetrzne)

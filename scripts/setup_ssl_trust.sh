@@ -9,7 +9,7 @@ set -e
 # === KONFIGURACJA ===
 SERVER_IP="192.168.31.70"
 SERVER_USER="lobo"
-SERVER_CERT_PATH="/media/lobo/BACKUP/KlimtechRAG/data/ssl/klimtech.crt"
+SERVER_CERT_PATH="/home/lobo/KlimtechRAG/data/ssl/klimtech.crt"
 LOCAL_CERT="/tmp/klimtech.crt"
 TARGET_DIR="/usr/local/share/ca-certificates"
 

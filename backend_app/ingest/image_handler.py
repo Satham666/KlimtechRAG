@@ -28,7 +28,7 @@ def _find_vlm_model():
 
     paths_to_check = [
         os.environ.get("KLIMTECH_BASE_PATH", "").strip(),
-        "/media/lobo/BACKUP/KlimtechRAG",
+        "/home/lobo/KlimtechRAG",
         settings.base_path,
     ]
 

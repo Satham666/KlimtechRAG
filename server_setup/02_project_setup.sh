@@ -274,8 +274,8 @@ fi
 # =============================================================================
 section "7. Aktualizacja ścieżek w start_klimtech_v3.py"
 # =============================================================================
-# start_klimtech_v3.py ma hardcoded ścieżkę /media/lobo/BACKUP/KlimtechRAG
-OLD_PATH="/media/lobo/BACKUP/KlimtechRAG"
+# start_klimtech_v3.py ma hardcoded ścieżkę /home/lobo/KlimtechRAG
+OLD_PATH="/home/lobo/KlimtechRAG"
 START_SCRIPT="$NEW_BASE/start_klimtech_v3.py"
 
 if grep -q "$OLD_PATH" "$START_SCRIPT" 2>/dev/null; then

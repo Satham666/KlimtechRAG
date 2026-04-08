@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 
-BASE_DIR = "/media/lobo/BACKUP/KlimtechRAG"
+BASE_DIR = "/home/lobo/KlimtechRAG"
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 
 # MUSI być zgodne z watch_nextcloud.py (logs/klimtech_watchdog.pid)
