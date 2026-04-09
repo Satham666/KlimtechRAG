@@ -1,22 +1,39 @@
 # Plan Wdrożenia Architektury Agentowej — KlimtechRAG
 **Opracowany:** 2026-04-08  
-**Aktualizowany:** 2026-04-08  
+**Aktualizowany:** 2026-04-09  
 **Źródło:** KlimtechRAG_sesja_planistyczna_2026-04-08.md
 
 ---
 
-## AKTUALNY FOCUS (2026-04-08)
+## AKTUALNY FOCUS (2026-04-09)
 
-> **Laptop only — brak GPU1.**  
-> Pracujemy nad: `wiki/` (zewnętrzna pamięć Claude Code) + Qdrant RAG na laptopie.  
-> Fazy 2 i 3 (Qwen3, serwer) są zamrożone do czasu dostarczenia karty 32GB.
+> **Serwer hall9000 ONLINE.** Backend działa z autostartem. Pracujemy nad pamięcią agentów.  
+> Fazy 2 i 3 (Qwen3, GPU1) są zamrożone do czasu dostarczenia karty 32GB.
+
+### Uwaga — Laptop Qdrant vs Serwer Qdrant
+
+Laptop posiada własny Qdrant (port 6333) z kolekcjami `agent_memory` i `supervisor_memory`.
+Służy jako **lokalna baza wiedzy** — docelowo lokalny mały model na laptopie będzie tam zapisywał
+wiedzę, a wybrane wpisy będą przesyłane do głównej bazy RAG na serwerze.
+**Na serwerze** endpointy `agent_memory` i `supervisor_memory` są implementowane niezależnie —
+serwer ma własne kolekcje (dim=1024) w swoim Qdrant.
+
+### Uwaga — Zdalny dostęp do Proxmox
+
+Do pełnego zarządzania serwerem zdalnie (spoza sieci lokalnej) potrzebna jest jedna z opcji:
+- **VPN** (np. WireGuard na routerze lub Proxmox hoście) — preferowane
+- **SSH tunnel**: `ssh -L 8006:192.168.0.2:8006 user@publiczny_ip`
+- **Proxmox Backup Server** z dostępem zewnętrznym — opcjonalnie
+
+Do skonfigurowania jako osobne zadanie przed wdrożeniem produkcyjnym.
 
 ## Status Faz
 
 | Faza | Nazwa | Status |
 |------|-------|--------|
 | 0 | Fundament (wiki + docs) | ✅ WYKONANE |
-| 1 | Pamięć RAG na laptopie (Qdrant) | 🟡 W toku — kolekcje OK, endpoint do napisania |
+| 1 | Pamięć RAG — agent_memory endpoint | ✅ WYKONANE (serwer) |
+| 1b | Pamięć RAG — supervisor_memory endpoint | 🔄 W TOKU |
 | 2 | GPU1 + Qwen3-Coder | ⛔ ZAMROŻONE — brak karty 32GB |
 | 3 | Integracja z Qwen3 (workflow nocny) | ⛔ ZAMROŻONE — wymaga Fazy 2 |
 | 4 | Obsidian Dashboard | ⚪ Opcjonalne, niezależne od GPU |
