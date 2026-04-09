@@ -318,6 +318,13 @@ async def nowy_endpoint(
 - Po znaczącej zmianie (nowy moduł, zmiana konfiguracji, nowa zależność): zaproponuj aktualizację `PROJEKT_OPIS.md` i `postep.md` — jako osobny, atomowy krok.
 - `postep.md` — aktualizuj po każdej sesji: co zrobiono, co nierozwiązane, rekomendacja dla następnej sesji.
 
+### Pliki planów wdrożenia (*.md z konkretnym planem)
+
+- Pliki takie jak `Plan_Wdrożenia_Architektury_Agentowej.md` czy inne pliki `.md` zawierające konkretny plan do realizacji — traktuj jako **aktywne dokumenty robocze**.
+- Gdy wszystkie zadania z takiego planu zostaną zrealizowane → **przenieś plik do `MD_files/`** jako bazę wiedzy na przyszłość.
+- Trigger przeniesienia: użytkownik potwierdza że plan jest w 100% wykonany, lub ostatni checkbox w pliku jest odznaczony.
+- Przed przeniesieniem: upewnij się że plik jest commitowany (`git add MD_files/nazwa.md && git commit`).
+
 ---
 
 ## 12. Zarządzanie Kontekstem i Tokenami
