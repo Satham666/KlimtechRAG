@@ -11,3 +11,4 @@ modele_LLM/
 *.backup
 nohup.out
 export_claude_session/
+*.pkg.tar.zst
