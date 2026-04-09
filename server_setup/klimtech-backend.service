@@ -1,0 +1,20 @@
+[Unit]
+Description=KlimtechRAG Backend (FastAPI/uvicorn)
+After=network.target qdrant.service
+Wants=qdrant.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/lobo/KlimtechRAG
+ExecStart=/home/lobo/KlimtechRAG/scripts/start_backend.sh
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=klimtech-backend
+
+# Bez limitów pamięci (GPU/CPU zależnie od modelu)
+LimitNOFILE=65536
+
+[Install]
+WantedBy=default.target

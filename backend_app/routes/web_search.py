@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 import httpx
 
 try:
-    from ddgs import DDGS
+    from duckduckgo_search import DDGS
 
     DUCKDUCKGO_AVAILABLE = True
 except ImportError:

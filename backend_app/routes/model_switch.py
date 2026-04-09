@@ -133,7 +133,7 @@ async def api_switch_to_vlm(req: Request):
 async def api_switch_model(
     req: Request,
     model_type: str = Query(
-        ..., regex="^(llm|vlm)$", description="Typ modelu: llm lub vlm"
+        ..., pattern="^(llm|vlm)$", description="Typ modelu: llm lub vlm"
     ),
 ):
     require_api_key(req)
