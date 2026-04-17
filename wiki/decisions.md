@@ -47,3 +47,16 @@
 ### Backtick w Python strings — ZAWSZE concatenation
 **Decyzja:** JS osadzony w Python string: zawsze `+` concatenation i `var`, nigdy backtick ani `const`/`let`.  
 **Powód:** Backtick w f-string powoduje SyntaxWarning w Python i SyntaxError w przeglądarce.
+
+## 2026-04-17
+
+### Migracja UI → OpenWebUI (Wariant B)
+**Decyzja:** Frontend KlimtechRAG = OpenWebUI (nie Anything-LLM, nie własny widget).  
+**Powód:** OpenWebUI to FastAPI + Svelte (Python stack), hostowany na Proxmox razem z backendem. Brak dodatkowych hopów API przez VPN. Zgodność z istniejącymi planami w repo.  
+**Kluczowe:** KlimtechRAG FastAPI jako silnik RAG (Opcja 1) — OpenWebUI tylko cienki frontend do `/v1/chat/completions`. NIE używać wbudowanego RAG OpenWebUI.  
+**Odrzucone:** Anything-LLM (Node.js, ColPali niekompatybilne, 4 warstwy zamiast 2).
+
+### Pamięć sesji na laptopie — fastembed zamiast pełnego backendu
+**Decyzja:** Laptop używa `scripts/laptop_memory.py` z fastembed (ONNX) + qdrant-client. Bez torch, bez pełnego backendu.  
+**Powód:** Laptop nie jest docelową platformą projektu. llama.cpp jest dostępny, ale e5-large przez fastembed jest lżejszy i wystarczający do embeddingu snapshotów sesji.  
+**Storage:** Qdrant lokalny port 6333, kolekcja `supervisor_memory` dim=1024.

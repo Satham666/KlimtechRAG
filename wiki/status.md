@@ -3,64 +3,57 @@
 
 ---
 
-## Stan na: 2026-04-09
+## Stan na: 2026-04-17
 
-### Co właśnie skończyliśmy (sesja Faza 5 — uruchomienie w LXC hall9000)
+### Co zrobiono w tej sesji (laptop — synchronizacja + narzędzia)
 
-- **Krok 1:** remote zmieniony SSH → HTTPS (`git fetch` działa bez kluczy)
-- **Krok 2:** Python venv + `pip install -r requirements.txt` (requirements.txt stworzony od zera)
-- **Krok 3:** SSL cert self-signed RSA 4096, SAN 192.168.0.3, ważny do 2036
-- **Krok 4:** nginx zainstalowany + konfiguracja HTTPS 8443 → proxy do :8000
-- **Krok 5:** Qdrant v1.17.1 w Podman quadlet systemd (Network=host + PodmanArgs — LXC nie ma /dev/net/tun)
-- **Krok 6:** `.env` skonfigurowany, katalogi data/ i logs/ stworzone
-- **Fix globalny:** zamieniono wszystkie ścieżki `/media/lobo/BACKUP/KlimtechRAG` → `/home/lobo/KlimtechRAG` w całym projekcie (config.py, model_manager.py, start scripts, n8n workflows, server_setup/, scripts/)
-- **Backend działa:** `curl http://localhost:8000/health` → `{"status":"ok","qdrant":true}`
-- **nginx działa:** `curl -sk https://localhost:8443/health` → OK
+- **Decyzja:** migracja UI → OpenWebUI (Wariant B) — zapisana w `migracja_openwebui.md`
+- **Synchronizacja laptopa z GitHub:** git pull (laptop był 5 commitów za serwerem Proxmox)
+- **GitHub auth na laptopie:** SSH key "laptop" wgrany na GitHub (read/write), remote przełączony SSH→HTTPS→SSH
+- **`scripts/laptop_memory.py`** — lekki klient pamięci sesji (fastembed ONNX + qdrant-client, bez torch)
+- **`/home/tamiel/programy/klimtech-embed-venv/`** — dedykowany venv dla fastembed + qdrant-client
+- **`~/.claude/commands/export_claude.md`** — skill eksportu sesji z embeddingiem do Qdrant
+- **`~/.claude/commands/import_claude.md`** — skill wczytania ostatniego snapshotu z Qdrant
+- **Push:** commit `3b40576` — wszystkie nowe pliki laptopa na GitHub
 
 ### Aktualny stan
 
-**LXC hall9000 (192.168.0.3) — PLATFORMA AKTYWNA:**
-- SSH: `ssh lobo@192.168.0.3 -p 2222` ✅
-- Repo: `/home/lobo/KlimtechRAG/` ✅
-- Claude Code: `~/.local/bin/claude` v2.1.97 ✅
-- venv Python 3.12: `/home/lobo/KlimtechRAG/venv/` ✅
-- Qdrant (Podman quadlet): port 6333 ✅
-- `.env`: skonfigurowany ✅
-- nginx HTTPS 8443: ✅
-- Backend KlimtechRAG: **OFFLINE** (tylko test, nie autostart) ⬜
-- AMD Instinct 16 GB: **NIE zamontowana fizycznie** ⬜
+**Laptop (tamiel@hall8000) — ŚRODOWISKO DEWELOPERSKIE:**
+- Repo: `/home/tamiel/KlimtechRAG/` ✅ (zsynchronizowane z GitHub)
+- Qdrant lokalny: port 6333 ✅ (kolekcje: supervisor_memory, agent_memory — puste)
+- Claude Code: zainstalowany ✅
+- Skills: `/export_claude`, `/import_claude` ✅
+- venv fastembed: `/home/tamiel/programy/klimtech-embed-venv/` ✅
+- Backend KlimtechRAG: NIE uruchomiony (nie potrzebny na laptopie) ⬜
+- llama.cpp: `/home/tamiel/programy/llama.cpp` ✅ (Quadro P1000 GPU)
 
-### Co zostało do zrobienia (kolejność)
+**Serwer Proxmox (lobo@hall9000) — PLATFORMA PRODUKCYJNA:**
+- Ostatni commit na serwerze: `5425ca1` (supervisor_memory endpoint)
+- Backend: weryfikować przy następnej sesji na serwerze
+- AMD Instinct 16 GB: aktywna
 
-#### Priorytet 1 — autostart backendu
-- [ ] Systemd unit dla uvicorn (user service) — żeby backend startował przy restarcie LXC
-- [ ] Test pełnego stacku po restarcie LXC
+### Co dalej (następna sesja)
 
-#### Priorytet 2 — pakiety opcjonalne (tylko WARN, nie blokują)
-- [ ] `pip install duckduckgo-search trafilatura` — używane przez niektóre trasy
-- [ ] `model_switch.py:135` — zmienić `regex=` na `pattern=` (FastAPI deprecation)
+#### Priorytet 1 — planowanie wdrożenia OpenWebUI
+- [ ] Przeczytać `wiki/decisions.md` — decyzja o OpenWebUI
+- [ ] Potwierdzić Opcję 1: KlimtechRAG FastAPI jako silnik RAG, OpenWebUI jako cienki frontend
+- [ ] Rozpisać atomowy plan wdrożenia (Fish shell, bez heredoc)
 
-#### Priorytet 3 — agent_memory endpoint
-- [ ] `backend_app/routes/agent_memory.py` — POST /v1/agent/memory, GET search
-- [ ] Rejestracja w `backend_app/main.py`
-
-#### Odłożone
-- AMD Instinct 16 GB — fizyczna instalacja + passthrough do LXC
-- C5 Late Chunking, W6 Agent Builder, Obsidian Dashboard
+#### Priorytet 2 — weryfikacja serwera po ostatnich commitach
+- [ ] Sprawdzić czy `supervisor_memory` i `agent_memory` endpointy działają na serwerze
+- [ ] `git pull` na serwerze po nowym commicie `3b40576`
 
 ### Pliki krytyczne — ostatnio modyfikowane
 ```
-backend_app/config.py               — ścieżka /home/lobo/KlimtechRAG
-backend_app/services/model_manager.py — j.w.
-requirements.txt                    — nowy (stworzony w tej sesji)
-ssl/cert.pem, ssl/key.pem          — nowe (self-signed)
-ssl/klimtech_nginx.conf             — kopia konfigu nginx
-wiki/                               — zaktualizowane
+scripts/laptop_memory.py            — nowy (fastembed + Qdrant, laptop only)
+migracja_openwebui.md               — decyzja o migracji UI
+~/.claude/commands/export_claude.md — skill eksportu sesji
+~/.claude/commands/import_claude.md — skill importu sesji
 ```
 
 ### Numer wersji następnego release
-Ostatni tag: `v7.7`
-Następny: `v7.8` (Faza 5 ukończona)
+Ostatni tag: `v7.9`
+Następny: `v7.10` (sesja synchronizacji laptopa + narzędzia pamięci)
 
 ---
 
@@ -68,8 +61,8 @@ Następny: `v7.8` (Faza 5 ukończona)
 
 ```
 Przeczytałem wiki/status.md.
-Kontynuujemy od: autostart backendu (systemd unit dla uvicorn)
-Serwer online: tak (hall9000 192.168.0.3)
-Qdrant: aktywny (quadlet systemd)
-Backend: wymaga ręcznego startu
+Kontynuujemy od: planowanie wdrożenia OpenWebUI
+Laptop zsynchronizowany z GitHub (commit 3b40576)
+Qdrant lokalny: aktywny (puste kolekcje)
+Następny krok: atomowy plan migracji UI → OpenWebUI
 ```
