@@ -60,3 +60,20 @@
 **Decyzja:** Laptop używa `scripts/laptop_memory.py` z fastembed (ONNX) + qdrant-client. Bez torch, bez pełnego backendu.  
 **Powód:** Laptop nie jest docelową platformą projektu. llama.cpp jest dostępny, ale e5-large przez fastembed jest lżejszy i wystarczający do embeddingu snapshotów sesji.  
 **Storage:** Qdrant lokalny port 6333, kolekcja `supervisor_memory` dim=1024.
+
+## 2026-04-18
+
+### MemPalace MVP — runtime wing extraction zamiast migracji 02_METADATA
+**Decyzja:** Graf wiedzy wyciąga `wing` z istniejącego pola `payload.category` (runtime split po kropce), **nie** migruje 5114 punktów dodając pole `wing`.  
+**Powód:** Migracja wymaga re-embeddingu lub batch update w Qdrant — ryzyko i czas. Runtime split jest deterministyczny (`category.split(".")[0]` → `construction.scaffolding` → `construction`) i działa z dnia na dzień na istniejących danych.  
+**Konsekwencja:** `02_METADATA.md` plan migracji przesunięty do przyszłej fazy. `_extract_wing(payload)` w `graph_service.py` jest single point of truth.
+
+### MemPalace Viz — 3d-force-graph zamiast D3.js
+**Decyzja:** Wizualizacja grafu używa biblioteki `3d-force-graph@1.73.4` (WebGL 3D), nie D3.js 2D.  
+**Powód:** Dla N=5114 dokumentów i tysięcy krawędzi 2D siatka staje się nieczytelna. 3D pozwala obrócić kamerę i zobaczyć skupiska domen (wings) jako wyraźne kolorowe gromady. Plan 06 pierwotnie sugerował D3, ale `PLAN_GRAF_WIEDZY.md` słusznie poprawiał na 3d-force-graph dla skali.  
+**Konsekwencja:** HTML ładuje bibliotekę z CDN (unpkg), brak build-stepu. Kompatybilne z istniejącym wzorcem serwowania HTML (routes/ui.py).
+
+### MemPalace scope MVP = plany 05 + 06
+**Decyzja:** MVP = Graph Edges (plan 05) + Graph API/Viz (plan 06). Pozostałe plany (01 Robotnicy, 02 Metadata, 03 Temporal, 04 Context Layers, 07 NER, 08 Rooms) — osobne fazy po weryfikacji MVP na serwerze.  
+**Powód:** 05+06 dają pełny *end-to-end slice* (backend → API → UI) bez zmian kontraktu danych. Reszta to rozszerzenia. Ograniczenie scope przyspiesza iterację na żywych danych.  
+**Konsekwencja:** Branch `feature/mempalace` żyje do pełnej walidacji na serwerze. Merge do `main` dopiero po testach.

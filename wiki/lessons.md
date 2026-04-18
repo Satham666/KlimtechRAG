@@ -62,6 +62,17 @@ Następnie: `sudo update-grub`
 
 ## VRAM i GPU
 
+### Pascal CC 6.1 + cuDNN 9.21 (onnxruntime-gpu) — niekompatybilne
+**Błąd (2026-04-18):** fastembed-gpu 0.8 / onnxruntime-gpu 1.24.4 na Quadro P1000 (Pascal, CC 6.1) rzuca `CUDNN_STATUS_EXECUTION_FAILED_CUDART 5003` na `cudnnReduceTensor` (operacja `MaskReduceSum` / `ReduceSum`).
+**Diagnoza:** cuDNN 9.x formalnie listuje Pascala jako supported, ale wiele nowych kerneli (w tym reduction ops) nie ma wariantów dla CC 6.1 — fail przy pierwszej operacji. Nie da się naprawić przez downgrade/upgrade driver/cudart — problem jest w cuDNN.
+**Fix:** Przełączyć się na **PyTorch + sentence-transformers**. PyTorch 2.5.1+cu121 ma wbudowany cuDNN 9.1 z kernelami dla Pascala.
+```bash
+/path/to/venv/bin/pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+/path/to/venv/bin/pip install sentence-transformers qdrant-client
+```
+**Uwaga:** PyTorch 2.6+ ogłosił dropping Maxwell/Pascal/Volta. Na Pascalu zostawać na 2.5.x.
+**Wydajność:** Quadro P1000 (640 CUDA cores, brak Tensor Cores) = 2.1 chunk/s na e5-large, VRAM peak 2.3 GB (batch=8). To 7× szybciej niż CPU, ale 25× wolniej niż RTX 30xx. Na Pascalu fp16 nie przyspiesza (brak natywnego fp16).
+
 ### Eager loading = OOM na starcie
 **Błąd:** Importowanie embeddings.py na poziomie modułu ładuje e5-large od razu → 4.5 GB VRAM.  
 **Fix:** Lazy singleton — `_model = None; def get(): global _model; if _model is None: _model = load()`.  
