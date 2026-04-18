@@ -1,9 +1,8 @@
 # Analiza błędów — PLAN_WDROZENIA_MASTER.md
 
 **Data analizy:** 2026-04-07  
-**Ostatnia aktualizacja:** 2026-04-07 (weryfikacja błędów 9-14 + ELEMENTY NIEZREALIZOWANE)  
 **Wersja planu:** 1.0 (2026-03-30)  
-**Analizował:** Claude Code (Sonnet 4.6), aktualizacja: GLM-5 (2026-04-07)
+**Analizował:** Claude Code (Sonnet 4.6)
 
 ---
 
@@ -12,8 +11,8 @@
 | Kategoria | Liczba |
 |-----------|--------|
 | Błędy nazw / ścieżek | 3 |
-| ~~Pliki brakujące (plan mówi "utwórz", a ich nie ma)~~ | ~~2~~ → 0 (oba naprawione) |
-| Kroki z Sprint 6 już wykonane | 7 |
+| Pliki brakujące (plan mówi "utwórz", a ich nie ma) | 2 |
+| Kroki z Sprint 6 już wykonane wcześniej | 7 |
 | Cały Sprint 0–5 praktycznie ukończony (nie zaznaczono w planie) | 31 |
 | Nieaktualne rozmiary plików | 4 |
 | Nieaktualny harmonogram | 1 |
@@ -51,16 +50,16 @@
 
 ## PLIKI BRAKUJĄCE (plan wymienia, kod nie ma)
 
-### ~~[BRAK_PLIKU] A2 — `settings-ingest.yaml`~~ ✅ NAPRAWIONE
+### [BRAK_PLIKU] A2 — `settings-ingest.yaml`
 
 **Sekcja:** Sprint 5, A2, linia ~588  
 **Plan mówi:** Utwórz `settings-ingest.yaml` — tryb ingest (GPU embedding, bez LLM)  
-**Stan rzeczywisty:** Plik `settings-ingest.yaml` istnieje (35 linii) — profil ingest z GPU embedding, wyłączonym LLM, odpowiednimi limitami.  
-**Naprawione:** 2026-04-07
+**Stan rzeczywisty:** Istnieją `settings.yaml`, `settings-server.yaml`, `settings-dev.yaml`. Brak `settings-ingest.yaml`.  
+**Powaga:** DROBNY — nie blokuje działania, ale profil ingest jest przydatny dla oszczędności VRAM.
 
 ---
 
-### ~~[BRAK_PLIKU] G1 — brakujące pliki testów~~ ✅ CZĘŚCIOWO NAPRAWIONE
+### [BRAK_PLIKU] G1 — brakujące pliki testów
 
 **Sekcja:** Sprint 5, G1, linia ~613  
 **Plan wymienia:**
@@ -71,14 +70,8 @@ tests/test_chat.py
 tests/test_ingest.py
 tests/test_chunks.py
 ```
-**Stan rzeczywisty (2026-04-07):**
-- ✅ `tests/conftest.py` — istnieje (32 linie, wspólne fixtures: app, client, api_key, auth_headers, bad_headers)
-- ❌ `tests/test_health.py` — brak (ale health testowany w `test_admin.py`)
-- ✅ `tests/test_chat.py` — istnieje (59 linii, testy models, chat/completions, rag/debug)
-- ✅ `tests/test_ingest.py` — istnieje (62 linie, testy upload, ingest_path, files/stats, progress)
-- ✅ `tests/test_chunks.py` — istnieje (51 linii, testy /v1/chunks z auth, limit, context_filter)
-
-**Naprawione:** conftest.py, test_chat.py, test_ingest.py, test_chunks.py dodane. Brakuje test_health.py (trivialne — health testowany w test_admin.py).
+**Stan rzeczywisty:** Żaden z tych plików nie istnieje. Zamiast nich są: `test_admin.py`, `test_api.py`, `test_config.py`, `test_security.py`, `test_sessions.py`.  
+**Powaga:** WAŻNY — brak `conftest.py` (fixtures wielokrotnego użytku) powoduje duplikację setup w każdym pliku testowym. Brak testów dla `chat`, `ingest`, `chunks`.
 
 ---
 
@@ -113,51 +106,46 @@ Plan umieszcza poniższe funkcje w Sprint 6 (tydzień 11+, 🟢), ale wszystkie 
 
 ---
 
-### ~~[KROK_WYKONANY] F4 — Session-aware chat z persistent history~~ ✅ ZGODNO Z PLANEM
+### [KROK_WYKONANY] F4 — Session-aware chat z persistent history
 
-**Sekcja:** Sprint 6, linia ~742 — sessions table w SQLite, GET/POST /sessions  
-**Stan rzeczywisty:** Zaimplementowane w całości — `backend_app/routes/sessions.py` z pełnym CRUD, wiadomościami, eksportem, importem, wyszukiwaniem, bulk-delete, export-all, cleanup-old i więcej.  
-**Plan master:** Oznaczony ✅ DONE (linia 740).
-
----
-
-### ~~[KROK_WYKONANY] H2 — Watcher zintegrowany z backendem~~ ✅ ZGODNO Z PLANEM
-
-**Sekcja:** Sprint 6, linia ~754  
-**Stan rzeczywisty:** `backend_app/services/watcher_service.py` istnieje. `GET /v1/watcher/status` w `admin.py:503`.  
-**Plan master:** Oznaczony ✅ DONE (linia 750).
+**Plan:** Sprint 6, linia ~742 — sessions table w SQLite, GET/POST /sessions  
+**Stan rzeczywisty:** Zaimplementowane w całości — `backend_app/routes/sessions.py` z pełnym CRUD, wiadomościami, eksportem, importem, wyszukiwaniem, bulk-delete, export-all, cleanup-old i więcej.
 
 ---
 
-### ~~[KROK_WYKONANY] W2 — MCP Compatibility~~ ✅ ZGODNO Z PLANEM
+### [KROK_WYKONANY] H2 — Watcher zintegrowany z backendem
 
-**Sekcja:** Sprint 6, linia ~766  
-**Stan rzeczywisty:** `backend_app/routes/mcp.py` istnieje. `GET /mcp` zwraca endpoint, protokół, listę narzędzi.  
-**Plan master:** Oznaczony ✅ DONE (linia 761).
-
----
-
-### ~~[KROK_WYKONANY] W5 — Batch Processing~~ ✅ ZGODNO Z PLANEM
-
-**Sekcja:** Sprint 6, linia ~793  
-**Stan rzeczywisty:** `backend_app/services/batch_service.py` istnieje z kolejką priorytetową, retry logic, batch embeddingiem. Endpointy: `/v1/batch/stats`, `/v1/batch/enqueue`, `/v1/batch/clear`, `/v1/batch/history`.  
-**Plan master:** Oznaczony ✅ DONE (linia 783).
+**Plan:** Sprint 6, linia ~754  
+**Stan rzeczywisty:** `backend_app/services/watcher_service.py` istnieje. `GET /v1/watcher/status` w `admin.py:503`.
 
 ---
 
-### ~~[KROK_WYKONANY] B5 — Answer Verification~~ ✅ ZGODNO Z PLANEM
+### [KROK_WYKONANY] W2 — MCP Compatibility
 
-**Sekcja:** Sprint 6, linia ~704 (🟢)  
-**Stan rzeczywisty:** `backend_app/services/verification_service.py` istnieje. Flaga `KLIMTECH_ANSWER_VERIFICATION=false` (domyślnie wyłączone, zgodnie z planem).  
-**Plan master:** Oznaczony ✅ DONE (linia 704).
+**Plan:** Sprint 6, linia ~766  
+**Stan rzeczywisty:** `backend_app/routes/mcp.py` istnieje. `GET /mcp` zwraca endpoint, protokół, listę narzędzi.
 
 ---
 
-### ~~[KROK_WYKONANY] C5 — Late Chunking~~ ❌ NIE ZAIMPLEMENTOWANY
+### [KROK_WYKONANY] W5 — Batch Processing
 
-**Sekcja:** Sprint 6, linia ~717 (🟢) — "wymaga dużo VRAM, rozważ jako opcjonalny"  
-**Stan rzeczywisty (zweryfikowano 2026-04-07):** C5 Late Chunking **NIE jest zaimplementowany**. Zero odniesień do "late chunking", "jina", "LATE_CHUNK" w całym `backend_app/`. Aktualny pipeline ingest używa tradycyjnego `parse → chunk → embed` (e5-large). ColPali istnieje ale to osobna funkcja (visual late interaction), nie Late Chunking (Jina).
-**Powaga:** Nie blokuje działania. Funkcja oznaczona jako 🟢 (nice-to-have). Wymaga modelu Jina Embeddings v3 i dodatkowej logiki w pipeline.
+**Plan:** Sprint 6, linia ~793  
+**Stan rzeczywisty:** `backend_app/services/batch_service.py` istnieje z kolejką priorytetową, retry logic, batch embeddingiem. Endpointy: `/v1/batch/stats`, `/v1/batch/enqueue`, `/v1/batch/clear`, `/v1/batch/history`.
+
+---
+
+### [KROK_WYKONANY] B5 — Answer Verification
+
+**Plan:** Sprint 6, linia ~704 (🟢)  
+**Stan rzeczywisty:** `backend_app/services/verification_service.py` istnieje. Flaga `KLIMTECH_ANSWER_VERIFICATION=false` (domyślnie wyłączone, zgodnie z planem).
+
+---
+
+### [KROK_WYKONANY] C5 — Late Chunking
+
+**Plan:** Sprint 6, linia ~717 (🟢) — "wymaga dużo VRAM, rozważ jako opcjonalny"  
+**Stan rzeczywisty:** Do sprawdzenia — `streaming_service.py` istnieje, ale czy Late Chunking (Jina Embeddings) jest zaimplementowane — wymaga osobnej weryfikacji.  
+**Powaga:** STATUS_NIEJASNY
 
 ---
 
@@ -208,22 +196,21 @@ Wszystkie funkcje z Sprint 0–5 są zaimplementowane, ale plan nie zawiera żad
 
 ## ELEMENTY PLANU NIE ZREALIZOWANE (rzeczywiście pozostałe)
 
-| Element | Powód | Priorytet | Status 2026-04-07 |
-|---------|-------|-----------|-------------------|
-| A1a/A1b dokończenie | `chat.py` = 277 linii (cel: ~80), `ingest_service.py` = 249 linii (cel: ~120) | 🟡 | ⚠️ CZĘŚCIOWO (ingest_service znacznie zmniejszony z 548→249) |
-| A1c Components layer | `backend_app/components/` nie istnieje | 🟢 Sprint 6 | ❌ NIE ZROBIONE |
-| ~~`settings-ingest.yaml`~~ | ~~Brak profilu dla trybu ingest~~ | 🟢 | ✅ NAPRAWIONE |
-| ~~`tests/conftest.py`~~ | ~~Brak wspólnych fixtures~~ | 🟡 | ✅ NAPRAWIONE |
-| ~~`tests/test_chat.py`~~ | ~~Brak testów czatu~~ | 🟡 | ✅ NAPRAWIONE |
-| ~~`tests/test_ingest.py`~~ | ~~Brak testów ingestu~~ | 🟡 | ✅ NAPRAWIONE |
-| ~~`tests/test_chunks.py`~~ | ~~Brak testów /v1/chunks~~ | 🟢 | ✅ NAPRAWIONE |
-| C5 Late Chunking | Nie zaimplementowane (zero odniesień do Jina/late chunking w kodzie) | 🟢 | ❌ NIE ZROBIONE |
-| W4 Chat Widget | ~~`klimtech-widget.js` nie istnieje~~ → ISTNIEJE (130 linii) | 🟢 Sprint 6 | ✅ NAPRAWIONE |
-| W6 Agent Builder | Nie wdrożone | ⚪ Sprint 6 | ❌ NIE ZROBIONE |
-| W1 krok 5 — `workspace_id` w `file_registry.db` | Kolumna workspace_id nie istnieje w file_registry | 🟡 | ❌ NIE ZROBIONE |
-| F2 — kliknięcie źródła → podgląd chunku | Brak obsługi kliknięcia w UI | 🟢 | ❌ NIE ZROBIONE |
+| Element | Powód | Priorytet |
+|---------|-------|-----------|
+| A1a/A1b dokończenie | `chat.py` = 277 linii (cel: ~80), `ingest.py` = 548 linii (cel: ~120) | 🟡 |
+| A1c Components layer | `backend_app/components/` nie istnieje | 🟢 Sprint 6 |
+| `settings-ingest.yaml` | Brak profilu dla trybu ingest | 🟢 |
+| `tests/conftest.py` | Brak wspólnych fixtures | 🟡 |
+| `tests/test_chat.py` | Brak testów czatu | 🟡 |
+| `tests/test_ingest.py` | Brak testów ingestu | 🟡 |
+| `tests/test_chunks.py` | Brak testów /v1/chunks | 🟢 |
+| C5 Late Chunking | Niejasne czy wdrożone (wymaga weryfikacji) | 🟢 |
+| W4 Chat Widget | `klimtech-widget.js` nie istnieje | 🟢 Sprint 6 |
+| W6 Agent Builder | Nie wdrożone | ⚪ Sprint 6 |
+| W1 krok 5 — `workspace_id` w `file_registry.db` | Kolumna workspace_id nie istnieje w file_registry | 🟡 |
+| F2 — kliknięcie źródła → podgląd chunku | Do weryfikacji czy UI implementuje kliknięcie | 🟢 |
 
 ---
 
 *Analiza oparta na odczycie kodu z 2026-04-07. Stan kodu może być nowszy niż plan (v1.0 z 2026-03-30).*
-*Aktualizacja 2026-04-07: Zweryfikowano błędy 9-14, naprawiono status 7 elementów NIEZREALIZOWANYCH.*

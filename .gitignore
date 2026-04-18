@@ -12,3 +12,4 @@ modele_LLM/
 nohup.out
 export_claude_session/
 *.pkg.tar.zst
+ttkb_tut/

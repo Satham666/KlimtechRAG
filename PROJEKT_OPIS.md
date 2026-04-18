@@ -140,6 +140,21 @@ Służy jako **lokalna baza wiedzy** — od czasu do czasu synchronizowana z ser
 Docelowo: lokalny mały model na laptopie będzie zapisywał wiedzę do laptopowego Qdrant,
 a wybrane wpisy będą przesyłane do głównej bazy RAG na serwerze.
 
+### Laptop — lokalne środowiska Python (nie w Git)
+
+| Venv | Ścieżka | Przeznaczenie |
+|------|---------|---------------|
+| `klimtech-embed-venv` | `/home/tamiel/programy/klimtech-embed-venv/` | onnxruntime-gpu 1.24 + fastembed-gpu 0.8 (CUDA 12.9). **Znany problem**: cuDNN 9.21 `CUDNN_STATUS_EXECUTION_FAILED_CUDART 5003` na Pascalu Quadro P1000 (CC 6.1) — niektóre kernele nie mają wariantów dla starej architektury. |
+| `ttkb_tut/venv` | `/home/tamiel/KlimtechRAG/ttkb_tut/venv/` | **PyTorch + sentence-transformers** — środowisko używane do lokalnego indeksowania plików `.md` / `.txt` do Qdrant (`agent_memory`). PyTorch ma kernele cuDNN z pełnym fallbackiem dla Pascala, co rozwiązuje problem powyżej. |
+
+Folder `ttkb_tut/` jest w `.gitignore` — nie trafia do repo.
+
+### Laptop — indeksowanie lokalnej bazy wiedzy
+Plan: skrypt `scripts/index_md.py` przechodzi przez katalog projektu (pliki `.md`, `.txt`),
+chunkuje (800 słów, overlap 100), embedduje modelem `intfloat/multilingual-e5-large`
+na GPU przez PyTorch+sentence-transformers i zapisuje do kolekcji `agent_memory`
+(dim=1024) z idempotencją po SHA-256 treści chunka.
+
 ---
 
 ## Endpointy pamięci agentów
