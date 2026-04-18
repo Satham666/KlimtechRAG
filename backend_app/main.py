@@ -27,6 +27,7 @@ from .routes.sessions import router as sessions_router
 from .routes.mcp import router as mcp_router
 from .routes.agent_memory import router as agent_memory_router
 from .routes.supervisor_memory import router as supervisor_memory_router
+from .routes.graph import router as graph_router
 
 from .services import doc_store
 from .file_registry import init_db as init_file_registry
@@ -163,6 +164,7 @@ app.include_router(sessions_router)
 app.include_router(mcp_router)
 app.include_router(agent_memory_router)
 app.include_router(supervisor_memory_router)
+app.include_router(graph_router)
 
 
 @app.middleware("http")

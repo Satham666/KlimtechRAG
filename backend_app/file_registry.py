@@ -94,6 +94,25 @@ def init_db():
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_files_workspace ON files(workspace_id)"
         )
+        # MemPalace: tabela grafu wiedzy dokumentów (krawędzie semantyczne)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS document_graph (
+                source_a TEXT NOT NULL,
+                source_b TEXT NOT NULL,
+                edge_type TEXT NOT NULL,
+                weight REAL DEFAULT 0.5,
+                created_at TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (source_a, source_b, edge_type)
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_graph_source_a "
+            "ON document_graph(source_a)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_graph_edge_type "
+            "ON document_graph(edge_type)"
+        )
         conn.commit()
 
 

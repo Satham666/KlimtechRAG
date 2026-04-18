@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KlimtechRAG — Graf Wiedzy (MemPalace)</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #0b0d12; color: #e6e6e6; font-family: system-ui, sans-serif; overflow: hidden; }
+    #graph { width: 100vw; height: 100vh; }
+    #panel {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      background: rgba(20, 24, 32, 0.92); border: 1px solid #2a2f3a;
+      border-radius: 8px; padding: 14px 16px; min-width: 280px; max-width: 340px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+    #panel h1 { font-size: 14px; margin: 0 0 10px; color: #7cc4ff; letter-spacing: .5px; }
+    #panel label { display: block; font-size: 12px; margin-top: 10px; color: #aab2c0; }
+    #panel select, #panel input[type=range] { width: 100%; margin-top: 4px; }
+    #panel input[type=text] { width: 100%; margin-top: 4px; background: #1a1f2a; color: #e6e6e6; border: 1px solid #333a48; padding: 6px; border-radius: 4px; }
+    #panel button { margin-top: 10px; padding: 6px 12px; background: #2d5fa8; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+    #panel button:hover { background: #3d77c7; }
+    #stats { font-size: 11px; color: #8892a4; margin-top: 10px; line-height: 1.5; }
+    #node-info {
+      position: absolute; top: 12px; right: 12px; z-index: 10;
+      background: rgba(20, 24, 32, 0.92); border: 1px solid #2a2f3a;
+      border-radius: 8px; padding: 14px 16px; max-width: 380px; display: none;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+    #node-info h2 { font-size: 13px; margin: 0 0 8px; color: #ffd27c; word-break: break-all; }
+    #node-info .meta { font-size: 11px; color: #8892a4; margin-bottom: 6px; }
+    #node-info ul { list-style: none; padding: 0; margin: 8px 0 0; max-height: 280px; overflow-y: auto; }
+    #node-info li { font-size: 11px; padding: 4px 6px; border-radius: 3px; word-break: break-all; cursor: pointer; }
+    #node-info li:hover { background: #2a3142; }
+    #legend { position: absolute; bottom: 12px; left: 12px; z-index: 10; background: rgba(20,24,32,.88); border-radius: 6px; padding: 8px 12px; font-size: 10px; }
+    #legend .item { display: inline-block; margin-right: 10px; }
+    #legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+    #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #7cc4ff; font-size: 16px; z-index: 20; }
+  </style>
+</head>
+<body>
+
+<div id="panel">
+  <h1>GRAF WIEDZY — MemPalace</h1>
+  <label>API Key (X-API-Key)</label>
+  <input type="text" id="api-key" placeholder="sk-local">
+
+  <label>Typ krawędzi</label>
+  <select id="edge-type">
+    <option value="">wszystkie</option>
+    <option value="same_wing">same_wing</option>
+    <option value="semantic">semantic</option>
+    <option value="co_retrieved">co_retrieved</option>
+  </select>
+
+  <label>Min. waga: <span id="mw-val">0.00</span></label>
+  <input type="range" id="min-weight" min="0" max="1" step="0.05" value="0">
+
+  <button id="reload">Odśwież graf</button>
+  <div id="stats">Ładowanie...</div>
+</div>
+
+<div id="node-info">
+  <h2 id="ni-title">—</h2>
+  <div class="meta" id="ni-meta"></div>
+  <div class="meta">Sąsiedzi: <span id="ni-count">0</span></div>
+  <ul id="ni-neighbors"></ul>
+</div>
+
+<div id="legend"></div>
+
+<div id="loading">Ładowanie grafu...</div>
+<div id="graph"></div>
+
+<script src="https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js"></script>
+<script>
+// ---------------------------------------------------------------------------
+// MemPalace — Graf wiedzy (3d-force-graph)
+// ---------------------------------------------------------------------------
+
+// Kolory 14 wings (kategorii top-level z definitions.py)
+const WING_COLORS = {
+  agriculture:  '#7dd87d',
+  construction: '#ff9a3c',
+  culture:      '#d87dd8',
+  education:    '#7ddddd',
+  environment:  '#5fcf7f',
+  family:       '#ffb3c1',
+  finance:      '#ffe066',
+  law:          '#9e7dff',
+  medicine:     '#ff5c5c',
+  other:        '#888888',
+  religion:     '#c9a07a',
+  society:      '#ffad66',
+  sport:        '#66d0ff',
+  technology:   '#7cc4ff',
+  unknown:      '#555555',
+};
+
+const EDGE_COLORS = {
+  same_wing:    'rgba(125,196,255,0.35)',
+  semantic:     'rgba(255,210,124,0.6)',
+  co_retrieved: 'rgba(255,124,124,0.7)',
+};
+
+// API key — prefill z localStorage
+const apiInput = document.getElementById('api-key');
+apiInput.value = localStorage.getItem('klimtech_api_key') || 'sk-local';
+apiInput.addEventListener('change', () => {
+  localStorage.setItem('klimtech_api_key', apiInput.value);
+});
+
+const mwSlider = document.getElementById('min-weight');
+const mwVal = document.getElementById('mw-val');
+mwSlider.addEventListener('input', () => { mwVal.textContent = Number(mwSlider.value).toFixed(2); });
+
+// Legend
+const legend = document.getElementById('legend');
+Object.keys(WING_COLORS).forEach(w => {
+  const span = document.createElement('span');
+  span.className = 'item';
+  const dot = document.createElement('span');
+  dot.className = 'dot';
+  dot.style.background = WING_COLORS[w];
+  span.appendChild(dot);
+  span.appendChild(document.createTextNode(w));
+  legend.appendChild(span);
+});
+
+// Graph init
+const Graph = ForceGraph3D()(document.getElementById('graph'))
+  .backgroundColor('#0b0d12')
+  .nodeLabel(n => n.id)
+  .nodeColor(n => WING_COLORS[n.wing] || WING_COLORS.unknown)
+  .nodeVal(n => Math.max(1, Math.min(20, n.chunks || 1)))
+  .linkColor(l => EDGE_COLORS[l.edge_type] || 'rgba(200,200,200,0.3)')
+  .linkWidth(l => Math.max(0.3, l.weight * 2))
+  .linkOpacity(0.6)
+  .onNodeClick(node => {
+    Graph.cameraPosition(
+      { x: node.x * 1.4, y: node.y * 1.4, z: node.z * 1.4 },
+      node, 1200
+    );
+    showNodeInfo(node);
+  });
+
+async function fetchGraph() {
+  const apiKey = apiInput.value.trim();
+  const edgeType = document.getElementById('edge-type').value;
+  const minW = mwSlider.value;
+
+  const params = new URLSearchParams();
+  params.set('min_weight', minW);
+  if (edgeType) params.set('edge_type', edgeType);
+
+  const loading = document.getElementById('loading');
+  loading.style.display = 'block';
+  loading.textContent = 'Ładowanie grafu...';
+
+  try {
+    const r = await fetch('/v1/graph/data?' + params.toString(), {
+      headers: { 'X-API-Key': apiKey },
+    });
+    if (!r.ok) {
+      loading.textContent = 'Błąd ' + r.status + ' — sprawdź API key';
+      return;
+    }
+    const data = await r.json();
+
+    // Mapuj edges → links (3d-force-graph wymaga source/target)
+    const links = (data.edges || []).map(e => ({
+      source: e.source_a,
+      target: e.source_b,
+      edge_type: e.edge_type,
+      weight: e.weight,
+    }));
+
+    Graph.graphData({ nodes: data.nodes || [], links });
+
+    const s = data.stats || {};
+    const stats = document.getElementById('stats');
+    stats.textContent = '';
+    stats.appendChild(document.createTextNode('Węzłów: ' + (s.total_nodes || 0)));
+    stats.appendChild(document.createElement('br'));
+    stats.appendChild(document.createTextNode('Krawędzi: ' + (s.total_edges || 0)));
+    if (s.edge_types) {
+      Object.keys(s.edge_types).forEach(k => {
+        stats.appendChild(document.createElement('br'));
+        stats.appendChild(document.createTextNode('  ' + k + ': ' + s.edge_types[k]));
+      });
+    }
+    loading.style.display = 'none';
+  } catch (err) {
+    loading.textContent = 'Błąd: ' + err.message;
+  }
+}
+
+async function showNodeInfo(node) {
+  const panel = document.getElementById('node-info');
+  panel.style.display = 'block';
+  document.getElementById('ni-title').textContent = node.id;
+  document.getElementById('ni-meta').textContent =
+    'wing: ' + (node.wing || '?') + ' | category: ' + (node.category || '?') + ' | chunks: ' + (node.chunks || 0);
+  const list = document.getElementById('ni-neighbors');
+  list.textContent = '';
+
+  const apiKey = apiInput.value.trim();
+  try {
+    const r = await fetch('/v1/graph/node/' + encodeURIComponent(node.id), {
+      headers: { 'X-API-Key': apiKey },
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    document.getElementById('ni-count').textContent = data.count || 0;
+    (data.neighbors || []).forEach(nb => {
+      const li = document.createElement('li');
+      li.textContent = nb;
+      li.addEventListener('click', () => {
+        const target = Graph.graphData().nodes.find(n => n.id === nb);
+        if (target) {
+          Graph.cameraPosition({ x: target.x * 1.4, y: target.y * 1.4, z: target.z * 1.4 }, target, 1200);
+          showNodeInfo(target);
+        }
+      });
+      list.appendChild(li);
+    });
+  } catch (err) {
+    // cicho — panel pokazuje dane offline
+  }
+}
+
+document.getElementById('reload').addEventListener('click', fetchGraph);
+document.getElementById('edge-type').addEventListener('change', fetchGraph);
+mwSlider.addEventListener('change', fetchGraph);
+
+// Load on start
+fetchGraph();
+</script>
+
+</body>
+</html>
