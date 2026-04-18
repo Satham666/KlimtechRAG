@@ -13,3 +13,5 @@ nohup.out
 export_claude_session/
 *.pkg.tar.zst
 ttkb_tut/
+robotnik_tasks/
+robotnik_output/
