@@ -3,6 +3,25 @@
 
 ---
 
+## 2026-04-18
+
+### Robotnik faza 01 — Qwen2.5-Coder-3B-Q8_0 na laptopie (Quadro P1000)
+**Decyzja:** Robotnik (lokalny LLM executor) zaczyna od modelu `Qwen2.5-Coder-3B-Q8_0` uruchamianego przez `llama-cli`/`llama-server` ze Złotą Komendą v1.0 (`-c 4096 -n -1 -b 64 -ngl 99 -t 8 -tb 12 -fa on -ctk q8_0 -ctv q8_0 --temp 0.6 --top-k 40 --top-p 0.9 --repeat-penalty 1.1`).
+**Powód:** Eksperymentalnie ustalone parametry (patrz `GPU_LAPTOPT_TEST.md`): Prompt 286 t/s, Generation 14.1 t/s, EOS natural, brak OOM na 4 GB VRAM Pascal. Phi-3.5-mini i gemma-4 nie działają na tym sprzęcie.
+**Konsekwencja:** Zmiana parametrów/modelu wymaga nowego benchmarku i aktualizacji `robotnik/config.py:LAPTOP_CONFIG`.
+
+### Robotnik — architektura Claude ↔ Qwen (faza 01)
+**Decyzja:** Claude = planner/reviewer, Qwen = executor. Workflow: Claude pisze specyfikację do `robotnik_tasks/NNN.md`, Qwen generuje kod do `robotnik_output/NNN.py`, Claude review + merge do właściwego miejsca w repo. Katalogi `robotnik_tasks/` i `robotnik_output/` w `.gitignore` (surowe artefakty, nie wersjonowane).
+**Powód:** Offline, brak kosztów API, pełna kontrola nad outputem. Zgodne z architekturą z sekcji "Mistrz + Uczeń" — tu realizacja dla laptopa.
+**Konsekwencja:** Wszystkie zmiany kodu finalnego nadal przez ścieżkę Claude Code (review + commit). Qwen to narzędzie, nie autonomiczny agent.
+
+### Robotnik — profile portable (laptop vs proxmox)
+**Decyzja:** `robotnik/config.py` zawiera `LAPTOP_CONFIG` (CUDA Pascal 4GB, Qwen-3B-Q8) i `PROXMOX_CONFIG` (ROCm AMD gfx906 16GB, Qwen-7B-Q4 — szkielet). Wybór przez env `ROBOTNIK_PROFILE=laptop|proxmox`. Zmienne ROCm wymagane przy profilu proxmox: `HSA_OVERRIDE_GFX_VERSION=9.0.6` etc.
+**Powód:** Ten sam kod musi działać na laptopie i serwerze z minimalnym wysiłkiem. Flagi llama-cli są istotnie różne dla każdego GPU.
+**Konsekwencja:** Przy dodawaniu nowego profilu — rozszerzyć `detect_config()` i dodać sekcję do `robotnik/README.md`.
+
+---
+
 ## 2026-04-08
 
 ### Lazy loading embeddings (NIEODWRACALNE)

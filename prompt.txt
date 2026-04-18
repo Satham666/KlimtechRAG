@@ -1,0 +1,59 @@
+Jesteś ekspertem od automatyzacji sieci Linux z wieloletnim doświadczeniem w tworzeniu skryptów infrastrukturalnych w Pythonie. Specjalizujesz się w WireGuard i bezpieczeństwie systemów. Twoim zadaniem jest napisanie **gotowego do użycia produkcyjnego** skryptu w Python 3, który w pełni automatycznie skonfiguruje połączenie WireGuard typu **site-to-site** między dwoma serwerami (np. siedziba główna i oddział).
+
+**KRYTYCZNE OGRANICZENIE TECHNICZNE:** Skrypt może importować **wyłącznie** moduły ze standardowej biblioteki Pythona: `subprocess`, `os`, `sys`, `argparse`, `shlex`, `pathlib`, `shutil`. Zabronione jest używanie `import wireguard`, `pyroute2`, `python-iptables` lub jakichkolwiek zewnętrznych bibliotek. Wszystkie operacje na poziomie systemu (generowanie kluczy, konfiguracja interfejsu, reguły firewalla, routing) muszą być realizowane poprzez wywołania `subprocess.run()` z flagą `check=True`.
+
+**WYMAGANIA FUNKCJONALNE SKRYPTU:**
+
+1. **Parsowanie argumentów (`argparse`):**
+   - `--mode {server,client}` (wymagane).
+   - `--tunnel-ip` (np. `10.0.0.1/30` dla serwera, `10.0.0.2/30` dla klienta).
+   - `--listen-port` (domyślnie `51820`).
+   - `--local-lan` (opcjonalnie, sieć LAN za serwerem, np. `192.168.1.0/24`).
+   - `--remote-pubkey` (klucz publiczny drugiej strony – **wymagany w obu trybach**).
+   - `--remote-endpoint` (wymagane tylko w trybie `client`: IP:PORT serwera głównego).
+   - `--enable-service` (flaga włączająca usługę systemd).
+
+2. **Generowanie kluczy i bezpieczeństwo:**
+   - Uruchom `wg genkey` aby utworzyć klucz prywatny. Użyj `umask 077` przed zapisem do `/etc/wireguard/private.key`.
+   - Wygeneruj klucz publiczny z prywatnego (`wg pubkey`).
+   - **WAŻNE:** Skrypt musi wypisać na konsolę wygenerowany **KLUCZ PUBLICZNY** w czytelny sposób (np. `>>> PUBLIC KEY THIS SERVER: xyz123...`), aby administrator mógł go przekazać na drugi serwer.
+
+3. **Tworzenie pliku `/etc/wireguard/wg0.conf`:**
+   - Użyj `with open()` i `os.chmod` aby ustawić uprawnienia `600`.
+   - **Sekcja [Interface]:** Adres tunelu, `ListenPort`, `PrivateKey = /etc/wireguard/private.key` (lub wklejony klucz – zalecane odwołanie do pliku dla bezpieczeństwa).
+   - **Sekcja [Peer]:** `PublicKey = {remote_pubkey}`, `AllowedIPs = {local_lan_zdalnego_serwera}`, `Endpoint = {remote_endpoint}` (tylko dla klienta). Dla serwera nie dodawaj `Endpoint`, ale dodaj `PersistentKeepalive = 25` dla stabilności NAT.
+
+4. **Operacje na interfejsie sieciowym (`subprocess`):**
+   - Sprawdź `ip link show wg0`; jeśli istnieje, przerwij z błędem (chyba że podano flagę `--force`).
+   - `ip link add wg0 type wireguard`
+   - `ip addr add {tunnel_ip} dev wg0`
+   - `wg setconf wg0 /etc/wireguard/wg0.conf`
+   - `ip link set wg0 up`
+
+5. **Routing i IP Forward:**
+   - Włącz forwarding: `sysctl -w net.ipv4.ip_forward=1`. Dodaj trwałą konfigurację do `/etc/sysctl.d/99-wireguard.conf`.
+   - Jeśli podano `--local-lan`, dodaj odpowiednią trasę, aby ruch z tunelu mógł wrócić do sieci LAN.
+
+6. **Inteligentna konfiguracja Firewalla (detekcja iptables/nftables):**
+   - Sprawdź dostępność: `shutil.which('iptables')` oraz `shutil.which('nft')`.
+   - **W przypadku iptables:**
+     - `iptables -A INPUT -p udp --dport {port} -j ACCEPT`
+     - `iptables -A FORWARD -i wg0 -j ACCEPT`
+     - `iptables -A FORWARD -o wg0 -j ACCEPT`
+     - `iptables -t nat -A POSTROUTING -s {tunnel_network} -o {lan_interface} -j MASQUERADE`
+   - **W przypadku nftables:** Skrypt powinien utworzyć tymczasowy plik `.nft` i załadować go przez `nft -f`.
+   - **IDEMPOTENTNOŚĆ:** Sprawdź, czy reguła już istnieje (`-C` dla iptables) przed dodaniem.
+
+7. **Obsługa błędów i rollback:**
+   - Każde wywołanie `subprocess.run` musi być opakowane w `try/except`. W przypadku błędu przy tworzeniu interfejsu, skrypt musi usunąć plik `wg0.conf` i wycofać zmiany firewalla.
+
+8. **Usługa systemowa (`--enable-service`):**
+   - Wykonaj `systemctl enable wg-quick@wg0` oraz `systemctl start wg-quick@wg0`.
+
+**STRUKTURA ODPOWIEDZI MODELU:**
+- Rozpocznij od komentarza nagłówkowego z opisem, autorem i licencją (np. MIT).
+- Następnie zamieść kompletny, pojedynczy plik `.py` z dokładnymi komentarzami przy każdym wywołaniu `subprocess`.
+- Użyj funkcji pomocniczej `run_cmd(cmd_list)` do centralnej obsługi błędów.
+- Zapewnij zgodność z Python 3.6+ oraz dystrybucjami opartymi na Debianie i RHEL.
+
+Napisz kod Pythona realizujący powyższe wymagania. Rozpocznij od szczegółowego komentarza nagłówkowego.

@@ -3,6 +3,62 @@
 
 ---
 
+## Stan na: 2026-04-18 (wieczór — Robotnik faza 01, lokalny LLM executor)
+
+### Co zrobiono w tej sesji (laptop — worktree feature/robotnik)
+
+- **Analiza dziennika testów** (`GPU_LAPTOPT_TEST.md`, `prompt.txt`) — ustalono Złotą Komendę v1.0 dla Qwen2.5-Coder-3B-Q8_0 na Quadro P1000 (Pascal 4 GB): Prompt 286 t/s, Generation 14.1 t/s, EOS natural
+- **Worktree `feature/robotnik`** (`/home/tamiel/KlimtechRAG-worktrees/Robotnik`) — nowy moduł `robotnik/`:
+  - `robotnik/config.py` — `LAPTOP_CONFIG`, `PROXMOX_CONFIG`, `AMD_ROCM_ENV`, `detect_config()` (env `ROBOTNIK_PROFILE`)
+  - `robotnik/runner.py` — subprocess wrapper dla `llama-cli`, CLI `python -m robotnik.runner <prompt> [--out <file>]`
+  - `robotnik/server.py` — daemon wrapper dla `llama-server` (OpenAI-compatible :8080), start/stop/status/restart + health check
+  - `robotnik/prompts/templates.py` — 4 szablony: `CODE_TASK`, `REFACTOR_TASK`, `TEST_TASK`, `DOCSTRING_TASK` + render helpers
+  - `robotnik/README.md` — instrukcja laptop vs proxmox, workflow Claude→Qwen
+  - `scripts/robotnik.sh` — bash artefakt Złotej Komendy
+  - `scripts/robotnik_server.sh` — bash wrapper dla daemona
+  - `.gitignore` — dodano `robotnik_tasks/` i `robotnik_output/` (surowe artefakty)
+- **Decyzje architektoniczne** zapisane w `wiki/decisions.md`:
+  - Robotnik faza 01 = Qwen-3B-Q8_0 + Złota Komenda v1.0
+  - Claude = planner/reviewer, Qwen = executor (Mistrz + Uczeń dla laptopa)
+  - Profile portable (laptop/proxmox) przez `ROBOTNIK_PROFILE`
+- **Snapshot w supervisor_memory**: id `ec7495d4-1473-4675-8324-2d4ebcfb5804`
+
+### Aktualny stan
+
+**Laptop:**
+- Branch `main`: untracked: `GPU_LAPTOPT_TEST.md`, `prompt.txt`, `CUDA_LAPTOP.md`, `Plan_wdrożenia_OpenWebUI.md`
+- Branch `feature/mempalace`: spushowany, gotowy do deployu (z poprzedniej sesji)
+- Branch `feature/robotnik`: 1 commit lokalny (czeka na push od użytkownika)
+- Model `Qwen2.5-Coder-3B-Q8_0.gguf` w `~/.cache/llama.cpp/` — gotowy
+
+**Serwer Proxmox** — bez zmian, Robotnik faza 02 (Qwen-7B) dopiero po dostępie.
+
+### Co dalej (następna sesja)
+
+1. **Push `feature/robotnik`** na GitHub (użytkownik w osobnym terminalu)
+2. **Test end-to-end** na laptopie: `python3 -m robotnik.runner /home/tamiel/KlimtechRAG/prompt.txt --out /tmp/wg.py` — weryfikacja czy runner produkuje poprawny skrypt (pipeline sprawny)
+3. **Test server mode**: `./scripts/robotnik_server.sh start`, `curl /v1/chat/completions`
+4. **Decyzja merge**: PR feature/robotnik na GitHubie czy merge lokalny
+5. **Pierwszy realny task** przez workflow Claude→Qwen (wygenerować coś małego w repo, review, merge)
+6. Opcjonalnie: commit `GPU_LAPTOPT_TEST.md` + `prompt.txt` do main jako referencja
+
+### Pliki krytyczne — tej sesji
+```
+robotnik/config.py              — Złota Komenda v1.0 (LAPTOP_CONFIG)
+robotnik/runner.py              — CLI executor
+robotnik/server.py              — daemon wrapper
+robotnik/prompts/templates.py   — 4 szablony zadań
+robotnik/README.md              — workflow Claude→Qwen
+scripts/robotnik.sh             — bash Złotej Komendy
+scripts/robotnik_server.sh      — bash server start/stop
+```
+
+### Numer wersji następnego release
+Ostatni tag: `v7.9`
+Następny: **`v7.11`** lub wyżej (Robotnik faza 01; `v7.10` rezerwowane dla MVP grafu MemPalace gdy wejdzie do main)
+
+---
+
 ## Stan na: 2026-04-18 (popołudnie — MVP graf wiedzy MemPalace)
 
 ### Co zrobiono w tej sesji (laptop — worktree feature/mempalace)
